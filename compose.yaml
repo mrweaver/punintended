@@ -1,0 +1,55 @@
+# punintended/compose.yaml
+services:
+  punintended:
+    build:
+      context: ./app
+    container_name: punintended
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - PGHOST=punintended-db
+      - PGPORT=5432
+      - PGDATABASE=punintended
+      - PGUSER=punintended
+      - PGPASSWORD=
+      - SESSION_SECRET=${SESSION_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - UMAMI_BASE_URL=${UMAMI_BASE_URL:-http://umami:3000}
+    networks:
+      - dockge_default
+    depends_on:
+      punintended-db:
+        condition: service_healthy
+
+  punintended-db:
+    image: postgres:16-alpine
+    container_name: punintended-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=punintended
+      - POSTGRES_USER=punintended
+      - POSTGRES_PASSWORD=punintended_password
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    networks:
+      - dockge_default
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./app/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./app/db/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U punintended"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dockge_default:
+    external: true
+
+volumes:
+  postgres_data:

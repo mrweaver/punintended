@@ -1,0 +1,286 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { MessageCircle, Share2, Check, Pencil, Trash2, Send } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { Button } from './ui/Button';
+import { Logo } from './ui/Logo';
+import type { Pun, PunComment, PunReaction } from '../api/client';
+
+interface PunCardProps {
+  pun: Pun;
+  index: number;
+  comments: PunComment[];
+  submitting: boolean;
+  onReact: (punId: string, reaction: PunReaction | null) => void;
+  onViewed: (punId: string) => void;
+  onEdit: (punId: string, text: string) => void;
+  onDelete: (punId: string) => void;
+  onComment: (punId: string, text: string) => void;
+}
+
+const REACTIONS: Array<{ key: PunReaction; emoji: string }> = [
+  { key: 'clever', emoji: '🧠' },
+  { key: 'laugh', emoji: '😂' },
+  { key: 'groan', emoji: '😩' },
+  { key: 'fire', emoji: '🔥' },
+  { key: 'wild', emoji: '🤯' },
+];
+
+export function PunCard({
+  pun,
+  index,
+  comments,
+  submitting,
+  onReact,
+  onViewed,
+  onEdit,
+  onDelete,
+  onComment,
+}: PunCardProps) {
+  const { user } = useAuth();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [copiedPunId, setCopiedPunId] = useState(false);
+
+  const isAuthor = pun.authorId === user?.uid;
+
+  const handleCopyPun = () => {
+    const text = `"${pun.text}"\n- ${pun.authorName}\n\n${pun.aiScore ? `AI Score: ${pun.aiScore}/10\n` : ''}Play PunIntended: ${window.location.origin}`;
+    navigator.clipboard.writeText(text);
+    setCopiedPunId(true);
+    setTimeout(() => setCopiedPunId(false), 2000);
+  };
+
+  const handleSubmitComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+    onComment(pun.id, commentText.trim());
+    setCommentText('');
+    onViewed(pun.id);
+  };
+
+  const handleReaction = (reaction: PunReaction) => {
+    const nextReaction = pun.myReaction === reaction ? null : reaction;
+    onReact(pun.id, nextReaction);
+    onViewed(pun.id);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      onClick={() => onViewed(pun.id)}
+      className="bg-white dark:bg-zinc-900 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm border border-gray-100 dark:border-zinc-800 flex flex-col gap-4 sm:gap-6"
+    >
+      <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4 flex-wrap">
+            <span className="font-bold text-gray-900 dark:text-zinc-100 truncate max-w-[120px] sm:max-w-none">
+              {pun.authorName}
+            </span>
+            <span className="text-xs text-gray-400 dark:text-zinc-500 whitespace-nowrap">
+              • {new Date(pun.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {!pun.viewed && (
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-violet-900/50 dark:text-violet-200">
+                New
+              </span>
+            )}
+            {isAuthor && !isEditing && (
+              <div className="ml-auto flex items-center gap-1 sm:gap-2">
+                <button
+                  onClick={() => {
+                    setIsEditing(true);
+                    setEditText(pun.text);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-orange-500 dark:hover:text-violet-500 hover:bg-orange-50 dark:hover:bg-violet-900/30 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onDelete(pun.id)}
+                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {isEditing ? (
+            <div className="mb-3 sm:mb-4 space-y-3">
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full p-3 sm:p-4 text-lg font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl border border-gray-200 dark:border-zinc-800 focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[80px] resize-none"
+              />
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="ghost"
+                  onClick={() => setIsEditing(false)}
+                  className="px-3 py-1.5 text-sm"
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    onEdit(pun.id, editText);
+                    setIsEditing(false);
+                  }}
+                  className="px-3 py-1.5 text-sm"
+                  loading={submitting}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xl sm:text-2xl font-serif italic text-gray-800 dark:text-zinc-200 mb-3 sm:mb-4">
+              "{pun.text}"
+            </p>
+          )}
+
+          {pun.aiScore !== undefined && pun.aiScore !== null && !isEditing && (
+            <div className="flex items-start gap-3 p-3 sm:p-4 bg-orange-50 dark:bg-violet-900/20 rounded-xl sm:rounded-2xl">
+              <Logo className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 dark:text-violet-400 shrink-0 mt-1" accent />
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-bold text-orange-700 dark:text-violet-300">
+                    AI Score: {pun.aiScore}/10
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">
+                  {pun.aiFeedback}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {pun.aiFeedback === 'Re-evaluating...' && !isEditing && (
+            <div className="flex items-start gap-3 p-3 sm:p-4 bg-orange-50 dark:bg-violet-900/20 rounded-xl sm:rounded-2xl">
+              <Logo className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 dark:text-violet-400 shrink-0 mt-1 animate-spin" accent />
+              <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">Re-evaluating...</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex md:flex-col items-center justify-around md:justify-center gap-4 md:gap-4 border-t md:border-t-0 md:border-l border-gray-100 dark:border-zinc-800 pt-3 md:pt-0 md:pl-6">
+          <div className="flex flex-col items-center gap-1 text-orange-500 dark:text-violet-500">
+            <span className="font-bold text-base sm:text-lg">{pun.reactionTotal}</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">Reacts</span>
+          </div>
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={`flex flex-col items-center gap-1 transition-all ${isExpanded ? 'text-orange-500 dark:text-violet-500' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+          >
+            <MessageCircle className={`w-5 h-5 sm:w-6 sm:h-6 ${isExpanded ? 'fill-current' : ''}`} />
+            <span className="font-bold text-base sm:text-lg">{comments.length}</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">Chat</span>
+          </button>
+
+          <button
+            onClick={handleCopyPun}
+            className={`flex flex-col items-center gap-1 transition-all ${copiedPunId ? 'text-green-500 dark:text-green-400' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+          >
+            {copiedPunId ? <Check className="w-5 h-5 sm:w-6 sm:h-6" /> : <Share2 className="w-5 h-5 sm:w-6 sm:h-6" />}
+            <span className="font-bold text-base sm:text-lg">&nbsp;</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">
+              {copiedPunId ? 'Copied' : 'Share'}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {REACTIONS.map((item) => {
+          const count = pun.reactions?.[item.key] || 0;
+          const active = pun.myReaction === item.key;
+          return (
+            <motion.button
+              key={item.key}
+              whileTap={{ scale: 1.25 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleReaction(item.key);
+              }}
+              className={`px-2.5 py-1.5 rounded-full text-sm font-semibold border transition-colors flex items-center gap-1 ${
+                active
+                  ? 'bg-orange-100 border-orange-400 text-orange-700 dark:bg-violet-900/40 dark:border-violet-400 dark:text-violet-200'
+                  : 'border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:border-orange-300 dark:hover:border-violet-500 hover:bg-gray-50 dark:hover:bg-zinc-800'
+              }`}
+            >
+              <span className="text-base">{item.emoji}</span>
+              {count > 0 && <span>{count}</span>}
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* Comments Section */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden border-t border-gray-100 dark:border-zinc-800 pt-4"
+          >
+            <div className="space-y-4 mb-4">
+              {comments.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-zinc-500 italic text-center py-2">
+                  No comments yet. Be the first!
+                </p>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <img
+                      src={comment.userPhoto || ''}
+                      alt={comment.userName}
+                      className="w-6 h-6 rounded-full border border-gray-200 dark:border-zinc-700"
+                    />
+                    <div className="flex-1 bg-gray-50 dark:bg-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-gray-900 dark:text-zinc-200">
+                          {comment.userName}
+                        </span>
+                        <span className="text-[10px] text-gray-400 dark:text-zinc-500">
+                          {new Date(comment.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-zinc-300">{comment.text}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <form onSubmit={handleSubmitComment} className="flex gap-2">
+              <input
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Add a comment..."
+                className="flex-1 bg-transparent border-b border-gray-200 dark:border-zinc-800 text-gray-900 dark:text-zinc-100 px-2 py-2 text-sm focus:outline-none focus:border-orange-500 dark:focus:border-violet-500 transition-colors"
+              />
+              <Button
+                variant="ghost"
+                type="submit"
+                className="p-2 rounded-full min-w-[36px] h-[36px] flex items-center justify-center text-orange-500 dark:text-violet-500 hover:bg-orange-50 dark:hover:bg-violet-900/20"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}

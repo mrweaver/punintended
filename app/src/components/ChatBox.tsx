@@ -1,0 +1,87 @@
+import { useState, useRef, useEffect } from 'react';
+import { MessageSquare, Send } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import type { ChatMessage } from '../api/client';
+
+interface ChatBoxProps {
+  messages: ChatMessage[];
+  onSendMessage: (text: string) => void;
+}
+
+export function ChatBox({ messages, onSendMessage }: ChatBoxProps) {
+  const { user } = useAuth();
+  const [chatText, setChatText] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }, [messages]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatText.trim()) return;
+    onSendMessage(chatText.trim());
+    setChatText('');
+  };
+
+  return (
+    <div className="lg:col-span-1 flex flex-col h-full">
+      <h2 className="text-2xl sm:text-3xl font-serif italic flex items-center gap-3 dark:text-zinc-100 mb-4 sm:mb-6">
+        <MessageSquare className="text-orange-500 dark:text-violet-500" />
+        Session Chat
+      </h2>
+      <Card className="flex flex-col h-[400px] sm:h-[calc(100vh-200px)] border-2 border-gray-100 dark:border-zinc-800 p-0 overflow-hidden sticky top-24 bg-white dark:bg-zinc-900">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="text-center text-gray-400 dark:text-zinc-500 text-sm italic mt-4">
+              No messages yet. Start the conversation!
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex gap-3 ${msg.userId === user?.uid ? 'flex-row-reverse' : ''}`}
+              >
+                <img
+                  src={msg.userPhoto || ''}
+                  alt={msg.userName}
+                  className="w-8 h-8 rounded-full border border-gray-200 dark:border-zinc-700"
+                />
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-2 ${msg.userId === user?.uid ? 'bg-orange-500 dark:bg-violet-600 text-white rounded-tr-sm' : 'bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 rounded-tl-sm'}`}
+                >
+                  {msg.userId !== user?.uid && (
+                    <p className="text-[10px] font-bold opacity-50 mb-1">{msg.userName}</p>
+                  )}
+                  <p className="text-sm">{msg.text}</p>
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={chatEndRef} />
+        </div>
+        <form
+          onSubmit={handleSubmit}
+          className="p-4 border-t border-gray-100 dark:border-zinc-800 flex gap-2"
+        >
+          <input
+            type="text"
+            value={chatText}
+            onChange={(e) => setChatText(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 bg-transparent border-b border-gray-200 dark:border-zinc-800 text-gray-900 dark:text-zinc-100 px-2 py-2 text-sm focus:outline-none focus:border-orange-500 dark:focus:border-violet-500 transition-colors"
+          />
+          <Button
+            variant="ghost"
+            type="submit"
+            className="p-2 rounded-full min-w-[40px] h-[40px] flex items-center justify-center text-orange-500 dark:text-violet-500 hover:bg-orange-50 dark:hover:bg-violet-900/20"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </form>
+      </Card>
+    </div>
+  );
+}

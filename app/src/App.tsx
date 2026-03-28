@@ -108,7 +108,7 @@ export default function App() {
             onClick={() => setShowChangelog(true)}
             className="mt-2 text-xs opacity-50 hover:opacity-100 hover:text-orange-500 dark:hover:text-violet-400 transition-all cursor-pointer"
           >
-            v1.1.0
+            v1.2.0
           </button>
         </footer>
 

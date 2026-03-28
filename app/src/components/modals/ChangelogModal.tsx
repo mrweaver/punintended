@@ -7,6 +7,18 @@ interface ChangelogModalProps {
 
 const CHANGELOG = [
   {
+    version: '1.2.0',
+    date: '2026-03-28',
+    highlights: [
+      {
+        icon: Zap,
+        title: 'Speed Score',
+        description:
+          'A timer starts when you see the challenge. Faster submissions earn a speed bonus — quick wit + great pun = best outcome.',
+      },
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-03-28',
     highlights: [

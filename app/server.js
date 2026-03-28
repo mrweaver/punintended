@@ -34,6 +34,7 @@ import {
   getNotificationsByUser,
   createNotification,
   markNotificationRead,
+  runMigrations,
 } from "./db/database.js";
 
 const pgSession = connectPgSimple(session);
@@ -487,9 +488,11 @@ app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
 });
 
 app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
-  const { text } = req.body;
+  const { text, responseTimeMs } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: "Pun text required" });
   if (text.length > 500) return res.status(400).json({ error: "Pun too long (max 500 chars)" });
+  const validatedResponseTimeMs =
+    Number.isInteger(responseTimeMs) && responseTimeMs > 0 ? responseTimeMs : null;
 
   const sessionId = req.params.id;
   const todayId = new Date().toISOString().split("T")[0];
@@ -509,7 +512,7 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
       }
     }
 
-    const pun = await createPun(sessionId, todayId, req.user.id, text.trim());
+    const pun = await createPun(sessionId, todayId, req.user.id, text.trim(), validatedResponseTimeMs);
     broadcastPunsUpdate(sessionId, todayId);
 
     // Score asynchronously
@@ -715,6 +718,13 @@ app.get("*", (req, res) => {
 });
 
 // --- Start server ---
-app.listen(PORT, () => {
-  console.log(`PunIntended server running on port ${PORT}`);
-});
+runMigrations()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`PunIntended server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Migration failed, aborting startup:", err);
+    process.exit(1);
+  });

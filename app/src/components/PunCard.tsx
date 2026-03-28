@@ -153,6 +153,19 @@ export function PunCard({
                   <span className="text-sm font-bold text-orange-700 dark:text-violet-300">
                     AI Score: {pun.aiScore}/10
                   </span>
+                  {pun.responseTimeMs != null && (
+                    <span className={`text-xs font-mono ${
+                      pun.responseTimeMs <= 30_000
+                        ? 'text-green-600 dark:text-green-400'
+                        : pun.responseTimeMs <= 120_000
+                        ? 'text-orange-500 dark:text-orange-400'
+                        : 'text-gray-400 dark:text-zinc-500'
+                    }`}>
+                      ⚡ {pun.responseTimeMs < 60_000
+                        ? `${Math.round(pun.responseTimeMs / 1000)}s`
+                        : `${Math.floor(pun.responseTimeMs / 60_000)}m ${Math.round((pun.responseTimeMs % 60_000) / 1000)}s`}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">
                   {pun.aiFeedback}

@@ -21,7 +21,15 @@ const DEFAULT_REACTIONS = {
   wild: 0,
 };
 
+function getSpeedScore(ms: number): number {
+  return 10 * Math.max(0, 1 - ms / 300_000);
+}
+
 function getPunScore(pun: Pun) {
+  if (pun.responseTimeMs != null) {
+    const speed = getSpeedScore(pun.responseTimeMs);
+    return (pun.aiScore || 0) * 0.5 + (pun.reactionTotal || 0) * 0.35 + speed * 0.15;
+  }
   return (pun.aiScore || 0) * 0.6 + (pun.reactionTotal || 0) * 0.4;
 }
 
@@ -144,11 +152,11 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
   }, [sortedPuns]);
 
   const submitPun = useCallback(
-    async (text: string) => {
+    async (text: string, responseTimeMs: number | null) => {
       if (!sessionId) return;
       setSubmitting(true);
       try {
-        await punsApi.submit(sessionId, text);
+        await punsApi.submit(sessionId, text, responseTimeMs);
       } finally {
         setSubmitting(false);
       }

@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS puns (
     text TEXT NOT NULL CHECK (char_length(text) BETWEEN 1 AND 500),
     ai_score NUMERIC(3,1),
     ai_feedback TEXT,
+    response_time_ms INTEGER,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

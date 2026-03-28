@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, QrCode, RefreshCw, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,6 +47,14 @@ export function GameBoard({
   );
   const { messages, sendMessage } = useMessages(session.id);
   const { addComment, getCommentsForPun } = useComments(session.id);
+  const challengeViewedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (session.challenge && !challengeViewedAtRef.current) {
+      challengeViewedAtRef.current = Date.now();
+    }
+  }, [session.challenge]);
+
   const [punText, setPunText] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
@@ -54,8 +62,11 @@ export function GameBoard({
 
   const handleSubmitPun = async () => {
     if (!punText.trim()) return;
+    const responseTimeMs = challengeViewedAtRef.current
+      ? Date.now() - challengeViewedAtRef.current
+      : null;
     try {
-      await submitPun(punText.trim());
+      await submitPun(punText.trim(), responseTimeMs);
       setPunText('');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to submit pun';

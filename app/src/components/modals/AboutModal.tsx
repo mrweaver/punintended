@@ -75,7 +75,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
           </div>
 
           <div className="pt-6 border-t border-gray-100 dark:border-zinc-800 text-center">
-            <p className="text-xs text-gray-400 dark:text-zinc-500">Version 1.1.0</p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">Version 1.2.0</p>
           </div>
         </div>
       </motion.div>

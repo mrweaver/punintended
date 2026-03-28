@@ -41,10 +41,10 @@ export const sessionsApi = {
 export const punsApi = {
   list: (sessionId: string, challengeId: string) =>
     request<Pun[]>(`/api/sessions/${sessionId}/puns?challengeId=${challengeId}`),
-  submit: (sessionId: string, text: string) =>
+  submit: (sessionId: string, text: string, responseTimeMs: number | null) =>
     request<{ id: string }>(`/api/sessions/${sessionId}/puns`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, responseTimeMs }),
     }),
   edit: (id: string, text: string) =>
     request<{ success: boolean }>(`/api/puns/${id}`, {
@@ -129,6 +129,7 @@ export interface Pun {
   reactions: Record<PunReaction, number>;
   reactionTotal: number;
   myReaction: PunReaction | null;
+  responseTimeMs: number | null;
   viewed?: boolean;
   createdAt: string;
   updatedAt: string;

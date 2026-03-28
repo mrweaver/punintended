@@ -169,6 +169,12 @@ function formatSession(row) {
   };
 }
 
+// --- Migrations ---
+
+async function runMigrations() {
+  await query(`ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`);
+}
+
 // --- Pun functions ---
 
 async function getPunsBySessionAndChallenge(sessionId, challengeId, viewerId = null) {
@@ -205,11 +211,11 @@ async function getPunsBySessionAndChallenge(sessionId, challengeId, viewerId = n
   return result.rows.map(formatPun);
 }
 
-async function createPun(sessionId, challengeId, authorId, text) {
+async function createPun(sessionId, challengeId, authorId, text, responseTimeMs) {
   const result = await query(
-    `INSERT INTO puns (session_id, challenge_id, author_id, text)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [sessionId, challengeId, authorId, text]
+    `INSERT INTO puns (session_id, challenge_id, author_id, text, response_time_ms)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [sessionId, challengeId, authorId, text, responseTimeMs ?? null]
   );
   return result.rows[0];
 }
@@ -338,6 +344,7 @@ function formatPun(row) {
     },
     reactionTotal: Number(row.reaction_total || 0),
     myReaction: row.my_reaction || null,
+    responseTimeMs: row.response_time_ms != null ? parseInt(row.response_time_ms, 10) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -461,6 +468,7 @@ function formatNotification(row) {
 export {
   pool,
   query,
+  runMigrations,
   findOrCreateUser,
   getUserById,
   createSession,

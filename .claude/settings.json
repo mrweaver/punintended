@@ -16,7 +16,10 @@
       "Bash(docker compose:*)",
       "Bash(find /opt/stacks/punintended/app/src -name *.tsx -o -name *.ts)",
       "Bash(npx tsc:*)",
-      "Bash(find /opt/stacks/punintended -name *backup* -o -name *dump* -o -name *.sql)"
+      "Bash(find /opt/stacks/punintended -name *backup* -o -name *dump* -o -name *.sql)",
+      "Bash(git tag:*)",
+      "Bash(docker exec punintended-db psql -U punintended punintended -c \":*)",
+      "Bash(docker exec:*)"
     ]
   }
 }

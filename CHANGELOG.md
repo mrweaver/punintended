@@ -4,6 +4,19 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.4.0] - 2026-03-29
+
+### Added
+
+- **Ctrl+Enter to Submit:** Keyboard shortcut to submit a pun without reaching for the mouse. Hint shown in the tip text below the textarea.
+- **Mobile Sign-Out:** Sign Out button added to the Profile modal on small screens (header logout button is hidden on mobile to save space).
+- **Mobile Chat Modal:** ChatBox supports a bottom-sheet modal mode on mobile with drag handle and close button.
+
+### Changed
+
+- **AI Scoring Ceiling for Non-Phonetic Puns:** Acronym redefinitions and purely logical jokes are now capped at 6/10. The AI feedback cheekily explains the ceiling if phonetic wordplay is missing.
+- **Timestamp Fix:** All timestamps now display in the user's local timezone. Previously, a pg type-parsing quirk caused UTC times to be treated as local, showing e.g. 3 AM instead of 2 PM.
+
 ## [1.3.0] - 2026-03-29
 
 ### Added

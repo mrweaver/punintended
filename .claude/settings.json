@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(git init:*)",
+      "Bash(gh repo:*)",
+      "Bash(git branch:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.github.com)",
+      "Bash(git config:*)",
+      "Read(//home/michael/**)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Read(//opt/stacks/khronos/web/**)",
+      "Bash(docker compose:*)",
+      "Bash(find /opt/stacks/punintended/app/src -name *.tsx -o -name *.ts)",
+      "Bash(npx tsc:*)",
+      "Bash(find /opt/stacks/punintended -name *backup* -o -name *dump* -o -name *.sql)"
+    ]
+  }
+}

@@ -1,17 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'motion/react';
-import { Sparkles, Share2, Check } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { profileApi } from '../../api/client';
-import { Button } from '../ui/Button';
-import type { Pun } from '../../api/client';
+import { useState, useEffect, useMemo } from "react";
+import { motion } from "motion/react";
+import { Sparkles, Share2, Check } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { profileApi } from "../../api/client";
+import { Button } from "../ui/Button";
+import type { Pun } from "../../api/client";
 
 interface ProfileModalProps {
   onClose: () => void;
 }
 
 function getLocalDateString(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function calculateStreak(punsList: Pun[]) {
@@ -20,8 +20,10 @@ function calculateStreak(punsList: Pun[]) {
   const dates = [
     ...new Set(
       punsList
-        .map((p) => (p.createdAt ? getLocalDateString(new Date(p.createdAt)) : null))
-        .filter(Boolean)
+        .map((p) =>
+          p.createdAt ? getLocalDateString(new Date(p.createdAt)) : null,
+        )
+        .filter(Boolean),
     ),
   ] as string[];
 
@@ -37,7 +39,7 @@ function calculateStreak(punsList: Pun[]) {
   if (dates[0] !== todayStr && dates[0] !== yesterdayStr) return 0;
 
   let streak = 0;
-  const currentCheckDate = new Date(dates[0] + 'T12:00:00');
+  const currentCheckDate = new Date(dates[0] + "T12:00:00");
 
   for (let i = 0; i < dates.length; i++) {
     const dStr = getLocalDateString(currentCheckDate);
@@ -64,15 +66,24 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
   const streak = useMemo(() => calculateStreak(userPuns), [userPuns]);
 
   const avgScore = useMemo(() => {
-    const scored = userPuns.filter((p) => p.aiScore !== undefined && p.aiScore !== null);
+    const scored = userPuns.filter(
+      (p) => p.aiScore !== undefined && p.aiScore !== null,
+    );
     return scored.length > 0
-      ? (scored.reduce((acc, p) => acc + (p.aiScore || 0), 0) / scored.length).toFixed(1)
-      : '-';
+      ? (
+          scored.reduce((acc, p) => acc + (p.aiScore || 0), 0) / scored.length
+        ).toFixed(1)
+      : "-";
   }, [userPuns]);
 
   const totalReactions = useMemo(
-    () => userPuns.reduce((acc, pun) => acc + Object.values(pun.reactions).reduce((sum, n) => sum + n, 0), 0),
-    [userPuns]
+    () =>
+      userPuns.reduce(
+        (acc, pun) =>
+          acc + Object.values(pun.reactions).reduce((sum, n) => sum + n, 0),
+        0,
+      ),
+    [userPuns],
   );
 
   const copyStats = () => {
@@ -102,7 +113,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
 
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-8 border-b border-gray-100 dark:border-zinc-800 pb-8">
           <img
-            src={user.photoURL || ''}
+            src={user.photoURL || ""}
             className="w-24 h-24 rounded-full border-4 border-orange-100 dark:border-violet-900/50"
             alt="Profile"
           />
@@ -117,8 +128,12 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                 onClick={copyStats}
                 className="w-full sm:w-auto"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                {copied ? 'Copied!' : 'Share Stats'}
+                {copied ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Share2 className="w-4 h-4" />
+                )}
+                {copied ? "Copied!" : "Share Stats"}
               </Button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-medium text-gray-500 dark:text-zinc-400">
@@ -126,19 +141,27 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                 <span className="text-black dark:text-zinc-100 font-bold text-xl">
                   {userPuns.length}
                 </span>
-                <span className="text-xs uppercase tracking-wider mt-1">Puns</span>
+                <span className="text-xs uppercase tracking-wider mt-1">
+                  Puns
+                </span>
               </div>
               <div className="bg-orange-50 dark:bg-violet-900/20 px-3 py-2 rounded-xl text-orange-600 dark:text-violet-400 flex flex-col items-center justify-center text-center">
                 <span className="font-bold text-xl">{totalReactions}</span>
-                <span className="text-xs uppercase tracking-wider mt-1">Reactions</span>
+                <span className="text-xs uppercase tracking-wider mt-1">
+                  Reactions
+                </span>
               </div>
               <div className="bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-xl text-blue-600 dark:text-blue-400 flex flex-col items-center justify-center text-center">
                 <span className="font-bold text-xl">{streak}</span>
-                <span className="text-xs uppercase tracking-wider mt-1">Day Streak</span>
+                <span className="text-xs uppercase tracking-wider mt-1">
+                  Day Streak
+                </span>
               </div>
               <div className="bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-xl text-green-600 dark:text-green-400 flex flex-col items-center justify-center text-center">
                 <span className="font-bold text-xl">{avgScore}</span>
-                <span className="text-xs uppercase tracking-wider mt-1">Avg Score</span>
+                <span className="text-xs uppercase tracking-wider mt-1">
+                  Avg Score
+                </span>
               </div>
             </div>
           </div>

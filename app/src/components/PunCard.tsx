@@ -1,10 +1,17 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircle, Share2, Check, Pencil, Trash2, Send } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { Button } from './ui/Button';
-import { Logo } from './ui/Logo';
-import type { Pun, PunComment, PunReaction } from '../api/client';
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  MessageCircle,
+  Share2,
+  Check,
+  Pencil,
+  Trash2,
+  Send,
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { Button } from "./ui/Button";
+import { Logo } from "./ui/Logo";
+import type { Pun, PunComment, PunReaction } from "../api/client";
 
 interface PunCardProps {
   pun: Pun;
@@ -19,11 +26,11 @@ interface PunCardProps {
 }
 
 const REACTIONS: Array<{ key: PunReaction; emoji: string }> = [
-  { key: 'clever', emoji: '🧠' },
-  { key: 'laugh', emoji: '😂' },
-  { key: 'groan', emoji: '😩' },
-  { key: 'fire', emoji: '🔥' },
-  { key: 'wild', emoji: '🤯' },
+  { key: "clever", emoji: "🧠" },
+  { key: "laugh", emoji: "😂" },
+  { key: "groan", emoji: "😩" },
+  { key: "fire", emoji: "🔥" },
+  { key: "wild", emoji: "🤯" },
 ];
 
 export function PunCard({
@@ -40,14 +47,14 @@ export function PunCard({
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState('');
-  const [commentText, setCommentText] = useState('');
+  const [editText, setEditText] = useState("");
+  const [commentText, setCommentText] = useState("");
   const [copiedPunId, setCopiedPunId] = useState(false);
 
   const isAuthor = pun.authorId === user?.uid;
 
   const handleCopyPun = () => {
-    const text = `"${pun.text}"\n- ${pun.authorName}\n\n${pun.aiScore ? `AI Score: ${pun.aiScore}/10\n` : ''}Play PunIntended: ${window.location.origin}`;
+    const text = `"${pun.text}"\n- ${pun.authorName}\n\n${pun.aiScore ? `AI Score: ${pun.aiScore}/10\n` : ""}Play PunIntended: ${window.location.origin}`;
     navigator.clipboard.writeText(text);
     setCopiedPunId(true);
     setTimeout(() => setCopiedPunId(false), 2000);
@@ -57,7 +64,7 @@ export function PunCard({
     e.preventDefault();
     if (!commentText.trim()) return;
     onComment(pun.id, commentText.trim());
-    setCommentText('');
+    setCommentText("");
     onViewed(pun.id);
   };
 
@@ -82,7 +89,11 @@ export function PunCard({
               {pun.authorName}
             </span>
             <span className="text-xs text-gray-400 dark:text-zinc-500 whitespace-nowrap">
-              • {new Date(pun.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              •{" "}
+              {new Date(pun.createdAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </span>
             {!pun.viewed && (
               <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-violet-900/50 dark:text-violet-200">
@@ -147,21 +158,27 @@ export function PunCard({
 
           {pun.aiScore !== undefined && pun.aiScore !== null && !isEditing && (
             <div className="flex items-start gap-3 p-3 sm:p-4 bg-orange-50 dark:bg-violet-900/20 rounded-xl sm:rounded-2xl">
-              <Logo className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 dark:text-violet-400 shrink-0 mt-1" accent />
+              <Logo
+                className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 dark:text-violet-400 shrink-0 mt-1"
+                accent
+              />
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-bold text-orange-700 dark:text-violet-300">
                     AI Score: {pun.aiScore}/10
                   </span>
                   {pun.responseTimeMs != null && (
-                    <span className={`text-xs font-mono ${
-                      pun.responseTimeMs <= 30_000
-                        ? 'text-green-600 dark:text-green-400'
-                        : pun.responseTimeMs <= 120_000
-                        ? 'text-orange-500 dark:text-orange-400'
-                        : 'text-gray-400 dark:text-zinc-500'
-                    }`}>
-                      ⚡ {pun.responseTimeMs < 60_000
+                    <span
+                      className={`text-xs font-mono ${
+                        pun.responseTimeMs <= 30_000
+                          ? "text-green-600 dark:text-green-400"
+                          : pun.responseTimeMs <= 120_000
+                            ? "text-orange-500 dark:text-orange-400"
+                            : "text-gray-400 dark:text-zinc-500"
+                      }`}
+                    >
+                      ⚡{" "}
+                      {pun.responseTimeMs < 60_000
                         ? `${Math.round(pun.responseTimeMs / 1000)}s`
                         : `${Math.floor(pun.responseTimeMs / 60_000)}m ${Math.round((pun.responseTimeMs % 60_000) / 1000)}s`}
                     </span>
@@ -174,37 +191,56 @@ export function PunCard({
             </div>
           )}
 
-          {pun.aiFeedback === 'Re-evaluating...' && !isEditing && (
+          {pun.aiFeedback === "Re-evaluating..." && !isEditing && (
             <div className="flex items-start gap-3 p-3 sm:p-4 bg-orange-50 dark:bg-violet-900/20 rounded-xl sm:rounded-2xl">
-              <Logo className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 dark:text-violet-400 shrink-0 mt-1 animate-spin" accent />
-              <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">Re-evaluating...</p>
+              <Logo
+                className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 dark:text-violet-400 shrink-0 mt-1 animate-spin"
+                accent
+              />
+              <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">
+                Re-evaluating...
+              </p>
             </div>
           )}
         </div>
 
         <div className="flex md:flex-col items-center justify-around md:justify-center gap-4 md:gap-4 border-t md:border-t-0 md:border-l border-gray-100 dark:border-zinc-800 pt-3 md:pt-0 md:pl-6">
           <div className="flex flex-col items-center gap-1 text-orange-500 dark:text-violet-500">
-            <span className="font-bold text-base sm:text-lg">{pun.reactionTotal}</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">Reacts</span>
+            <span className="font-bold text-base sm:text-lg">
+              {pun.reactionTotal}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">
+              Reacts
+            </span>
           </div>
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className={`flex flex-col items-center gap-1 transition-all ${isExpanded ? 'text-orange-500 dark:text-violet-500' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+            className={`flex flex-col items-center gap-1 transition-all ${isExpanded ? "text-orange-500 dark:text-violet-500" : "text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300"}`}
           >
-            <MessageCircle className={`w-5 h-5 sm:w-6 sm:h-6 ${isExpanded ? 'fill-current' : ''}`} />
-            <span className="font-bold text-base sm:text-lg">{comments.length}</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">Chat</span>
+            <MessageCircle
+              className={`w-5 h-5 sm:w-6 sm:h-6 ${isExpanded ? "fill-current" : ""}`}
+            />
+            <span className="font-bold text-base sm:text-lg">
+              {comments.length}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">
+              Chat
+            </span>
           </button>
 
           <button
             onClick={handleCopyPun}
-            className={`flex flex-col items-center gap-1 transition-all ${copiedPunId ? 'text-green-500 dark:text-green-400' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+            className={`flex flex-col items-center gap-1 transition-all ${copiedPunId ? "text-green-500 dark:text-green-400" : "text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300"}`}
           >
-            {copiedPunId ? <Check className="w-5 h-5 sm:w-6 sm:h-6" /> : <Share2 className="w-5 h-5 sm:w-6 sm:h-6" />}
+            {copiedPunId ? (
+              <Check className="w-5 h-5 sm:w-6 sm:h-6" />
+            ) : (
+              <Share2 className="w-5 h-5 sm:w-6 sm:h-6" />
+            )}
             <span className="font-bold text-base sm:text-lg">&nbsp;</span>
             <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">
-              {copiedPunId ? 'Copied' : 'Share'}
+              {copiedPunId ? "Copied" : "Share"}
             </span>
           </button>
         </div>
@@ -224,8 +260,8 @@ export function PunCard({
               }}
               className={`px-2.5 py-1.5 rounded-full text-sm font-semibold border transition-colors flex items-center gap-1 ${
                 active
-                  ? 'bg-orange-100 border-orange-400 text-orange-700 dark:bg-violet-900/40 dark:border-violet-400 dark:text-violet-200'
-                  : 'border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:border-orange-300 dark:hover:border-violet-500 hover:bg-gray-50 dark:hover:bg-zinc-800'
+                  ? "bg-orange-100 border-orange-400 text-orange-700 dark:bg-violet-900/40 dark:border-violet-400 dark:text-violet-200"
+                  : "border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:border-orange-300 dark:hover:border-violet-500 hover:bg-gray-50 dark:hover:bg-zinc-800"
               }`}
             >
               <span className="text-base">{item.emoji}</span>
@@ -240,7 +276,7 @@ export function PunCard({
         {isExpanded && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden border-t border-gray-100 dark:border-zinc-800 pt-4"
           >
@@ -253,7 +289,7 @@ export function PunCard({
                 comments.map((comment) => (
                   <div key={comment.id} className="flex gap-3">
                     <img
-                      src={comment.userPhoto || ''}
+                      src={comment.userPhoto || ""}
                       alt={comment.userName}
                       className="w-6 h-6 rounded-full border border-gray-200 dark:border-zinc-700"
                     />
@@ -264,12 +300,14 @@ export function PunCard({
                         </span>
                         <span className="text-[10px] text-gray-400 dark:text-zinc-500">
                           {new Date(comment.createdAt).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
+                            hour: "2-digit",
+                            minute: "2-digit",
                           })}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-700 dark:text-zinc-300">{comment.text}</p>
+                      <p className="text-sm text-gray-700 dark:text-zinc-300">
+                        {comment.text}
+                      </p>
                     </div>
                   </div>
                 ))

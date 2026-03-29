@@ -107,6 +107,59 @@ export const profileApi = {
   getPuns: () => request<Pun[]>("/api/profile/puns"),
 };
 
+// Gauntlet
+export interface GauntletRoundPrompt {
+  topic: string;
+  focus: string;
+}
+
+export interface GauntletRunRound {
+  pun_text: string;
+  ai_score: number | null;
+  ai_feedback: string | null;
+  seconds_remaining: number;
+  round_score: number | null;
+}
+
+export interface GauntletRun {
+  id: string;
+  gauntletId: string;
+  playerId: number;
+  rounds: GauntletRunRound[];
+  status: "in_progress" | "scoring" | "complete";
+  totalScore: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GauntletStartResponse {
+  gauntletId: string;
+  runId: string;
+  rounds: GauntletRoundPrompt[];
+}
+
+export const gauntletApi = {
+  generate: () =>
+    request<GauntletStartResponse>("/api/gauntlet/generate", {
+      method: "POST",
+    }),
+  start: (gauntletId: string) =>
+    request<GauntletStartResponse>(`/api/gauntlet/${gauntletId}`),
+  submitRound: (
+    gauntletId: string,
+    runId: string,
+    roundIndex: number,
+    punText: string,
+    secondsRemaining: number,
+  ) =>
+    request<{ success: boolean }>(`/api/gauntlet/${gauntletId}/submit-round`, {
+      method: "POST",
+      body: JSON.stringify({ runId, roundIndex, punText, secondsRemaining }),
+    }),
+  getRun: (gauntletId: string, runId: string) =>
+    request<GauntletRun>(`/api/gauntlet/${gauntletId}/run/${runId}`),
+};
+
 // Types used by the API client
 export interface AuthUser {
   uid: number;

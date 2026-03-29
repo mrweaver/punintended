@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, Users, Trash2 } from 'lucide-react';
+import { Plus, Users, Trash2, Swords } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
@@ -12,6 +12,7 @@ interface SessionLobbyProps {
   onCreateSession: (name: string) => Promise<void>;
   onJoinSession: (session: Session) => void;
   onDeleteSession: (sessionId: string) => void;
+  onStartGauntlet: () => void;
 }
 
 export function SessionLobby({
@@ -20,6 +21,7 @@ export function SessionLobby({
   onCreateSession,
   onJoinSession,
   onDeleteSession,
+  onStartGauntlet,
 }: SessionLobbyProps) {
   const { user } = useAuth();
   const [newSessionName, setNewSessionName] = useState('');
@@ -38,6 +40,28 @@ export function SessionLobby({
       exit={{ opacity: 0, x: 20 }}
       className="grid grid-cols-1 md:grid-cols-2 gap-8"
     >
+      {/* Gauntlet CTA */}
+      <Card className="col-span-1 md:col-span-2 border-2 border-amber-200 dark:border-violet-700/50 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-violet-950/50 dark:to-zinc-900">
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <div className="flex-shrink-0 p-3 rounded-2xl bg-orange-100 dark:bg-violet-900/30">
+            <Swords className="w-8 h-8 text-orange-600 dark:text-violet-400" />
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <p className="font-mono text-xs uppercase tracking-widest text-orange-500 dark:text-violet-400 mb-1">
+              Solo Mode
+            </p>
+            <h2 className="text-2xl sm:text-3xl font-serif italic mb-1 dark:text-zinc-100">
+              The Gauntlet
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-zinc-400">
+              5 rounds. 60 seconds each. AI-judged. Share your score and challenge your mates.
+            </p>
+          </div>
+          <Button onClick={onStartGauntlet} variant="outline" className="w-full sm:w-auto shrink-0">
+            Play The Gauntlet
+          </Button>
+        </div>
+      </Card>
       {/* Create Session */}
       <Card className="flex flex-col justify-center">
         <h2 className="text-2xl sm:text-3xl font-serif italic mb-4 sm:mb-6 dark:text-zinc-100">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { LogIn } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { SessionLobby } from './components/SessionLobby';
 import { GameBoard } from './components/GameBoard';
+import { GauntletMode } from './components/GauntletMode';
 import { ProfileModal } from './components/modals/ProfileModal';
 import { AboutModal } from './components/modals/AboutModal';
 import { DeleteConfirmModal } from './components/modals/DeleteConfirmModal';
@@ -32,6 +33,20 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [gauntletMode, setGauntletMode] = useState(false);
+  const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
+
+  // Auto-enter gauntlet from a shared ?gauntlet= URL (mirrors ?session= handling)
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const gauntletId = params.get('gauntlet');
+    if (gauntletId) {
+      setSharedGauntletId(gauntletId);
+      setGauntletMode(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [user]);
 
   if (!isReady) {
     return (
@@ -82,13 +97,23 @@ export default function App() {
 
         <main className="max-w-6xl mx-auto p-4 sm:p-6">
           <AnimatePresence mode="wait">
-            {!currentSession ? (
+            {gauntletMode ? (
+              <GauntletMode
+                key="gauntlet"
+                initialGauntletId={sharedGauntletId ?? undefined}
+                onExit={() => {
+                  setGauntletMode(false);
+                  setSharedGauntletId(null);
+                }}
+              />
+            ) : !currentSession ? (
               <SessionLobby
                 sessions={sessions}
                 loading={loading}
                 onCreateSession={createNewSession}
                 onJoinSession={joinExistingSession}
                 onDeleteSession={(id) => setSessionToDelete(id)}
+                onStartGauntlet={() => setGauntletMode(true)}
               />
             ) : (
               <GameBoard

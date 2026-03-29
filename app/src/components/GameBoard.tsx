@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Trophy,
   QrCode,
-  RefreshCw,
   Send,
   Calendar,
   ArrowLeft,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { usePuns } from "../hooks/usePuns";
@@ -28,7 +28,6 @@ interface GameBoardProps {
   staleChallengeDetected: boolean;
   onLeave: () => void;
   onDelete: (sessionId: string) => Promise<void>;
-  onRefreshChallenge: () => Promise<void>;
 }
 
 export function GameBoard({
@@ -37,7 +36,6 @@ export function GameBoard({
   staleChallengeDetected,
   onLeave,
   onDelete,
-  onRefreshChallenge,
 }: GameBoardProps) {
   const { user } = useAuth();
   const todayId = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
@@ -68,6 +66,14 @@ export function GameBoard({
   const [punText, setPunText] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const lastReadCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (chatOpen) lastReadCountRef.current = messages.length;
+  }, [chatOpen, messages.length]);
+
+  const unreadChatCount = chatOpen ? 0 : Math.max(0, messages.length - lastReadCountRef.current);
 
   const handleSubmitPun = async () => {
     if (!punText.trim()) return;
@@ -166,45 +172,28 @@ export function GameBoard({
         <h2 className="text-2xl font-serif italic text-gray-500 dark:text-zinc-400">
           Today's Challenge
         </h2>
-        {isOwner && (
-          <Button
-            variant="outline"
-            onClick={onRefreshChallenge}
-            className="text-xs px-3 py-2"
-            loading={loading}
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh Cards
-          </Button>
-        )}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-4 sm:gap-6">
         <motion.div
           whileHover={{ rotate: -1 }}
-          className="bg-zinc-900 dark:bg-zinc-800 text-white p-6 sm:p-8 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-zinc-700"
+          className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-zinc-700"
         >
-          <div className="absolute top-2 right-4 sm:top-4 text-white/20 font-serif italic text-4xl sm:text-6xl">
-            01
-          </div>
           <p className="text-orange-500 dark:text-violet-400 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
             Topic
           </p>
-          <h2 className="text-3xl sm:text-5xl font-serif italic">
+          <h2 className="text-2xl sm:text-4xl font-serif italic">
             {session.challenge?.topic ||
               (isOwner ? "Generating..." : "Waiting for Host...")}
           </h2>
         </motion.div>
         <motion.div
           whileHover={{ rotate: 1 }}
-          className="bg-orange-500 dark:bg-violet-600 text-white p-6 sm:p-8 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-violet-500"
+          className="bg-orange-500 dark:bg-violet-600 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-violet-500"
         >
-          <div className="absolute top-2 right-4 sm:top-4 text-white/20 font-serif italic text-4xl sm:text-6xl">
-            02
-          </div>
           <p className="text-white/60 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
             Focus
           </p>
-          <h2 className="text-3xl sm:text-5xl font-serif italic">
+          <h2 className="text-2xl sm:text-4xl font-serif italic">
             {session.challenge?.focus ||
               (isOwner ? "Generating..." : "Waiting for Host...")}
           </h2>
@@ -351,8 +340,56 @@ export function GameBoard({
           </AnimatePresence>
         </div>
 
-        <ChatBox messages={messages} onSendMessage={sendMessage} />
+        <div className="hidden lg:block lg:col-span-1">
+          <ChatBox messages={messages} onSendMessage={sendMessage} />
+        </div>
       </div>
+
+      {/* Mobile chat FAB */}
+      <div className="fixed bottom-6 right-6 z-40 lg:hidden">
+        <button
+          onClick={() => setChatOpen(true)}
+          className="relative w-14 h-14 rounded-full bg-orange-500 dark:bg-violet-600 text-white shadow-lg flex items-center justify-center"
+          aria-label="Open Session Chat"
+        >
+          <MessageSquare className="w-6 h-6" />
+          {unreadChatCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white dark:border-zinc-950">
+              {unreadChatCount > 9 ? "9+" : unreadChatCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Mobile chat bottom drawer */}
+      <AnimatePresence>
+        {chatOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+              onClick={() => setChatOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-50 lg:hidden rounded-t-3xl overflow-hidden"
+              style={{ height: "75vh" }}
+            >
+              <ChatBox
+                messages={messages}
+                onSendMessage={sendMessage}
+                onClose={() => setChatOpen(false)}
+                isMobileModal
+              />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Modals */}
       {showShareModal && (

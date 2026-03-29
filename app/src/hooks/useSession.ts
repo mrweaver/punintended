@@ -144,17 +144,6 @@ export function useSession() {
     [currentSession?.id]
   );
 
-  const refreshChallenge = useCallback(async () => {
-    if (!currentSession) return;
-    setLoading(true);
-    try {
-      const updated = await sessionsApi.refreshChallenge(currentSession.id);
-      setCurrentSession(updated);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentSession]);
-
   return {
     sessions,
     currentSession,
@@ -164,6 +153,5 @@ export function useSession() {
     joinExistingSession,
     leaveSession,
     deleteExistingSession,
-    refreshChallenge,
   };
 }

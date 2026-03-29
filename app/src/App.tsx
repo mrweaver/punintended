@@ -26,7 +26,6 @@ export default function App() {
     joinExistingSession,
     leaveSession,
     deleteExistingSession,
-    refreshChallenge,
   } = useSession();
 
   const [showProfile, setShowProfile] = useState(false);
@@ -98,7 +97,6 @@ export default function App() {
                 staleChallengeDetected={staleChallengeDetected}
                 onLeave={leaveSession}
                 onDelete={deleteExistingSession}
-                onRefreshChallenge={refreshChallenge}
               />
             )}
           </AnimatePresence>
@@ -110,7 +108,7 @@ export default function App() {
             onClick={() => setShowChangelog(true)}
             className="mt-2 text-xs opacity-50 hover:opacity-100 hover:text-orange-500 dark:hover:text-violet-400 transition-all cursor-pointer"
           >
-            v1.2.0
+            v1.3.0
           </button>
         </footer>
 

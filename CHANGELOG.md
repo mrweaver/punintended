@@ -4,6 +4,15 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.5.1] - 2026-03-30
+
+### Fixed
+
+- **Daily Puzzle Persistence:** Challenge no longer regenerates on every page refresh — the server now reuses the stored challenge for the current day instead of calling the AI each time.
+- **Timezone Handling:** Day boundaries now follow host local time rather than server UTC, preventing spurious stale-challenge triggers for users in UTC+ zones.
+- **Pun Date Alignment:** Pun submissions are now filed under the session's active `challengeId` rather than server UTC, keeping puns correctly linked to the displayed challenge.
+- **Date Label:** A formatted date (e.g. "Monday, March 30, 2026") is now shown beneath the "Today's Challenge" heading.
+
 ## [1.5.0] - 2026-03-30
 
 ### Added

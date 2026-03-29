@@ -1,13 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { sessionsApi, type Session } from '../api/client';
 import { createSSE } from '../api/sse';
 import { useAuth } from '../contexts/AuthContext';
+
+function getLocalDateId() {
+  return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+}
 
 export function useSession() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [staleChallengeDetected, setStaleChallengeDetected] = useState(false);
+  const autoRefreshedRef = useRef<string | null>(null); // tracks sessionId already auto-refreshed
 
   // Load sessions on mount
   useEffect(() => {
@@ -42,6 +48,38 @@ export function useSession() {
       })
       .catch(() => setLoading(false));
   }, [user]);
+
+  // Auto-refresh stale challenge when session is set
+  useEffect(() => {
+    if (!currentSession || !user) return;
+
+    const today = getLocalDateId();
+    const isStale = currentSession.challengeId && currentSession.challengeId < today;
+
+    if (!isStale) {
+      setStaleChallengeDetected(false);
+      return;
+    }
+
+    const isOwner = currentSession.ownerId === user.uid;
+
+    if (isOwner && autoRefreshedRef.current !== currentSession.id) {
+      // Auto-refresh once per session load for the owner
+      autoRefreshedRef.current = currentSession.id;
+      setLoading(true);
+      sessionsApi
+        .refreshChallenge(currentSession.id)
+        .then((updated) => {
+          setCurrentSession(updated);
+          setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+          setStaleChallengeDetected(false);
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    } else if (!isOwner) {
+      setStaleChallengeDetected(true);
+    }
+  }, [currentSession?.id, currentSession?.challengeId, user]);
 
   // SSE for current session
   useEffect(() => {
@@ -121,6 +159,7 @@ export function useSession() {
     sessions,
     currentSession,
     loading,
+    staleChallengeDetected,
     createNewSession,
     joinExistingSession,
     leaveSession,

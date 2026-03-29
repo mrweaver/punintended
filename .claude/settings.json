@@ -19,7 +19,9 @@
       "Bash(find /opt/stacks/punintended -name *backup* -o -name *dump* -o -name *.sql)",
       "Bash(git tag:*)",
       "Bash(docker exec punintended-db psql -U punintended punintended -c \":*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(npm install:*)",
+      "Bash(find /opt/stacks/punintended -not -path */node_modules* -not -path */dist* -type d)"
     ]
   }
 }

@@ -4,6 +4,18 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.5.0] - 2026-03-30
+
+### Added
+
+- **The Gauntlet:** Solo mode — 5 AI-generated rounds, 60 seconds each, scored by Gemini with a time bonus for fast submissions. Share your result link to challenge friends.
+- **Markdown Changelog:** ChangelogModal now renders `changelog.md` via react-markdown with collapsible version sections.
+
+### Changed
+
+- **AI Scoring Persona:** Deadpan British-Australian tone; no forced slang or cultural caricature. Feedback calibrated by score band: roast for 0–3, weary groan for 4–6, grudging respect for 7–10.
+- **PunCard Reactions:** Compact layout with a toggle-to-reveal reaction picker; share button removed; reactions reordered.
+
 ## [1.4.0] - 2026-03-29
 
 ### Added

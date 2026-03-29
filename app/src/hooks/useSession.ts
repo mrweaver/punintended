@@ -68,7 +68,7 @@ export function useSession() {
       autoRefreshedRef.current = currentSession.id;
       setLoading(true);
       sessionsApi
-        .refreshChallenge(currentSession.id)
+        .refreshChallenge(currentSession.id, today)
         .then((updated) => {
           setCurrentSession(updated);
           setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));

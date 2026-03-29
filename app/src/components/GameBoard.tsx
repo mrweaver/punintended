@@ -169,9 +169,19 @@ export function GameBoard({
 
       {/* Daily Challenge Cards */}
       <div className="flex justify-between items-end mb-4">
-        <h2 className="text-2xl font-serif italic text-gray-500 dark:text-zinc-400">
-          Today's Challenge
-        </h2>
+        <div>
+          <h2 className="text-2xl font-serif italic text-gray-500 dark:text-zinc-400">
+            Today's Challenge
+          </h2>
+          {session.challengeId && (
+            <p className="text-xs font-mono text-gray-400 dark:text-zinc-500 mt-0.5">
+              {new Date(session.challengeId + "T00:00:00").toLocaleDateString(
+                undefined,
+                { weekday: "long", year: "numeric", month: "long", day: "numeric" },
+              )}
+            </p>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-4 sm:gap-6">
         <motion.div

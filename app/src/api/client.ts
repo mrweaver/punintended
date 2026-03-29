@@ -39,9 +39,10 @@ export const sessionsApi = {
     request<Session>(`/api/sessions/${id}/join`, { method: "POST" }),
   delete: (id: string) =>
     request<{ success: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
-  refreshChallenge: (id: string) =>
+  refreshChallenge: (id: string, localDateId: string, force = false) =>
     request<Session>(`/api/sessions/${id}/refresh-challenge`, {
       method: "POST",
+      body: JSON.stringify({ localDateId, force }),
     }),
   history: (id: string) =>
     request<ChallengeHistoryEntry[]>(`/api/sessions/${id}/history`),

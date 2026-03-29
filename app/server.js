@@ -91,15 +91,18 @@ async function scorePunText(topic, focus, punText) {
         properties: {
           reasoning: {
             type: Type.STRING,
-            description: "Internal logic. Briefly analyze if the pun phonetically or semantically links the Topic and Focus. Do not show to the user."
+            description:
+              "Internal logic. Briefly analyze if the pun phonetically or semantically links the Topic and Focus. Do not show to the user.",
           },
-          score: { 
+          score: {
             type: Type.INTEGER,
-            description: "Score 0-10 based on the reasoning. 0-3: logic failure. 4-6: a groaner/stretch. 7-9: clever. 10: brilliant."
+            description:
+              "Score 0-10. CRITICAL RULE: To score 7 or above, the submission MUST contain actual phonetic wordplay (words that sound similar or have double meanings). Acronym redefinitions (like JPL = Just Pat Lightly) or purely logical jokes without phonetic puns are clever, but must be capped at a maximum score of 6.",
           },
-          feedback: { 
+          feedback: {
             type: Type.STRING,
-            description: "1-2 sentences. Speak directly to the player. Use Australian English spelling (e.g., humour). Match the tone to the score."
+            description:
+              "1-2 sentences. Speak directly to the player using Australian English. If they used an acronym or logical joke instead of a phonetic pun, cheekily call them out on it and explain why they didn't score higher.",
           },
         },
         required: ["reasoning", "score", "feedback"],
@@ -604,15 +607,19 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
       )
         .then(async (result) => {
           // OPTIONAL: Log the reasoning for your own server diagnostics
-          console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`); 
-          
+          console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`);
+
           await updatePunScore(pun.id, result.score, result.feedback);
           broadcastPunsUpdate(sessionId, todayId);
         })
         .catch(async (err) => {
           console.error("AI scoring failed:", err);
           // OPTIONAL: Write a fallback state to the DB so the frontend doesn't hang
-          await updatePunScore(pun.id, 0, "The judge fell asleep at the bar. Please edit and resubmit!");
+          await updatePunScore(
+            pun.id,
+            0,
+            "The judge fell asleep at the bar. Please edit and resubmit!",
+          );
           broadcastPunsUpdate(sessionId, todayId);
         });
     }

@@ -281,6 +281,14 @@ async function getPastChallengeTopics(sessionId) {
   return result.rows.map((row) => ({ topic: row.topic, focus: row.focus }));
 }
 
+async function getChallengeForDate(sessionId, challengeId) {
+  const result = await query(
+    `SELECT topic, focus FROM session_challenge_history WHERE session_id = $1 AND challenge_id = $2`,
+    [sessionId, challengeId],
+  );
+  return result.rows[0] || null;
+}
+
 // --- Pun functions ---
 
 async function getPunsBySessionAndChallenge(
@@ -722,6 +730,7 @@ export {
   saveChallengeToHistory,
   getChallengeHistory,
   getPastChallengeTopics,
+  getChallengeForDate,
   getPunsBySessionAndChallenge,
   createPun,
   updatePunText,

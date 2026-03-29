@@ -19,6 +19,7 @@ import {
   saveChallengeToHistory,
   getChallengeHistory,
   getPastChallengeTopics,
+  getChallengeForDate,
   getPunsBySessionAndChallenge,
   createPun,
   updatePunText,
@@ -572,20 +573,34 @@ app.post(
       if (session.ownerId !== req.user.id)
         return res.status(403).json({ error: "Only the owner can refresh" });
 
-      const todayId = new Date().toISOString().split("T")[0];
-      const pastChallenges = await getPastChallengeTopics(req.params.id);
-      const challenge = await generateDailyChallenge(pastChallenges);
+      const { localDateId, force = false } = req.body;
+      const dateId =
+        localDateId && /^\d{4}-\d{2}-\d{2}$/.test(localDateId)
+          ? localDateId
+          : new Date().toISOString().split("T")[0];
+
+      let challenge;
+      if (!force) {
+        // Reuse today's challenge if it already exists — no AI call needed
+        challenge = await getChallengeForDate(req.params.id, dateId);
+      }
+
+      if (!challenge) {
+        const pastChallenges = await getPastChallengeTopics(req.params.id);
+        challenge = await generateDailyChallenge(pastChallenges);
+        await saveChallengeToHistory(
+          req.params.id,
+          dateId,
+          challenge.topic,
+          challenge.focus,
+        );
+      }
+
       await updateSessionChallenge(
         req.params.id,
         challenge.topic,
         challenge.focus,
-        todayId,
-      );
-      await saveChallengeToHistory(
-        req.params.id,
-        todayId,
-        challenge.topic,
-        challenge.focus,
+        dateId,
       );
 
       // Notify other players
@@ -650,11 +665,13 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
       : null;
 
   const sessionId = req.params.id;
-  const todayId = new Date().toISOString().split("T")[0];
 
   try {
     const session = await getSessionById(sessionId);
     if (!session) return res.status(404).json({ error: "Session not found" });
+
+    const todayId =
+      session.challengeId || new Date().toISOString().split("T")[0];
 
     // Fair play enforcement: server-side
     if (session.players.length > 1) {

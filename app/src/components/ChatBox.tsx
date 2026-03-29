@@ -8,9 +8,11 @@ import type { ChatMessage } from '../api/client';
 interface ChatBoxProps {
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
+  onClose?: () => void;
+  isMobileModal?: boolean;
 }
 
-export function ChatBox({ messages, onSendMessage }: ChatBoxProps) {
+export function ChatBox({ messages, onSendMessage, onClose, isMobileModal }: ChatBoxProps) {
   const { user } = useAuth();
   const [chatText, setChatText] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -27,12 +29,22 @@ export function ChatBox({ messages, onSendMessage }: ChatBoxProps) {
   };
 
   return (
-    <div className="lg:col-span-1 flex flex-col h-full">
-      <h2 className="text-2xl sm:text-3xl font-serif italic flex items-center gap-3 dark:text-zinc-100 mb-4 sm:mb-6">
-        <MessageSquare className="text-orange-500 dark:text-violet-500" />
-        Session Chat
-      </h2>
-      <Card className="flex flex-col h-[400px] sm:h-[calc(100vh-200px)] border-2 border-gray-100 dark:border-zinc-800 p-0 overflow-hidden sticky top-24 bg-white dark:bg-zinc-900">
+    <div className={isMobileModal ? 'flex flex-col h-full' : 'lg:col-span-1 flex flex-col h-full'}>
+      {isMobileModal ? (
+        <div className="relative flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-gray-300 dark:bg-zinc-600" />
+          <h2 className="text-lg font-serif italic dark:text-zinc-100">Session Chat</h2>
+          <button onClick={onClose} className="p-2 text-gray-400 dark:text-zinc-500 hover:text-black dark:hover:text-white">✕</button>
+        </div>
+      ) : (
+        <h2 className="text-2xl sm:text-3xl font-serif italic flex items-center gap-3 dark:text-zinc-100 mb-4 sm:mb-6">
+          <MessageSquare className="text-orange-500 dark:text-violet-500" />
+          Session Chat
+        </h2>
+      )}
+      <Card className={`flex flex-col border-2 border-gray-100 dark:border-zinc-800 p-0 overflow-hidden bg-white dark:bg-zinc-900 ${
+        isMobileModal ? 'flex-1 rounded-none' : 'h-[400px] sm:h-[calc(100vh-200px)] sticky top-24'
+      }`}>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 ? (
             <div className="text-center text-gray-400 dark:text-zinc-500 text-sm italic mt-4">

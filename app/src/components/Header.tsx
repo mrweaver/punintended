@@ -30,7 +30,7 @@ export function Header({ onOpenProfile, onOpenAbout, onNotificationClick }: Head
         </div>
         <span className="text-lg sm:text-xl font-serif italic font-bold">PunIntended</span>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         <button
           onClick={onOpenAbout}
           className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
@@ -119,7 +119,7 @@ export function Header({ onOpenProfile, onOpenAbout, onNotificationClick }: Head
             {user.displayName}
           </span>
         </div>
-        <Button variant="ghost" onClick={logout} className="p-2">
+        <Button variant="ghost" onClick={logout} className="hidden sm:flex p-2">
           <LogOut className="w-5 h-5" />
         </Button>
       </div>

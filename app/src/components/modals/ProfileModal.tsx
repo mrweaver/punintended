@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
-import { Sparkles, Share2, Check } from "lucide-react";
+import { Sparkles, Share2, Check, LogOut } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { profileApi } from "../../api/client";
 import { Button } from "../ui/Button";
@@ -55,7 +55,7 @@ function calculateStreak(punsList: Pun[]) {
 }
 
 export function ProfileModal({ onClose }: ProfileModalProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [userPuns, setUserPuns] = useState<Pun[]>([]);
   const [copied, setCopied] = useState(false);
 
@@ -122,19 +122,30 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
               <h3 className="text-3xl font-serif italic font-bold dark:text-zinc-100">
                 {user.displayName}
               </h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyStats}
-                className="w-full sm:w-auto"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Share2 className="w-4 h-4" />
-                )}
-                {copied ? "Copied!" : "Share Stats"}
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyStats}
+                  className="w-full sm:w-auto"
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Share2 className="w-4 h-4" />
+                  )}
+                  {copied ? "Copied!" : "Share Stats"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={logout}
+                  className="sm:hidden w-full text-red-500 border-red-200 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-medium text-gray-500 dark:text-zinc-400">
               <div className="bg-gray-50 dark:bg-zinc-800 px-3 py-2 rounded-xl flex flex-col items-center justify-center text-center">

@@ -4,6 +4,16 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.3.0] - 2026-03-29
+
+### Added
+
+- **Challenge History Panel:** Sessions now record every challenge played. A history panel in the GameBoard lets players browse past Topic/Focus pairs and the puns submitted for each.
+- **Smarter Challenge Refresh:** When the owner refreshes the challenge, past topics are passed to the AI so repeats are avoided within the same session.
+- **Stale Challenge Auto-Refresh:** Owners loading a session with yesterday's challenge get a silent auto-refresh on page load. Non-owners see a "waiting for host" banner until the host acts.
+- **AI Judge Persona:** Gemini scoring prompt updated to a witty pub trivia host persona with Australian English spelling. Adds a private `reasoning` field for server diagnostics and a graceful fallback message if scoring fails.
+- **Flat Pun List:** Puns are now displayed in a single flat list (unread first, then by score/time) rather than grouped by author. `unviewedCount` surfaces as a badge.
+
 ## [1.2.0] - 2026-03-28
 
 ### Added

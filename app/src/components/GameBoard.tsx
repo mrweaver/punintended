@@ -1,21 +1,31 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, QrCode, RefreshCw, Send } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { usePuns } from '../hooks/usePuns';
-import { useMessages } from '../hooks/useMessages';
-import { useComments } from '../hooks/useComments';
-import { Button } from './ui/Button';
-import { Card } from './ui/Card';
-import { PunCard } from './PunCard';
-import { ChatBox } from './ChatBox';
-import { ShareModal } from './modals/ShareModal';
-import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
-import type { Session } from '../api/client';
+import { useState, useMemo, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Trophy,
+  QrCode,
+  RefreshCw,
+  Send,
+  Calendar,
+  ArrowLeft,
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { usePuns } from "../hooks/usePuns";
+import { useChallengeHistory } from "../hooks/useChallengeHistory";
+import { useMessages } from "../hooks/useMessages";
+import { useComments } from "../hooks/useComments";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
+import { PunCard } from "./PunCard";
+import { ChallengeHistoryPanel } from "./ChallengeHistoryPanel";
+import { ChatBox } from "./ChatBox";
+import { ShareModal } from "./modals/ShareModal";
+import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
+import type { Session } from "../api/client";
 
 interface GameBoardProps {
   session: Session;
   loading: boolean;
+  staleChallengeDetected: boolean;
   onLeave: () => void;
   onDelete: (sessionId: string) => Promise<void>;
   onRefreshChallenge: () => Promise<void>;
@@ -24,14 +34,16 @@ interface GameBoardProps {
 export function GameBoard({
   session,
   loading,
+  staleChallengeDetected,
   onLeave,
   onDelete,
   onRefreshChallenge,
 }: GameBoardProps) {
   const { user } = useAuth();
-  const todayId = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayId = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
   const {
-    groupedPuns,
+    puns,
+    unviewedCount,
     sortMode,
     setSortMode,
     submitting,
@@ -40,14 +52,12 @@ export function GameBoard({
     deletePun,
     reactPun,
     markPunViewed,
-  } = usePuns(
-    session.id,
-    todayId,
-    user?.uid
-  );
+  } = usePuns(session.id, todayId, user?.uid);
+  const historyState = useChallengeHistory(session.id);
   const { messages, sendMessage } = useMessages(session.id);
   const { addComment, getCommentsForPun } = useComments(session.id);
   const challengeViewedAtRef = useRef<number | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (session.challenge && !challengeViewedAtRef.current) {
@@ -55,10 +65,9 @@ export function GameBoard({
     }
   }, [session.challenge]);
 
-  const [punText, setPunText] = useState('');
+  const [punText, setPunText] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
-  const [expandedAuthors, setExpandedAuthors] = useState<Record<number, boolean>>({});
 
   const handleSubmitPun = async () => {
     if (!punText.trim()) return;
@@ -67,14 +76,21 @@ export function GameBoard({
       : null;
     try {
       await submitPun(punText.trim(), responseTimeMs);
-      setPunText('');
+      setPunText("");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to submit pun';
+      const message =
+        err instanceof Error ? err.message : "Failed to submit pun";
       alert(message);
     }
   };
 
   const isOwner = session.ownerId === user?.uid;
+
+  const SORT_LABELS: Record<typeof sortMode, string> = {
+    unviewed: "Unread",
+    top: "Top",
+    new: "New",
+  };
 
   return (
     <motion.div
@@ -128,6 +144,23 @@ export function GameBoard({
         </div>
       </div>
 
+      {/* Stale challenge banner (non-owners) */}
+      <AnimatePresence>
+        {staleChallengeDetected && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl text-amber-700 dark:text-amber-300 text-sm"
+          >
+            <span className="text-base">🌅</span>
+            <span>
+              New day — waiting for the host to start today's challenge.
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Daily Challenge Cards */}
       <div className="flex justify-between items-end mb-4">
         <h2 className="text-2xl font-serif italic text-gray-500 dark:text-zinc-400">
@@ -158,7 +191,7 @@ export function GameBoard({
           </p>
           <h2 className="text-3xl sm:text-5xl font-serif italic">
             {session.challenge?.topic ||
-              (isOwner ? 'Generating...' : 'Waiting for Host...')}
+              (isOwner ? "Generating..." : "Waiting for Host...")}
           </h2>
         </motion.div>
         <motion.div
@@ -173,7 +206,7 @@ export function GameBoard({
           </p>
           <h2 className="text-3xl sm:text-5xl font-serif italic">
             {session.challenge?.focus ||
-              (isOwner ? 'Generating...' : 'Waiting for Host...')}
+              (isOwner ? "Generating..." : "Waiting for Host...")}
           </h2>
         </motion.div>
       </div>
@@ -189,8 +222,8 @@ export function GameBoard({
           />
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-              Tip: Combine {session.challenge?.topic} and {session.challenge?.focus} for maximum
-              points!
+              Tip: Combine {session.challenge?.topic} and{" "}
+              {session.challenge?.focus} for maximum points!
             </p>
             <Button
               variant="secondary"
@@ -209,108 +242,113 @@ export function GameBoard({
       {/* Puns Feed and Chat */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
         <div className="lg:col-span-2 flex flex-col h-full">
+          {/* Board header + controls */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
             <h2 className="text-2xl sm:text-3xl font-serif italic flex items-center gap-3 dark:text-zinc-100">
               <Trophy className="text-orange-500 dark:text-violet-500" />
-              Grouped Pun Board
+              {showHistory ? "Challenge History" : "Pun Board"}
             </h2>
-            <div className="flex flex-wrap gap-2">
-              {(['unviewed', 'top', 'new'] as const).map((mode) => (
-                <Button
-                  key={mode}
-                  variant={sortMode === mode ? 'secondary' : 'outline'}
-                  size="sm"
-                  onClick={() => setSortMode(mode)}
-                >
-                  {mode === 'unviewed' ? 'Unviewed' : mode === 'top' ? 'Top' : 'New'}
-                </Button>
-              ))}
+
+            <div className="flex flex-wrap items-center gap-2">
+              {!showHistory && (
+                <>
+                  {(["unviewed", "top", "new"] as const).map((mode) => (
+                    <Button
+                      key={mode}
+                      variant={sortMode === mode ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setSortMode(mode)}
+                    >
+                      {SORT_LABELS[mode]}
+                      {mode === "unviewed" && unviewedCount > 0 && (
+                        <span className="ml-1 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-orange-500 dark:bg-violet-500 text-white">
+                          {unviewedCount > 9 ? "9+" : unviewedCount}
+                        </span>
+                      )}
+                    </Button>
+                  ))}
+                  <div className="w-px h-5 bg-gray-200 dark:bg-zinc-700" />
+                </>
+              )}
+              <Button
+                variant={showHistory ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowHistory((v) => !v)}
+              >
+                {showHistory ? (
+                  <>
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Today
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-3.5 h-3.5" />
+                    History
+                    {historyState.history.length > 0 && (
+                      <span className="ml-1 text-xs text-gray-400 dark:text-zinc-500">
+                        ({historyState.history.length})
+                      </span>
+                    )}
+                  </>
+                )}
+              </Button>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 flex-1">
-            {groupedPuns.length === 0 ? (
-              <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-gray-300 dark:border-zinc-800">
-                <p className="text-gray-400 dark:text-zinc-500 italic">
-                  No puns submitted yet. Be the first to break the ice!
-                </p>
-              </div>
-            ) : (
-              groupedPuns.map((group, groupIndex) => {
-                const isExpanded = expandedAuthors[group.authorId] ?? group.unviewedCount > 0;
-                const bestScore = Math.max(...group.puns.map((p) => p.aiScore || 0));
-                const totalReacts = group.puns.reduce((sum, p) => sum + p.reactionTotal, 0);
-                return (
-                  <div
-                    key={group.authorId}
-                    className="bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-zinc-800 overflow-hidden"
-                  >
-                    <button
-                      onClick={() =>
-                        setExpandedAuthors((prev) => ({
-                          ...prev,
-                          [group.authorId]: !isExpanded,
-                        }))
-                      }
-                      className="w-full px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-between gap-4 text-left bg-gray-50/50 dark:bg-zinc-800/30 transition-colors hover:bg-gray-100/50 dark:hover:bg-zinc-800/50"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={group.authorPhoto || ''}
-                          alt={group.authorName}
-                          className="w-10 h-10 rounded-full border border-gray-200 dark:border-zinc-700"
-                        />
-                        <div className="min-w-0">
-                          <p className="font-bold text-gray-900 dark:text-zinc-100 truncate">
-                            {group.authorName}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-zinc-400">
-                            {group.puns.length} puns
-                            {group.unviewedCount > 0 && (
-                              <span className="text-amber-600 dark:text-violet-400 font-semibold"> · {group.unviewedCount} new</span>
-                            )}
-                            {bestScore > 0 && <span> · Best: {bestScore}/10</span>}
-                            {totalReacts > 0 && <span> · {totalReacts} reacts</span>}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-zinc-400">
-                        {isExpanded ? 'Hide' : 'Show'}
-                      </span>
-                    </button>
 
-                    <AnimatePresence initial={false}>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-4 pb-4 sm:px-6 sm:pb-6 pt-2 grid grid-cols-1 gap-4 sm:gap-6">
-                            {group.puns.map((pun, punIndex) => (
-                              <PunCard
-                                key={pun.id}
-                                pun={pun}
-                                index={groupIndex + punIndex * 0.1}
-                                comments={getCommentsForPun(pun.id)}
-                                submitting={submitting}
-                                onReact={reactPun}
-                                onViewed={markPunViewed}
-                                onEdit={editPun}
-                                onDelete={deletePun}
-                                onComment={addComment}
-                              />
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+          {/* Content area */}
+          <AnimatePresence mode="wait">
+            {showHistory ? (
+              <motion.div
+                key="history"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.15 }}
+              >
+                <ChallengeHistoryPanel
+                  historyState={historyState}
+                  getCommentsForPun={getCommentsForPun}
+                  submitting={submitting}
+                  onReact={reactPun}
+                  onEdit={editPun}
+                  onDelete={deletePun}
+                  onComment={addComment}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="today"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.15 }}
+                className="grid grid-cols-1 gap-4 sm:gap-6 flex-1"
+              >
+                {puns.length === 0 ? (
+                  <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-gray-300 dark:border-zinc-800">
+                    <p className="text-gray-400 dark:text-zinc-500 italic">
+                      No puns submitted yet. Be the first to break the ice!
+                    </p>
                   </div>
-                );
-              })
+                ) : (
+                  puns.map((pun, i) => (
+                    <PunCard
+                      key={pun.id}
+                      pun={pun}
+                      index={i}
+                      comments={getCommentsForPun(pun.id)}
+                      submitting={submitting}
+                      onReact={reactPun}
+                      onViewed={markPunViewed}
+                      onEdit={editPun}
+                      onDelete={deletePun}
+                      onComment={addComment}
+                    />
+                  ))
+                )}
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         </div>
 
         <ChatBox messages={messages} onSendMessage={sendMessage} />
@@ -318,7 +356,10 @@ export function GameBoard({
 
       {/* Modals */}
       {showShareModal && (
-        <ShareModal session={session} onClose={() => setShowShareModal(false)} />
+        <ShareModal
+          session={session}
+          onClose={() => setShowShareModal(false)}
+        />
       )}
 
       {sessionToDelete && (

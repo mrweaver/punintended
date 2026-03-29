@@ -1,17 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { punsApi, type Pun, type PunReaction } from '../api/client';
-import { createSSE } from '../api/sse';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { punsApi, type Pun, type PunReaction } from "../api/client";
+import { createSSE } from "../api/sse";
 
-export type PunSortMode = 'unviewed' | 'top' | 'new';
-
-interface PunGroup {
-  authorId: number;
-  authorName: string;
-  authorPhoto: string;
-  puns: Pun[];
-  unviewedCount: number;
-  groupScore: number;
-}
+export type PunSortMode = "unviewed" | "top" | "new";
 
 const DEFAULT_REACTIONS = {
   clever: 0,
@@ -25,18 +16,24 @@ function getSpeedScore(ms: number): number {
   return 10 * Math.max(0, 1 - ms / 300_000);
 }
 
-function getPunScore(pun: Pun) {
+export function getPunScore(pun: Pun) {
   if (pun.responseTimeMs != null) {
     const speed = getSpeedScore(pun.responseTimeMs);
-    return (pun.aiScore || 0) * 0.5 + (pun.reactionTotal || 0) * 0.35 + speed * 0.15;
+    return (
+      (pun.aiScore || 0) * 0.5 + (pun.reactionTotal || 0) * 0.35 + speed * 0.15
+    );
   }
   return (pun.aiScore || 0) * 0.6 + (pun.reactionTotal || 0) * 0.4;
 }
 
-export function usePuns(sessionId: string | null, challengeId: string, viewerId?: number) {
+export function usePuns(
+  sessionId: string | null,
+  challengeId: string,
+  viewerId?: number,
+) {
   const [puns, setPuns] = useState<Pun[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [sortMode, setSortMode] = useState<PunSortMode>('unviewed');
+  const [sortMode, setSortMode] = useState<PunSortMode>("unviewed");
   const viewedStorageKey = useMemo(() => {
     if (!sessionId || !challengeId || !viewerId) return null;
     return `pun-viewed:${sessionId}:${challengeId}:${viewerId}`;
@@ -64,7 +61,7 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
       if (!viewedStorageKey) return;
       localStorage.setItem(viewedStorageKey, JSON.stringify(Array.from(next)));
     },
-    [viewedStorageKey]
+    [viewedStorageKey],
   );
 
   const fetchPuns = useCallback(async () => {
@@ -80,7 +77,7 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
         reactions: pun.reactions || DEFAULT_REACTIONS,
         reactionTotal: pun.reactionTotal || 0,
         viewed: viewedIds.has(pun.id),
-      }))
+      })),
     );
   }, [sessionId, challengeId, viewedIds]);
 
@@ -96,7 +93,7 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
     const cleanup = createSSE({
       url: `/api/sessions/${sessionId}/stream`,
       events: {
-        'puns-update': () => {
+        "puns-update": () => {
           fetchPuns().catch(console.error);
         },
       },
@@ -105,18 +102,26 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
     return cleanup;
   }, [sessionId, fetchPuns]);
 
+  // Count unviewed puns for badge display
+  const unviewedCount = useMemo(
+    () => puns.filter((p) => !p.viewed).length,
+    [puns],
+  );
+
   const sortedPuns = useMemo(() => {
     return [...puns].sort((a, b) => {
-      const timeSort = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      const timeSort =
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
-      if (sortMode === 'new') return timeSort;
+      if (sortMode === "new") return timeSort;
 
       const scoreDiff = getPunScore(b) - getPunScore(a);
-      if (sortMode === 'top') {
+      if (sortMode === "top") {
         if (scoreDiff !== 0) return scoreDiff;
         return timeSort;
       }
 
+      // 'unviewed': unread floats to top, then by score, then by time
       if (Boolean(a.viewed) !== Boolean(b.viewed)) {
         return a.viewed ? 1 : -1;
       }
@@ -124,32 +129,6 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
       return timeSort;
     });
   }, [puns, sortMode]);
-
-  const groupedPuns = useMemo<PunGroup[]>(() => {
-    const grouped = new Map<number, PunGroup>();
-    for (const pun of sortedPuns) {
-      if (!grouped.has(pun.authorId)) {
-        grouped.set(pun.authorId, {
-          authorId: pun.authorId,
-          authorName: pun.authorName,
-          authorPhoto: pun.authorPhoto,
-          puns: [],
-          unviewedCount: 0,
-          groupScore: 0,
-        });
-      }
-
-      const group = grouped.get(pun.authorId)!;
-      group.puns.push(pun);
-      if (!pun.viewed) group.unviewedCount += 1;
-      group.groupScore += getPunScore(pun);
-    }
-
-    return Array.from(grouped.values()).sort((a, b) => {
-      if (a.unviewedCount !== b.unviewedCount) return b.unviewedCount - a.unviewedCount;
-      return b.groupScore - a.groupScore;
-    });
-  }, [sortedPuns]);
 
   const submitPun = useCallback(
     async (text: string, responseTimeMs: number | null) => {
@@ -161,7 +140,7 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
         setSubmitting(false);
       }
     },
-    [sessionId]
+    [sessionId],
   );
 
   const editPun = useCallback(async (punId: string, text: string) => {
@@ -177,9 +156,12 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
     await punsApi.delete(punId);
   }, []);
 
-  const reactPun = useCallback(async (punId: string, reaction: PunReaction | null) => {
-    await punsApi.react(punId, reaction);
-  }, []);
+  const reactPun = useCallback(
+    async (punId: string, reaction: PunReaction | null) => {
+      await punsApi.react(punId, reaction);
+    },
+    [],
+  );
 
   const markPunViewed = useCallback(
     (punId: string) => {
@@ -188,14 +170,16 @@ export function usePuns(sessionId: string | null, challengeId: string, viewerId?
       next.add(punId);
       setViewedIds(next);
       persistViewedIds(next);
-      setPuns((prev) => prev.map((pun) => (pun.id === punId ? { ...pun, viewed: true } : pun)));
+      setPuns((prev) =>
+        prev.map((pun) => (pun.id === punId ? { ...pun, viewed: true } : pun)),
+      );
     },
-    [viewedIds, persistViewedIds]
+    [viewedIds, persistViewedIds],
   );
 
   return {
     puns: sortedPuns,
-    groupedPuns,
+    unviewedCount,
     sortMode,
     setSortMode,
     submitting,

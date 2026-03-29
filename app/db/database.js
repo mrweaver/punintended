@@ -45,7 +45,9 @@ async function query(text, params, retries = 3) {
       if (!isTransient || attempt >= retries) throw error;
 
       const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-      console.warn(`Query failed (attempt ${attempt}/${retries}), retrying in ${backoffMs}ms...`);
+      console.warn(
+        `Query failed (attempt ${attempt}/${retries}), retrying in ${backoffMs}ms...`,
+      );
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
     }
   }
@@ -61,13 +63,15 @@ async function findOrCreateUser(googleProfile) {
 
   if (!email) throw new Error("Email not provided by Google");
 
-  let result = await query("SELECT * FROM users WHERE google_id = $1", [googleId]);
+  let result = await query("SELECT * FROM users WHERE google_id = $1", [
+    googleId,
+  ]);
 
   if (result.rows.length > 0) {
     result = await query(
       `UPDATE users SET display_name = $1, photo_url = $2, email = $3, updated_at = NOW()
        WHERE google_id = $4 RETURNING *`,
-      [displayName, photoUrl, email, googleId]
+      [displayName, photoUrl, email, googleId],
     );
     return result.rows[0];
   }
@@ -75,7 +79,7 @@ async function findOrCreateUser(googleProfile) {
   result = await query(
     `INSERT INTO users (google_id, email, display_name, photo_url)
      VALUES ($1, $2, $3, $4) RETURNING *`,
-    [googleId, email, displayName, photoUrl]
+    [googleId, email, displayName, photoUrl],
   );
   return result.rows[0];
 }
@@ -91,12 +95,12 @@ async function createSession(name, ownerId, challenge) {
   const result = await query(
     `INSERT INTO game_sessions (name, owner_id, challenge_topic, challenge_focus, challenge_id)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [name, ownerId, challenge.topic, challenge.focus, challenge.challengeId]
+    [name, ownerId, challenge.topic, challenge.focus, challenge.challengeId],
   );
   const session = result.rows[0];
   await query(
     `INSERT INTO session_players (session_id, user_id) VALUES ($1, $2)`,
-    [session.id, ownerId]
+    [session.id, ownerId],
   );
   return session;
 }
@@ -112,7 +116,7 @@ async function getAllSessions() {
      LEFT JOIN session_players sp ON gs.id = sp.session_id
      LEFT JOIN users u ON sp.user_id = u.id
      GROUP BY gs.id
-     ORDER BY gs.created_at DESC`
+     ORDER BY gs.created_at DESC`,
   );
   return result.rows.map(formatSession);
 }
@@ -129,7 +133,7 @@ async function getSessionById(sessionId) {
      LEFT JOIN users u ON sp.user_id = u.id
      WHERE gs.id = $1
      GROUP BY gs.id`,
-    [sessionId]
+    [sessionId],
   );
   return result.rows[0] ? formatSession(result.rows[0]) : null;
 }
@@ -138,7 +142,7 @@ async function joinSession(sessionId, userId) {
   await query(
     `INSERT INTO session_players (session_id, user_id)
      VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [sessionId, userId]
+    [sessionId, userId],
   );
 }
 
@@ -150,7 +154,7 @@ async function updateSessionChallenge(sessionId, topic, focus, challengeId) {
   await query(
     `UPDATE game_sessions SET challenge_topic = $1, challenge_focus = $2, challenge_id = $3
      WHERE id = $4`,
-    [topic, focus, challengeId, sessionId]
+    [topic, focus, challengeId, sessionId],
   );
 }
 
@@ -172,12 +176,66 @@ function formatSession(row) {
 // --- Migrations ---
 
 async function runMigrations() {
-  await query(`ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`);
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS session_challenge_history (
+      session_id UUID NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
+      challenge_id VARCHAR(10) NOT NULL,
+      topic VARCHAR(500) NOT NULL,
+      focus VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      PRIMARY KEY (session_id, challenge_id)
+    )
+  `);
+}
+
+// --- Challenge history functions ---
+
+async function saveChallengeToHistory(sessionId, challengeId, topic, focus) {
+  await query(
+    `INSERT INTO session_challenge_history (session_id, challenge_id, topic, focus)
+     VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+    [sessionId, challengeId, topic, focus],
+  );
+}
+
+async function getChallengeHistory(sessionId) {
+  const result = await query(
+    `SELECT sch.session_id, sch.challenge_id, sch.topic, sch.focus, sch.created_at,
+       COUNT(p.id)::int AS pun_count
+     FROM session_challenge_history sch
+     LEFT JOIN puns p ON p.session_id = sch.session_id AND p.challenge_id = sch.challenge_id
+     WHERE sch.session_id = $1
+     GROUP BY sch.session_id, sch.challenge_id, sch.topic, sch.focus, sch.created_at
+     ORDER BY sch.challenge_id DESC`,
+    [sessionId],
+  );
+  return result.rows.map((row) => ({
+    challengeId: row.challenge_id,
+    topic: row.topic,
+    focus: row.focus,
+    punCount: row.pun_count,
+    createdAt: row.created_at,
+  }));
+}
+
+async function getPastChallengeTopics(sessionId) {
+  const result = await query(
+    `SELECT topic, focus FROM session_challenge_history WHERE session_id = $1 ORDER BY challenge_id DESC`,
+    [sessionId],
+  );
+  return result.rows.map((row) => ({ topic: row.topic, focus: row.focus }));
 }
 
 // --- Pun functions ---
 
-async function getPunsBySessionAndChallenge(sessionId, challengeId, viewerId = null) {
+async function getPunsBySessionAndChallenge(
+  sessionId,
+  challengeId,
+  viewerId = null,
+) {
   const result = await query(
     `SELECT p.*,
        u.display_name AS author_name,
@@ -206,16 +264,22 @@ async function getPunsBySessionAndChallenge(sessionId, challengeId, viewerId = n
      WHERE p.session_id = $1 AND p.challenge_id = $2
      GROUP BY p.id, u.display_name, u.photo_url
      ORDER BY reaction_total DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
-    [sessionId, challengeId, viewerId]
+    [sessionId, challengeId, viewerId],
   );
   return result.rows.map(formatPun);
 }
 
-async function createPun(sessionId, challengeId, authorId, text, responseTimeMs) {
+async function createPun(
+  sessionId,
+  challengeId,
+  authorId,
+  text,
+  responseTimeMs,
+) {
   const result = await query(
     `INSERT INTO puns (session_id, challenge_id, author_id, text, response_time_ms)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [sessionId, challengeId, authorId, text, responseTimeMs ?? null]
+    [sessionId, challengeId, authorId, text, responseTimeMs ?? null],
   );
   return result.rows[0];
 }
@@ -223,15 +287,16 @@ async function createPun(sessionId, challengeId, authorId, text, responseTimeMs)
 async function updatePunText(punId, text) {
   await query(
     `UPDATE puns SET text = $1, ai_score = NULL, ai_feedback = 'Re-evaluating...' WHERE id = $2`,
-    [text, punId]
+    [text, punId],
   );
 }
 
 async function updatePunScore(punId, score, feedback) {
-  await query(
-    `UPDATE puns SET ai_score = $1, ai_feedback = $2 WHERE id = $3`,
-    [score, feedback, punId]
-  );
+  await query(`UPDATE puns SET ai_score = $1, ai_feedback = $2 WHERE id = $3`, [
+    score,
+    feedback,
+    punId,
+  ]);
 }
 
 async function deletePun(punId) {
@@ -245,7 +310,10 @@ async function getPunById(punId) {
 
 async function setPunReaction(punId, userId, reaction) {
   if (!reaction) {
-    await query("DELETE FROM pun_reactions WHERE pun_id = $1 AND user_id = $2", [punId, userId]);
+    await query(
+      "DELETE FROM pun_reactions WHERE pun_id = $1 AND user_id = $2",
+      [punId, userId],
+    );
     return null;
   }
 
@@ -255,7 +323,7 @@ async function setPunReaction(punId, userId, reaction) {
      ON CONFLICT (pun_id, user_id)
      DO UPDATE SET reaction = EXCLUDED.reaction, updated_at = NOW()
      RETURNING reaction`,
-    [punId, userId, reaction]
+    [punId, userId, reaction],
   );
   return result.rows[0].reaction;
 }
@@ -289,7 +357,7 @@ async function getPunsByAuthor(authorId) {
      WHERE p.author_id = $1
      GROUP BY p.id, u.display_name, u.photo_url
      ORDER BY p.created_at DESC`,
-    [authorId]
+    [authorId],
   );
   return result.rows.map(formatPun);
 }
@@ -297,7 +365,7 @@ async function getPunsByAuthor(authorId) {
 async function countPunsByAuthorInSession(sessionId, challengeId, authorId) {
   const result = await query(
     "SELECT COUNT(*) FROM puns WHERE session_id = $1 AND challenge_id = $2 AND author_id = $3",
-    [sessionId, challengeId, authorId]
+    [sessionId, challengeId, authorId],
   );
   return parseInt(result.rows[0].count, 10);
 }
@@ -311,7 +379,7 @@ async function getMinPunCountInSession(sessionId, challengeId) {
        WHERE sp.session_id = $1
        GROUP BY sp.user_id
      ) sub`,
-    [sessionId, challengeId]
+    [sessionId, challengeId],
   );
   return parseInt(result.rows[0].min_count, 10);
 }
@@ -344,7 +412,8 @@ function formatPun(row) {
     },
     reactionTotal: Number(row.reaction_total || 0),
     myReaction: row.my_reaction || null,
-    responseTimeMs: row.response_time_ms != null ? parseInt(row.response_time_ms, 10) : null,
+    responseTimeMs:
+      row.response_time_ms != null ? parseInt(row.response_time_ms, 10) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -359,7 +428,7 @@ async function getMessagesBySession(sessionId) {
      JOIN users u ON m.user_id = u.id
      WHERE m.session_id = $1
      ORDER BY m.created_at ASC`,
-    [sessionId]
+    [sessionId],
   );
   return result.rows.map(formatMessage);
 }
@@ -367,7 +436,7 @@ async function getMessagesBySession(sessionId) {
 async function createMessage(sessionId, userId, text) {
   const result = await query(
     `INSERT INTO messages (session_id, user_id, text) VALUES ($1, $2, $3) RETURNING *`,
-    [sessionId, userId, text]
+    [sessionId, userId, text],
   );
   return result.rows[0];
 }
@@ -393,7 +462,7 @@ async function getCommentsBySession(sessionId) {
      JOIN users u ON pc.user_id = u.id
      WHERE pc.session_id = $1
      ORDER BY pc.created_at ASC`,
-    [sessionId]
+    [sessionId],
   );
   return result.rows.map(formatComment);
 }
@@ -405,7 +474,7 @@ async function getCommentsByPun(punId) {
      JOIN users u ON pc.user_id = u.id
      WHERE pc.pun_id = $1
      ORDER BY pc.created_at ASC`,
-    [punId]
+    [punId],
   );
   return result.rows.map(formatComment);
 }
@@ -413,7 +482,7 @@ async function getCommentsByPun(punId) {
 async function createComment(punId, sessionId, userId, text) {
   const result = await query(
     `INSERT INTO pun_comments (pun_id, session_id, user_id, text) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [punId, sessionId, userId, text]
+    [punId, sessionId, userId, text],
   );
   return result.rows[0];
 }
@@ -436,7 +505,7 @@ function formatComment(row) {
 async function getNotificationsByUser(userId) {
   const result = await query(
     `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
-    [userId]
+    [userId],
   );
   return result.rows.map(formatNotification);
 }
@@ -444,13 +513,15 @@ async function getNotificationsByUser(userId) {
 async function createNotification(userId, type, message, link) {
   const result = await query(
     `INSERT INTO notifications (user_id, type, message, link) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [userId, type, message, link || null]
+    [userId, type, message, link || null],
   );
   return result.rows[0];
 }
 
 async function markNotificationRead(notificationId) {
-  await query("UPDATE notifications SET read = TRUE WHERE id = $1", [notificationId]);
+  await query("UPDATE notifications SET read = TRUE WHERE id = $1", [
+    notificationId,
+  ]);
 }
 
 function formatNotification(row) {
@@ -477,6 +548,9 @@ export {
   joinSession,
   deleteSession,
   updateSessionChallenge,
+  saveChallengeToHistory,
+  getChallengeHistory,
+  getPastChallengeTopics,
   getPunsBySessionAndChallenge,
   createPun,
   updatePunText,

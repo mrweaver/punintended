@@ -16,6 +16,9 @@ import {
   joinSession,
   deleteSession,
   updateSessionChallenge,
+  saveChallengeToHistory,
+  getChallengeHistory,
+  getPastChallengeTopics,
   getPunsBySessionAndChallenge,
   createPun,
   updatePunText,
@@ -53,10 +56,10 @@ async function generateDailyChallenge() {
     model: "gemini-3.1-flash-lite-preview",
     contents: `Generate a unique 'Topic' and 'Focus' for a pun-making game inspired by Punderdome.
 
-    CRITICAL RULE: The Topic and Focus MUST be completely unrelated and contrasting. Do NOT make them similar or logically connected (e.g., do NOT do "Ocean Life" and "Starfish").
+    CRITICAL RULE: The Topic and Focus MUST be completely unrelated and contrasting. Do NOT make them logically connected (e.g., do NOT do "Ocean Life" and "Starfish").
 
-    - The 'Topic' should be a broad category (e.g., "Human Body", "Music", "Technology", "History", "Animals").
-    - The 'Focus' should be a specific, unrelated object, situation, or place (e.g., "Bread", "The Grocery Store", "A Flat Tire", "Coffee", "Office Supplies").
+    - The 'Topic' should be a broad category (e.g., "Human Body", "IT Infrastructure", "History", "Power Tools").
+    - The 'Focus' should be a specific, unrelated object, situation, or place (e.g., "Bread", "A Flat Tire", "Coffee", "A Retaining Wall").
 
     The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON.`,
     config: {
@@ -77,19 +80,29 @@ async function generateDailyChallenge() {
 async function scorePunText(topic, focus, punText) {
   const response = await ai.models.generateContent({
     model: "gemini-3.1-flash-lite-preview",
-    contents: `Score this pun based on the topic '${topic}' and focus '${focus}'. The pun is: "${punText}".
-    Evaluate for creativity, humor, and how well it bridges both concepts.
-    You are a jaded comedy critic who has heard it all. Be direct. One sentence only. No filler. If it's bad, say so plainly. If it's good, grudgingly admit it. Never use exclamation marks.
-    Provide a score from 0 to 10 and your one-sentence feedback. Return as JSON.`,
+    contents: `Evaluate this pun. Topic: '${topic}'. Focus: '${focus}'. Pun: "${punText}".
+    
+    Persona: A witty, fair, and slightly cheeky pub trivia host. 
+    Appreciate clever wordplay, groan playfully at "dad jokes", and use dry humour for total failures.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          score: { type: Type.NUMBER },
-          feedback: { type: Type.STRING },
+          reasoning: {
+            type: Type.STRING,
+            description: "Internal logic. Briefly analyze if the pun phonetically or semantically links the Topic and Focus. Do not show to the user."
+          },
+          score: { 
+            type: Type.INTEGER,
+            description: "Score 0-10 based on the reasoning. 0-3: logic failure. 4-6: a groaner/stretch. 7-9: clever. 10: brilliant."
+          },
+          feedback: { 
+            type: Type.STRING,
+            description: "1-2 sentences. Speak directly to the player. Use Australian English spelling (e.g., humour). Match the tone to the score."
+          },
         },
-        required: ["score", "feedback"],
+        required: ["reasoning", "score", "feedback"],
       },
     },
   });
@@ -114,7 +127,8 @@ function removeSessionClient(sessionId, res) {
 }
 
 function addNotificationClient(userId, res) {
-  if (!notificationClients.has(userId)) notificationClients.set(userId, new Set());
+  if (!notificationClients.has(userId))
+    notificationClients.set(userId, new Set());
   notificationClients.get(userId).add(res);
 }
 
@@ -213,11 +227,15 @@ app.use(
         scriptSrc: ["'self'", "https://static.cloudflareinsights.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https://*.googleusercontent.com"],
-        connectSrc: ["'self'", "https://cloudflareinsights.com", "https://static.cloudflareinsights.com"],
+        connectSrc: [
+          "'self'",
+          "https://cloudflareinsights.com",
+          "https://static.cloudflareinsights.com",
+        ],
         fontSrc: ["'self'"],
       },
     },
-  })
+  }),
 );
 
 app.use(
@@ -226,12 +244,15 @@ app.use(
     filter: (req, res) => {
       const accept = req.headers.accept || "";
       const contentType = String(res.getHeader("Content-Type") || "");
-      if (accept.includes("text/event-stream") || contentType.includes("text/event-stream")) {
+      if (
+        accept.includes("text/event-stream") ||
+        contentType.includes("text/event-stream")
+      ) {
         return false;
       }
       return compression.filter(req, res);
     },
-  })
+  }),
 );
 
 // --- Umami proxy routes ---
@@ -244,7 +265,9 @@ app.get("/umami/script.js", async (req, res) => {
     });
 
     if (!upstream.ok) {
-      return res.status(upstream.status).send("Failed to load analytics script");
+      return res
+        .status(upstream.status)
+        .send("Failed to load analytics script");
     }
 
     const script = await upstream.text();
@@ -257,28 +280,32 @@ app.get("/umami/script.js", async (req, res) => {
   }
 });
 
-app.post("/umami/api/send", express.raw({ type: "*/*", limit: "1mb" }), async (req, res) => {
-  try {
-    const upstream = await fetch(`${UMAMI_BASE_URL}/api/send`, {
-      method: "POST",
-      headers: {
-        "content-type": req.get("content-type") || "application/json",
-        "user-agent": req.get("user-agent") || "PunIntended/umami-proxy",
-      },
-      body: req.body,
-    });
+app.post(
+  "/umami/api/send",
+  express.raw({ type: "*/*", limit: "1mb" }),
+  async (req, res) => {
+    try {
+      const upstream = await fetch(`${UMAMI_BASE_URL}/api/send`, {
+        method: "POST",
+        headers: {
+          "content-type": req.get("content-type") || "application/json",
+          "user-agent": req.get("user-agent") || "PunIntended/umami-proxy",
+        },
+        body: req.body,
+      });
 
-    const text = await upstream.text();
-    res.status(upstream.status);
-    if (upstream.headers.get("content-type")) {
-      res.setHeader("Content-Type", upstream.headers.get("content-type"));
+      const text = await upstream.text();
+      res.status(upstream.status);
+      if (upstream.headers.get("content-type")) {
+        res.setHeader("Content-Type", upstream.headers.get("content-type"));
+      }
+      res.send(text);
+    } catch (error) {
+      console.error("Umami event proxy failed:", error);
+      res.status(502).json({ error: "Analytics proxy error" });
     }
-    res.send(text);
-  } catch (error) {
-    console.error("Umami event proxy failed:", error);
-    res.status(502).json({ error: "Analytics proxy error" });
-  }
-});
+  },
+);
 
 app.use(express.json());
 
@@ -312,7 +339,7 @@ function ensureAuthenticated(req, res, next) {
 // --- Auth routes ---
 app.get(
   "/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
+  passport.authenticate("google", { scope: ["profile", "email"] }),
 );
 
 app.get(
@@ -320,7 +347,7 @@ app.get(
   passport.authenticate("google", { failureRedirect: "/?login=failed" }),
   (req, res) => {
     res.redirect("/?login=success");
-  }
+  },
 );
 
 app.post("/auth/logout", (req, res) => {
@@ -397,7 +424,8 @@ app.get("/api/sessions", ensureAuthenticated, async (req, res) => {
 
 app.post("/api/sessions", ensureAuthenticated, async (req, res) => {
   const { name } = req.body;
-  if (!name || !name.trim()) return res.status(400).json({ error: "Session name required" });
+  if (!name || !name.trim())
+    return res.status(400).json({ error: "Session name required" });
 
   try {
     const todayId = new Date().toISOString().split("T")[0];
@@ -406,6 +434,12 @@ app.post("/api/sessions", ensureAuthenticated, async (req, res) => {
       ...challenge,
       challengeId: todayId,
     });
+    await saveChallengeToHistory(
+      session.id,
+      todayId,
+      challenge.topic,
+      challenge.focus,
+    );
     const fullSession = await getSessionById(session.id);
     res.json(fullSession);
   } catch (error) {
@@ -442,44 +476,75 @@ app.delete("/api/sessions/:id", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.post("/api/sessions/:id/refresh-challenge", ensureAuthenticated, async (req, res) => {
-  try {
-    const session = await getSessionById(req.params.id);
-    if (!session) return res.status(404).json({ error: "Session not found" });
-    if (session.ownerId !== req.user.id)
-      return res.status(403).json({ error: "Only the owner can refresh" });
+app.post(
+  "/api/sessions/:id/refresh-challenge",
+  ensureAuthenticated,
+  async (req, res) => {
+    try {
+      const session = await getSessionById(req.params.id);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.ownerId !== req.user.id)
+        return res.status(403).json({ error: "Only the owner can refresh" });
 
-    const todayId = new Date().toISOString().split("T")[0];
-    const challenge = await generateDailyChallenge();
-    await updateSessionChallenge(req.params.id, challenge.topic, challenge.focus, todayId);
+      const todayId = new Date().toISOString().split("T")[0];
+      const pastChallenges = await getPastChallengeTopics(req.params.id);
+      const challenge = await generateDailyChallenge(pastChallenges);
+      await updateSessionChallenge(
+        req.params.id,
+        challenge.topic,
+        challenge.focus,
+        todayId,
+      );
+      await saveChallengeToHistory(
+        req.params.id,
+        todayId,
+        challenge.topic,
+        challenge.focus,
+      );
 
-    // Notify other players
-    for (const player of session.players) {
-      if (player.uid !== req.user.id) {
-        await createNotification(
-          player.uid,
-          "system",
-          `The host refreshed the challenge in "${session.name}".`,
-          session.id
-        );
-        broadcastNotificationUpdate(player.uid);
+      // Notify other players
+      for (const player of session.players) {
+        if (player.uid !== req.user.id) {
+          await createNotification(
+            player.uid,
+            "system",
+            `The host refreshed the challenge in "${session.name}".`,
+            session.id,
+          );
+          broadcastNotificationUpdate(player.uid);
+        }
       }
-    }
 
-    broadcastSessionUpdate(req.params.id);
-    const updated = await getSessionById(req.params.id);
-    res.json(updated);
+      broadcastSessionUpdate(req.params.id);
+      const updated = await getSessionById(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to refresh challenge:", error);
+      res.status(500).json({ error: "Failed to refresh challenge" });
+    }
+  },
+);
+
+app.get("/api/sessions/:id/history", ensureAuthenticated, async (req, res) => {
+  try {
+    const history = await getChallengeHistory(req.params.id);
+    res.json(history);
   } catch (error) {
-    console.error("Failed to refresh challenge:", error);
-    res.status(500).json({ error: "Failed to refresh challenge" });
+    console.error("Failed to get challenge history:", error);
+    res.status(500).json({ error: "Failed to get challenge history" });
   }
 });
 
 // --- Pun API ---
 app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
   try {
-    const challengeId = req.query.challengeId || new Date().toISOString().split("T")[0];
-    const puns = await getPunsBySessionAndChallenge(req.params.id, challengeId, req.user.id);
+    const challengeId =
+      req.query.challengeId || new Date().toISOString().split("T")[0];
+    const puns = await getPunsBySessionAndChallenge(
+      req.params.id,
+      challengeId,
+      req.user.id,
+    );
     res.json(puns);
   } catch (error) {
     console.error("Failed to get puns:", error);
@@ -489,10 +554,14 @@ app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
 
 app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
   const { text, responseTimeMs } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: "Pun text required" });
-  if (text.length > 500) return res.status(400).json({ error: "Pun too long (max 500 chars)" });
+  if (!text || !text.trim())
+    return res.status(400).json({ error: "Pun text required" });
+  if (text.length > 500)
+    return res.status(400).json({ error: "Pun too long (max 500 chars)" });
   const validatedResponseTimeMs =
-    Number.isInteger(responseTimeMs) && responseTimeMs > 0 ? responseTimeMs : null;
+    Number.isInteger(responseTimeMs) && responseTimeMs > 0
+      ? responseTimeMs
+      : null;
 
   const sessionId = req.params.id;
   const todayId = new Date().toISOString().split("T")[0];
@@ -503,26 +572,49 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
 
     // Fair play enforcement: server-side
     if (session.players.length > 1) {
-      const myCount = await countPunsByAuthorInSession(sessionId, todayId, req.user.id);
+      const myCount = await countPunsByAuthorInSession(
+        sessionId,
+        todayId,
+        req.user.id,
+      );
       const minCount = await getMinPunCountInSession(sessionId, todayId);
       if (myCount > minCount) {
         return res.status(429).json({
-          error: "Wait for others to catch up! Everyone must submit a pun before you can go again.",
+          error:
+            "Wait for others to catch up! Everyone must submit a pun before you can go again.",
         });
       }
     }
 
-    const pun = await createPun(sessionId, todayId, req.user.id, text.trim(), validatedResponseTimeMs);
+    const pun = await createPun(
+      sessionId,
+      todayId,
+      req.user.id,
+      text.trim(),
+      validatedResponseTimeMs,
+    );
     broadcastPunsUpdate(sessionId, todayId);
 
     // Score asynchronously
     if (session.challenge) {
-      scorePunText(session.challenge.topic, session.challenge.focus, text.trim())
+      scorePunText(
+        session.challenge.topic,
+        session.challenge.focus,
+        text.trim(),
+      )
         .then(async (result) => {
+          // OPTIONAL: Log the reasoning for your own server diagnostics
+          console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`); 
+          
           await updatePunScore(pun.id, result.score, result.feedback);
           broadcastPunsUpdate(sessionId, todayId);
         })
-        .catch((err) => console.error("AI scoring failed:", err));
+        .catch(async (err) => {
+          console.error("AI scoring failed:", err);
+          // OPTIONAL: Write a fallback state to the DB so the frontend doesn't hang
+          await updatePunScore(pun.id, 0, "The judge fell asleep at the bar. Please edit and resubmit!");
+          broadcastPunsUpdate(sessionId, todayId);
+        });
     }
 
     res.json({ id: pun.id });
@@ -534,7 +626,8 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
 
 app.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
   const { text } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: "Pun text required" });
+  if (!text || !text.trim())
+    return res.status(400).json({ error: "Pun text required" });
 
   try {
     const pun = await getPunById(req.params.id);
@@ -548,7 +641,11 @@ app.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
     // Re-score
     const session = await getSessionById(pun.session_id);
     if (session?.challenge) {
-      scorePunText(session.challenge.topic, session.challenge.focus, text.trim())
+      scorePunText(
+        session.challenge.topic,
+        session.challenge.focus,
+        text.trim(),
+      )
         .then(async (result) => {
           await updatePunScore(req.params.id, result.score, result.feedback);
           broadcastPunsUpdate(pun.session_id, pun.challenge_id);
@@ -582,9 +679,19 @@ app.delete("/api/puns/:id", ensureAuthenticated, async (req, res) => {
 
 app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
   const { reaction } = req.body;
-  const allowedReactions = new Set(["clever", "laugh", "groan", "fire", "wild"]);
+  const allowedReactions = new Set([
+    "clever",
+    "laugh",
+    "groan",
+    "fire",
+    "wild",
+  ]);
 
-  if (reaction !== null && reaction !== undefined && !allowedReactions.has(reaction)) {
+  if (
+    reaction !== null &&
+    reaction !== undefined &&
+    !allowedReactions.has(reaction)
+  ) {
     return res.status(400).json({ error: "Invalid reaction" });
   }
 
@@ -592,7 +699,11 @@ app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
     const pun = await getPunById(req.params.id);
     if (!pun) return res.status(404).json({ error: "Pun not found" });
 
-    const selectedReaction = await setPunReaction(req.params.id, req.user.id, reaction || null);
+    const selectedReaction = await setPunReaction(
+      req.params.id,
+      req.user.id,
+      reaction || null,
+    );
 
     // Notify pun author on positive reactions only.
     if (
@@ -606,7 +717,7 @@ app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
         pun.author_id,
         "reaction",
         `${req.user.display_name || "Someone"} reacted (${selectedReaction}) to your pun: "${punText}"`,
-        pun.session_id
+        pun.session_id,
       );
       broadcastNotificationUpdate(pun.author_id);
     }
@@ -630,20 +741,26 @@ app.get("/api/sessions/:id/messages", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.post("/api/sessions/:id/messages", ensureAuthenticated, async (req, res) => {
-  const { text } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: "Message text required" });
-  if (text.length > 500) return res.status(400).json({ error: "Message too long" });
+app.post(
+  "/api/sessions/:id/messages",
+  ensureAuthenticated,
+  async (req, res) => {
+    const { text } = req.body;
+    if (!text || !text.trim())
+      return res.status(400).json({ error: "Message text required" });
+    if (text.length > 500)
+      return res.status(400).json({ error: "Message too long" });
 
-  try {
-    await createMessage(req.params.id, req.user.id, text.trim());
-    broadcastMessagesUpdate(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to send message:", error);
-    res.status(500).json({ error: "Failed to send message" });
-  }
-});
+    try {
+      await createMessage(req.params.id, req.user.id, text.trim());
+      broadcastMessagesUpdate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  },
+);
 
 // --- Comment API ---
 app.get("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
@@ -658,8 +775,10 @@ app.get("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
 
 app.post("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
   const { text, sessionId } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: "Comment text required" });
-  if (text.length > 500) return res.status(400).json({ error: "Comment too long" });
+  if (!text || !text.trim())
+    return res.status(400).json({ error: "Comment text required" });
+  if (text.length > 500)
+    return res.status(400).json({ error: "Comment too long" });
   if (!sessionId) return res.status(400).json({ error: "Session ID required" });
 
   try {
@@ -683,16 +802,20 @@ app.get("/api/notifications", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.put("/api/notifications/:id/read", ensureAuthenticated, async (req, res) => {
-  try {
-    await markNotificationRead(req.params.id);
-    broadcastNotificationUpdate(req.user.id);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to mark notification:", error);
-    res.status(500).json({ error: "Failed to mark notification" });
-  }
-});
+app.put(
+  "/api/notifications/:id/read",
+  ensureAuthenticated,
+  async (req, res) => {
+    try {
+      await markNotificationRead(req.params.id);
+      broadcastNotificationUpdate(req.user.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to mark notification:", error);
+      res.status(500).json({ error: "Failed to mark notification" });
+    }
+  },
+);
 
 // --- Profile API ---
 app.get("/api/profile/puns", ensureAuthenticated, async (req, res) => {

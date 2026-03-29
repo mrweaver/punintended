@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Challenge history (one row per session per day)
+CREATE TABLE IF NOT EXISTS session_challenge_history (
+    session_id UUID NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
+    challenge_id VARCHAR(10) NOT NULL,
+    topic VARCHAR(500) NOT NULL,
+    focus VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (session_id, challenge_id)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_owner ON game_sessions(owner_id);

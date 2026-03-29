@@ -207,12 +207,19 @@ export function GameBoard({
             placeholder="Type your pun here..."
             value={punText}
             onChange={(e) => setPunText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.ctrlKey) {
+                e.preventDefault();
+                handleSubmitPun();
+              }
+            }}
             className="w-full p-4 sm:p-6 text-lg sm:text-xl font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl sm:rounded-2xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[100px] sm:min-h-[120px] resize-none"
           />
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
               Tip: Combine {session.challenge?.topic} and{" "}
-              {session.challenge?.focus} for maximum points!
+              {session.challenge?.focus} for maximum points!{" "}
+              <span className="text-xs opacity-60">Ctrl+Enter to submit.</span>
             </p>
             <Button
               variant="secondary"

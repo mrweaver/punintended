@@ -1,5 +1,10 @@
 import pg from "pg";
-const { Pool } = pg;
+const { Pool, types } = pg;
+
+// TIMESTAMP WITHOUT TIME ZONE (OID 1114) — pg returns a raw space-separated
+// string with no timezone marker. Browsers parse that as local time, which
+// makes every timestamp appear wrong for users outside UTC. Force UTC.
+types.setTypeParser(1114, (val) => new Date(val.replace(" ", "T") + "Z"));
 
 const poolConfig = {
   host: process.env.PGHOST || "punintended-db",

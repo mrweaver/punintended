@@ -103,12 +103,12 @@ export default function App() {
         </main>
 
         <footer className="p-12 text-center text-gray-400 dark:text-zinc-600 text-sm">
-          <p>&copy; 2026 PunIntended &bull; Built with AI for the pun of it.</p>
+          <p>&copy; 2026 Cotlone Studios &bull; Built with AI for the pun of it.</p>
           <button
             onClick={() => setShowChangelog(true)}
             className="mt-2 text-xs opacity-50 hover:opacity-100 hover:text-orange-500 dark:hover:text-violet-400 transition-all cursor-pointer"
           >
-            v1.3.0
+            v{__APP_VERSION__}
           </button>
         </footer>
 

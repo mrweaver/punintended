@@ -59,6 +59,21 @@ async function query(text, params, retries = 3) {
   throw lastError;
 }
 
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // --- User functions ---
 
 async function findOrCreateUser(googleProfile) {
@@ -193,6 +208,38 @@ async function runMigrations() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       PRIMARY KEY (session_id, challenge_id)
     )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlets (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      rounds JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_runs (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      rounds JSONB NOT NULL DEFAULT '[]',
+      status VARCHAR(20) NOT NULL DEFAULT 'in_progress'
+        CHECK (status IN ('in_progress', 'scoring', 'complete')),
+      total_score INTEGER,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`);
+  // Fix notifications constraint — original DB was created without 'reaction' type
+  await query(`
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check
+  `);
+  await query(`
+    ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+      CHECK (type IN ('reaction', 'vote', 'system'))
   `);
 }
 
@@ -541,9 +588,128 @@ function formatNotification(row) {
   };
 }
 
+// --- Gauntlet functions ---
+
+async function createGauntlet(userId, rounds) {
+  const result = await query(
+    `INSERT INTO gauntlets (created_by, rounds) VALUES ($1, $2) RETURNING *`,
+    [userId, JSON.stringify(rounds)],
+  );
+  return formatGauntlet(result.rows[0]);
+}
+
+async function getGauntletById(id) {
+  const result = await query(`SELECT * FROM gauntlets WHERE id = $1`, [id]);
+  return result.rows[0] ? formatGauntlet(result.rows[0]) : null;
+}
+
+async function createGauntletRun(gauntletId, playerId) {
+  const result = await query(
+    `INSERT INTO gauntlet_runs (gauntlet_id, player_id) VALUES ($1, $2) RETURNING *`,
+    [gauntletId, playerId],
+  );
+  return formatGauntletRun(result.rows[0]);
+}
+
+async function getGauntletRunById(runId) {
+  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [runId]);
+  return result.rows[0] ? formatGauntletRun(result.rows[0]) : null;
+}
+
+// Atomic JSONB append — WHERE clause on array length guards against out-of-order submissions
+async function submitGauntletRound(runId, roundIndex, punText, secondsRemaining) {
+  const newEntry = {
+    pun_text: punText,
+    ai_score: null,
+    ai_feedback: null,
+    seconds_remaining: secondsRemaining,
+    round_score: null,
+  };
+  const result = await query(
+    `UPDATE gauntlet_runs
+     SET rounds = rounds || $1::jsonb
+     WHERE id = $2 AND jsonb_array_length(rounds) = $3
+     RETURNING *`,
+    [JSON.stringify([newEntry]), runId, roundIndex],
+  );
+  if (!result.rows[0]) throw new Error("Round index mismatch or run not found");
+  return formatGauntletRun(result.rows[0]);
+}
+
+// Transaction + FOR UPDATE serialises concurrent Gemini scoring callbacks.
+// Without the lock, two callbacks that SELECT before either UPDATEs would
+// silently overwrite each other's scores.
+async function updateGauntletRoundScore(runId, roundIndex, aiScore, aiFeedback) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT rounds FROM gauntlet_runs WHERE id = $1 FOR UPDATE`,
+      [runId],
+    );
+    if (!rows[0]) throw new Error("Run not found");
+    const rounds = rows[0].rounds;
+    const round = rounds[roundIndex];
+    const baseScore = aiScore * 100;
+    const timeBonus = aiScore >= 5 ? (round.seconds_remaining || 0) * 10 : 0;
+    rounds[roundIndex] = {
+      ...round,
+      ai_score: aiScore,
+      ai_feedback: aiFeedback,
+      round_score: baseScore + timeBonus,
+    };
+    const result = await client.query(
+      `UPDATE gauntlet_runs SET rounds = $1::jsonb WHERE id = $2 RETURNING *`,
+      [JSON.stringify(rounds), runId],
+    );
+    return formatGauntletRun(result.rows[0]);
+  });
+}
+
+// SQL-level status guard prevents double-finalization from concurrent callbacks
+async function finalizeGauntletRun(runId, totalScore) {
+  const result = await query(
+    `UPDATE gauntlet_runs
+     SET status = 'complete', total_score = $1, updated_at = NOW()
+     WHERE id = $2 AND status != 'complete'
+     RETURNING *`,
+    [totalScore, runId],
+  );
+  return result.rows[0] ? formatGauntletRun(result.rows[0]) : null;
+}
+
+async function setGauntletRunScoring(runId) {
+  const result = await query(
+    `UPDATE gauntlet_runs SET status = 'scoring' WHERE id = $1 RETURNING *`,
+    [runId],
+  );
+  return formatGauntletRun(result.rows[0]);
+}
+
+function formatGauntlet(row) {
+  return {
+    id: row.id,
+    createdBy: row.created_by,
+    rounds: row.rounds,
+    createdAt: row.created_at,
+  };
+}
+
+function formatGauntletRun(row) {
+  return {
+    id: row.id,
+    gauntletId: row.gauntlet_id,
+    playerId: row.player_id,
+    rounds: row.rounds,
+    status: row.status,
+    totalScore: row.total_score,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export {
   pool,
   query,
+  withTransaction,
   runMigrations,
   findOrCreateUser,
   getUserById,
@@ -574,4 +740,12 @@ export {
   getNotificationsByUser,
   createNotification,
   markNotificationRead,
+  createGauntlet,
+  getGauntletById,
+  createGauntletRun,
+  getGauntletRunById,
+  submitGauntletRound,
+  updateGauntletRoundScore,
+  finalizeGauntletRun,
+  setGauntletRunScoring,
 };

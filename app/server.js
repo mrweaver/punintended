@@ -37,6 +37,14 @@ import {
   getNotificationsByUser,
   createNotification,
   markNotificationRead,
+  createGauntlet,
+  getGauntletById,
+  createGauntletRun,
+  getGauntletRunById,
+  submitGauntletRound,
+  updateGauntletRoundScore,
+  finalizeGauntletRun,
+  setGauntletRunScoring,
   runMigrations,
 } from "./db/database.js";
 
@@ -82,8 +90,10 @@ async function scorePunText(topic, focus, punText) {
     model: "gemini-3.1-flash-lite-preview",
     contents: `Evaluate this pun. Topic: '${topic}'. Focus: '${focus}'. Pun: "${punText}".
     
-    Persona: A witty, fair, and slightly cheeky pub trivia host. 
-    Appreciate clever wordplay, groan playfully at "dad jokes", and use dry humour for total failures.`,
+    Persona Tone & Mechanics:
+    You are a sharp, dry, and deadpan judge. Your humour is rooted in British and Australian comedic sensibilities: understated sarcasm, affectionate mockery ("taking the piss"), and a slightly weary but sharp intellect. 
+    
+    CRITICAL NEGATIVE PROMPT: Do NOT use forced colloquialisms, slang (e.g., "mate", "crikey", "blimey", "cheers"), or cultural stereotypes (no mentions of pubs, pints, kangaroos, or regional tropes). The humour must rely purely on dry, structural wit and deadpan delivery, not caricature.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -97,12 +107,12 @@ async function scorePunText(topic, focus, punText) {
           score: {
             type: Type.INTEGER,
             description:
-              "Score 0-10. CRITICAL RULE: To score 7 or above, the submission MUST contain actual phonetic wordplay (words that sound similar or have double meanings). Acronym redefinitions (like JPL = Just Pat Lightly) or purely logical jokes without phonetic puns are clever, but must be capped at a maximum score of 6.",
+              "Score 0-10. CRITICAL RULE: To score 7 or above, the submission MUST contain actual phonetic wordplay. Acronyms or purely logical jokes without phonetic puns are clever, but must be capped at a maximum score of 6.",
           },
           feedback: {
             type: Type.STRING,
             description:
-              "1-2 sentences. Speak directly to the player using Australian English. If they used an acronym or logical joke instead of a phonetic pun, cheekily call them out on it and explain why they didn't score higher.",
+              "1-2 sentences max. Speak directly to the player using Australian English spelling (e.g., humour, realise). Tone matching: 0-3 gets an elegant, deadpan roast; 4-6 gets a weary groan; 7-10 gets understated, grudging respect. Do not use exclamation marks to feign excitement.",
           },
         },
         required: ["reasoning", "score", "feedback"],
@@ -112,9 +122,47 @@ async function scorePunText(topic, focus, punText) {
   return JSON.parse(response.text);
 }
 
+async function generateGauntletPrompts() {
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: `Generate 5 completely unique 'Topic' and 'Focus' pairs for a rapid-fire pun-making game.
+
+    CRITICAL RULES:
+    1. All 5 pairs must be completely unrelated — no logical connections between Topic and Focus.
+    2. All 5 Topics must be different from each other.
+    3. All 5 Focuses must be different from each other.
+    4. Topics: broad categories (e.g., "Human Body", "Medieval History", "Power Tools").
+    5. Focuses: specific, unrelated objects or situations (e.g., "A Parking Ticket", "Sourdough Bread").
+
+    Use Australian English spelling throughout. Return as JSON with a 'rounds' array of exactly 5 objects.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          rounds: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                topic: { type: Type.STRING },
+                focus: { type: Type.STRING },
+              },
+              required: ["topic", "focus"],
+            },
+          },
+        },
+        required: ["rounds"],
+      },
+    },
+  });
+  return JSON.parse(response.text);
+}
+
 // --- SSE Infrastructure ---
 const sessionClients = new Map(); // sessionId -> Set<res>
 const notificationClients = new Map(); // userId -> Set<res>
+const gauntletClients = new Map(); // runId -> Set<res>
 
 function addSessionClient(sessionId, res) {
   if (!sessionClients.has(sessionId)) sessionClients.set(sessionId, new Set());
@@ -152,6 +200,32 @@ function broadcastToSession(sessionId, event, data) {
       client.write(payload);
     } catch {
       // Client disconnected
+    }
+  }
+}
+
+function addGauntletClient(runId, res) {
+  if (!gauntletClients.has(runId)) gauntletClients.set(runId, new Set());
+  gauntletClients.get(runId).add(res);
+}
+
+function removeGauntletClient(runId, res) {
+  const clients = gauntletClients.get(runId);
+  if (clients) {
+    clients.delete(res);
+    if (clients.size === 0) gauntletClients.delete(runId);
+  }
+}
+
+function broadcastToGauntletRun(runId, event, data) {
+  const clients = gauntletClients.get(runId);
+  if (!clients) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of clients) {
+    try {
+      client.write(payload);
+    } catch {
+      removeGauntletClient(runId, client);
     }
   }
 }
@@ -209,6 +283,15 @@ setInterval(() => {
     }
   }
   for (const [, clients] of notificationClients) {
+    for (const client of clients) {
+      try {
+        client.write(":heartbeat\n\n");
+      } catch {
+        // Will be cleaned up on close
+      }
+    }
+  }
+  for (const [, clients] of gauntletClients) {
     for (const client of clients) {
       try {
         client.write(":heartbeat\n\n");
@@ -839,6 +922,169 @@ app.get("/api/profile/puns", ensureAuthenticated, async (req, res) => {
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+
+// --- Gauntlet routes ---
+
+async function maybeFinalize(runId) {
+  const run = await getGauntletRunById(runId);
+  if (!run || run.status === "complete") return;
+  const allScored =
+    run.rounds.length === 5 &&
+    run.rounds.every(
+      (r) => r.round_score !== null && r.round_score !== undefined,
+    );
+  if (allScored) {
+    const total = run.rounds.reduce((sum, r) => sum + (r.round_score || 0), 0);
+    const finalRun = await finalizeGauntletRun(runId, total);
+    if (finalRun) {
+      broadcastToGauntletRun(runId, "gauntlet-run-complete", finalRun);
+    }
+  }
+}
+
+app.post("/api/gauntlet/generate", ensureAuthenticated, async (req, res) => {
+  try {
+    const { rounds } = await generateGauntletPrompts();
+    const gauntlet = await createGauntlet(req.user.id, rounds);
+    const run = await createGauntletRun(gauntlet.id, req.user.id);
+    res.json({ gauntletId: gauntlet.id, runId: run.id, rounds: gauntlet.rounds });
+  } catch (err) {
+    console.error("Failed to generate gauntlet:", err);
+    res.status(500).json({ error: "Failed to generate gauntlet" });
+  }
+});
+
+app.get("/api/gauntlet/:id", ensureAuthenticated, async (req, res) => {
+  try {
+    const gauntlet = await getGauntletById(req.params.id);
+    if (!gauntlet) return res.status(404).json({ error: "Gauntlet not found" });
+    const run = await createGauntletRun(gauntlet.id, req.user.id);
+    res.json({ gauntletId: gauntlet.id, runId: run.id, rounds: gauntlet.rounds });
+  } catch (err) {
+    console.error("Failed to start gauntlet:", err);
+    res.status(500).json({ error: "Failed to start gauntlet" });
+  }
+});
+
+app.post(
+  "/api/gauntlet/:id/submit-round",
+  ensureAuthenticated,
+  async (req, res) => {
+    const { runId, roundIndex, punText, secondsRemaining } = req.body;
+    if (typeof roundIndex !== "number" || roundIndex < 0 || roundIndex > 4)
+      return res.status(400).json({ error: "Invalid round index" });
+    const cleanText = typeof punText === "string" ? punText.trim() : "";
+    if (cleanText.length > 500)
+      return res.status(400).json({ error: "Pun too long" });
+    // secondsRemaining is client-supplied (V1 - casual game, no global leaderboard).
+    // V2 fix: record round_started_at server-side and compute elapsed on submission.
+    const validSecs =
+      Number.isInteger(secondsRemaining) &&
+      secondsRemaining >= 0 &&
+      secondsRemaining <= 60
+        ? secondsRemaining
+        : 0;
+
+    try {
+      const gauntlet = await getGauntletById(req.params.id);
+      if (!gauntlet)
+        return res.status(404).json({ error: "Gauntlet not found" });
+      const run = await getGauntletRunById(runId);
+      if (!run) return res.status(404).json({ error: "Run not found" });
+      if (run.playerId !== req.user.id)
+        return res.status(403).json({ error: "Not your run" });
+      if (run.status !== "in_progress")
+        return res.status(409).json({ error: "Run no longer in progress" });
+
+      await submitGauntletRound(runId, roundIndex, cleanText, validSecs);
+      if (roundIndex === 4) await setGauntletRunScoring(runId);
+
+      res.json({ success: true });
+
+      if (cleanText) {
+        const { topic, focus } = gauntlet.rounds[roundIndex];
+        scorePunText(topic, focus, cleanText)
+          .then(async ({ score, feedback, reasoning }) => {
+            console.log(`[Gauntlet ${runId} R${roundIndex}] ${reasoning}`);
+            await updateGauntletRoundScore(runId, roundIndex, score, feedback);
+            await maybeFinalize(runId);
+          })
+          .catch(async (err) => {
+            console.error(
+              `Gauntlet scoring failed run=${runId} round=${roundIndex}:`,
+              err,
+            );
+            await updateGauntletRoundScore(
+              runId,
+              roundIndex,
+              0,
+              "The judge fell asleep at the bar. No score for this round.",
+            );
+            await maybeFinalize(runId);
+          });
+      } else {
+        // Timer expired - score as zero immediately, no AI call needed
+        await updateGauntletRoundScore(
+          runId,
+          roundIndex,
+          0,
+          "Time's up - no pun submitted.",
+        );
+        await maybeFinalize(runId);
+      }
+    } catch (err) {
+      console.error("Failed to submit gauntlet round:", err);
+      res.status(500).json({ error: "Failed to submit round" });
+    }
+  },
+);
+
+app.get(
+  "/api/gauntlet/:id/run/:runId/stream",
+  ensureAuthenticated,
+  async (req, res) => {
+    const run = await getGauntletRunById(req.params.runId).catch(() => null);
+    if (!run) return res.status(404).json({ error: "Run not found" });
+    if (run.playerId !== req.user.id)
+      return res.status(403).json({ error: "Not your run" });
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write(":connected\n\n");
+
+    const runId = req.params.runId;
+    addGauntletClient(runId, res);
+
+    // Push immediately if scoring already finished before SSE connected
+    if (run.status === "complete") {
+      broadcastToGauntletRun(runId, "gauntlet-run-complete", run);
+    }
+
+    req.on("close", () => removeGauntletClient(runId, res));
+  },
+);
+
+app.get(
+  "/api/gauntlet/:id/run/:runId",
+  ensureAuthenticated,
+  async (req, res) => {
+    try {
+      const run = await getGauntletRunById(req.params.runId);
+      if (!run) return res.status(404).json({ error: "Run not found" });
+      if (run.playerId !== req.user.id)
+        return res.status(403).json({ error: "Not your run" });
+      res.json(run);
+    } catch (err) {
+      console.error("Failed to get gauntlet run:", err);
+      res.status(500).json({ error: "Failed to get run" });
+    }
+  },
+);
 
 // --- Serve React static files ---
 app.use(express.static(path.join(__dirname, "dist")));

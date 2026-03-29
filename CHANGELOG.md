@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.2.0] - 2026-03-28
 
 ### Added
+
 - **Response-Time Speed Score:** Timer starts silently when a user first sees the daily challenge cards. Elapsed time is recorded on pun submission and factored into the ranking score — rewarding quick wit alongside quality.
 - **Speed Badge on Pun Cards:** Each pun now shows a ⚡ indicator next to the AI score displaying the author's response time (e.g. "⚡ 42s"). Color-coded green (≤30s), orange (≤2min), or grey (slower).
 - **Combined Ranking Formula:** Score now weights AI judgment at 50%, reactions at 35%, and speed at 15%. Puns without a recorded time fall back to the original 60/40 formula — no regression for existing puns.
@@ -59,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.1.0] - 2026-03-01
 
 ### Added
+
 - **Daily Challenge Cards:** AI-generated Topic and Focus cards displayed in GameBoard; session owner can refresh the challenge at any time.
 - **Pun Submission:** Textarea with 500-character limit; fair-play enforcement prevents a player submitting again until everyone else has had a turn in multiplayer sessions.
 - **AI Scoring:** Gemini 3.1 Flash scores each pun 0–10 with a single line of feedback from "a jaded comedy critic". Scores are applied asynchronously and pushed via SSE.

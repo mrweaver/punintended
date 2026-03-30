@@ -77,12 +77,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
   }, [userPuns]);
 
   const totalReactions = useMemo(
-    () =>
-      userPuns.reduce(
-        (acc, pun) =>
-          acc + Object.values(pun.reactions).reduce((sum, n) => sum + n, 0),
-        0,
-      ),
+    () => userPuns.reduce((acc, pun) => acc + pun.groanCount, 0),
     [userPuns],
   );
 
@@ -199,7 +194,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-gray-500 dark:text-zinc-400">
                     <span>{new Date(pun.createdAt).toLocaleDateString()}</span>
                     <div className="flex items-center gap-1 text-orange-500 dark:text-violet-500 font-bold">
-                      <Sparkles className="w-3 h-3" /> {pun.reactionTotal}
+                      <Sparkles className="w-3 h-3" /> {pun.groanCount}
                     </div>
                   </div>
                 </div>

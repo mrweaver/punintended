@@ -4,6 +4,31 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.0] - 2026-03-30
+
+### Added
+
+- **Groan Reaction:** Single always-visible 😩 Groan button on every pun card replaces the hidden 5-reaction picker; Groans appear on global leaderboards.
+- **Weekly Group Leaderboard:** Collapsible Mon–Sun panel in the game board showing each player's daily-best scores; lowest day dropped automatically.
+- **Global Leaderboards:** New page (Trophy icon in header) with three tabs — Daily Crown (10/10 puns by groans), Hall of Shame (≤2/10 puns), and All-Time Groaners.
+- **Player Leaderboard Bar:** Live top-3 bar above the pun feed showing each player's best AI score for the day.
+- **Typing Presence:** Ghost cards in the pun feed show when other players are typing or have submitted.
+- **Score Audio Cues:** Web Audio API tones play when the current user's pun receives an AI score.
+- **Join by Invite Code:** Lobby redesigned with join-by-code as the primary action; Gauntlet demoted to a slim strip.
+
+### Changed
+
+- **3 Submissions Per Day:** Players get up to 3 attempts per challenge; remaining count shown below the submit button; form disables at 0.
+- **AEST Midnight Rollover:** Daily challenges now roll over at midnight Australia/Sydney time instead of UTC midnight.
+- **Daily-Best Scoring:** The leaderboard bar shows the highest AI score from a player's attempts, not the average.
+- **Speed Scoring Removed:** Response-time bonuses and the ⚡ speed badge have been removed.
+- **About Modal:** Rewritten with current game rules, Quick Start section, expandable details, and live version number.
+
+### Fixed
+
+- **Pun Feed 500 Error:** `MAX(uuid)` aggregate (unsupported in PostgreSQL) replaced with `COUNT(*) FILTER (...)` in the puns query.
+- **History Pun Display:** Removed stale `reactions`/`reactionTotal` mapping in `useChallengeHistory` that was shadowing valid pun data.
+
 ## [1.6.0] - 2026-03-30
 
 ### Added

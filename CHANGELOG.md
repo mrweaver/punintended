@@ -4,6 +4,16 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.8.0] - 2026-03-31
+
+### Added
+
+- **Gauntlet Comparison View:** After completing a run, "View Comparison" opens a side-by-side breakdown of all participants' puns and scores, round by round.
+- **Per-Pun Comment Threads:** Each pun in the comparison view has a collapsible comment thread — click to expand, Enter to post.
+- **Gauntlet History:** Past completed gauntlets persist in the idle lobby as a scrollable history list with avatars, scores, and rankings; click any entry to open its comparison.
+- **Logo Navigation:** Clicking the PunIntended logo from gauntlet, leaderboard, or session views navigates back to the lobby.
+- **About Modal — Gauntlet Section:** Expanded to cover the comparison view, comment threads, history, speed-bonus mechanics, and the challenge-a-mate flow.
+
 ## [1.7.0] - 2026-03-30
 
 ### Added

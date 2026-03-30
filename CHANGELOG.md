@@ -4,6 +4,18 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.10.0] - 2026-03-31
+
+### Added
+
+- **Pun History — Challenge Context:** Each pun in your profile history now shows the challenge topic and focus it was written for, pulled from the global daily challenge record.
+- **Pun History — Sort & Filter:** Sort your pun history by most recent, highest AI score, or most groans. Filter by pun text or challenge topic with a live search input.
+- **Pun History — Expand for Details:** Click any pun to expand it and see the AI verdict and all comments it received, loaded on demand.
+
+### Fixed
+
+- **Profile Modal — Close Button Overlap:** The ✕ button now has an opaque circular background and sits clearly above the Share Stats button at all viewport sizes.
+
 ## [1.9.0] - 2026-03-31
 
 ### Added

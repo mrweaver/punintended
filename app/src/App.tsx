@@ -1,21 +1,21 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { LogIn } from 'lucide-react';
-import { AnimatePresence } from 'motion/react';
-import { useAuth } from './contexts/AuthContext';
-import { useSession } from './hooks/useSession';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { Header } from './components/Header';
-import { SessionLobby } from './components/SessionLobby';
-import { GameBoard } from './components/GameBoard';
-import { GauntletMode } from './components/GauntletMode';
-import { GlobalLeaderboard } from './components/GlobalLeaderboard';
-import { ProfileModal } from './components/modals/ProfileModal';
-import { AboutModal } from './components/modals/AboutModal';
-import { DeleteConfirmModal } from './components/modals/DeleteConfirmModal';
-import { ChangelogModal } from './components/modals/ChangelogModal';
-import { Button } from './components/ui/Button';
-import { Logo } from './components/ui/Logo';
+import { useState, useEffect } from "react";
+import { motion } from "motion/react";
+import { LogIn } from "lucide-react";
+import { AnimatePresence } from "motion/react";
+import { useAuth } from "./contexts/AuthContext";
+import { useSession } from "./hooks/useSession";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Header } from "./components/Header";
+import { SessionLobby } from "./components/SessionLobby";
+import { GameBoard } from "./components/GameBoard";
+import { GauntletMode } from "./components/GauntletMode";
+import { GlobalLeaderboard } from "./components/GlobalLeaderboard";
+import { ProfileModal } from "./components/modals/ProfileModal";
+import { AboutModal } from "./components/modals/AboutModal";
+import { DeleteConfirmModal } from "./components/modals/DeleteConfirmModal";
+import { ChangelogModal } from "./components/modals/ChangelogModal";
+import { Button } from "./components/ui/Button";
+import { Logo } from "./components/ui/Logo";
 
 export default function App() {
   const { user, isReady, login } = useAuth();
@@ -42,7 +42,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(window.location.search);
-    const gauntletId = params.get('gauntlet');
+    const gauntletId = params.get("gauntlet");
     if (gauntletId) {
       setSharedGauntletId(gauntletId);
       setGauntletMode(true);
@@ -52,7 +52,9 @@ export default function App() {
 
   if (!isReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
     );
   }
 
@@ -65,14 +67,17 @@ export default function App() {
           className="max-w-md w-full text-center"
         >
           <div className="mb-6 sm:mb-8 inline-block p-3 sm:p-4 bg-orange-100 dark:bg-violet-900/30 rounded-2xl sm:rounded-3xl">
-            <Logo className="w-10 h-10 sm:w-12 sm:h-12 text-orange-600 dark:text-violet-400" accent />
+            <Logo
+              className="w-10 h-10 sm:w-12 sm:h-12 text-orange-600 dark:text-violet-400"
+              accent
+            />
           </div>
           <h1 className="text-4xl sm:text-6xl font-serif italic mb-4 text-zinc-900 dark:text-zinc-100">
             PunIntended
           </h1>
           <p className="text-lg sm:text-xl text-gray-600 dark:text-zinc-400 mb-8 sm:mb-12">
-            The social game where wit meets wordplay. Compete with friends for the ultimate pun
-            glory.
+            The social game where wit meets wordplay. Compete with friends for
+            the ultimate pun glory.
           </p>
           <Button onClick={login} className="w-full py-4 text-lg">
             <LogIn className="w-5 h-5" />
@@ -90,6 +95,16 @@ export default function App() {
           onOpenProfile={() => setShowProfile(true)}
           onOpenAbout={() => setShowAbout(true)}
           onOpenLeaderboard={() => setShowLeaderboard(true)}
+          onLogoClick={
+            gauntletMode || showLeaderboard || !!currentSession
+              ? () => {
+                  setGauntletMode(false);
+                  setSharedGauntletId(null);
+                  setShowLeaderboard(false);
+                  leaveSession();
+                }
+              : undefined
+          }
           onNotificationClick={(link) => {
             if (link) {
               const targetSession = sessions.find((s) => s.id === link);
@@ -128,7 +143,6 @@ export default function App() {
               <GameBoard
                 session={currentSession}
                 loading={loading}
-
                 onLeave={leaveSession}
                 onDelete={deleteExistingSession}
               />
@@ -137,7 +151,9 @@ export default function App() {
         </main>
 
         <footer className="p-12 text-center text-gray-400 dark:text-zinc-600 text-sm">
-          <p>&copy; 2026 Cotlone Studios &bull; Built with AI for the pun of it.</p>
+          <p>
+            &copy; 2026 Cotlone Studios &bull; Built with AI for the pun of it.
+          </p>
           <button
             onClick={() => setShowChangelog(true)}
             className="mt-2 text-xs opacity-50 hover:opacity-100 hover:text-orange-500 dark:hover:text-violet-400 transition-all cursor-pointer"
@@ -149,7 +165,9 @@ export default function App() {
         {/* Global Modals */}
         {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
         {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
-        {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+        {showChangelog && (
+          <ChangelogModal onClose={() => setShowChangelog(false)} />
+        )}
         {sessionToDelete && (
           <DeleteConfirmModal
             onConfirm={async () => {

@@ -1,20 +1,27 @@
-import { useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { LogOut, Bell, Sun, Moon, Info, Trophy } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
-import { useNotifications } from '../hooks/useNotifications';
-import { Button } from './ui/Button';
-import { Logo } from './ui/Logo';
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { LogOut, Bell, Sun, Moon, Info, Trophy } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { useTheme } from "../contexts/ThemeContext";
+import { useNotifications } from "../hooks/useNotifications";
+import { Button } from "./ui/Button";
+import { Logo } from "./ui/Logo";
 
 interface HeaderProps {
   onOpenProfile: () => void;
   onOpenAbout: () => void;
   onOpenLeaderboard: () => void;
   onNotificationClick: (link: string | null) => void;
+  onLogoClick?: () => void;
 }
 
-export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotificationClick }: HeaderProps) {
+export function Header({
+  onOpenProfile,
+  onOpenAbout,
+  onOpenLeaderboard,
+  onNotificationClick,
+  onLogoClick,
+}: HeaderProps) {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const { notifications, unreadCount, markRead } = useNotifications();
@@ -24,12 +31,19 @@ export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotifi
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-gray-200 dark:border-zinc-800 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
-      <div className="flex items-center gap-2 sm:gap-3">
+      <button
+        onClick={onLogoClick}
+        className="flex items-center gap-2 sm:gap-3 rounded-lg transition-opacity hover:opacity-75 disabled:pointer-events-none"
+        disabled={!onLogoClick}
+        aria-label="Go to lobby"
+      >
         <div className="p-1.5 sm:p-2 bg-orange-500 dark:bg-violet-600 rounded-lg sm:rounded-xl">
           <Logo className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
         </div>
-        <span className="text-lg sm:text-xl font-serif italic font-bold">PunIntended</span>
-      </div>
+        <span className="text-lg sm:text-xl font-serif italic font-bold">
+          PunIntended
+        </span>
+      </button>
       <div className="flex items-center gap-2 sm:gap-4">
         <button
           onClick={onOpenLeaderboard}
@@ -50,7 +64,11 @@ export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotifi
           className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
           aria-label="Toggle Dark Mode"
         >
-          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          {isDarkMode ? (
+            <Sun className="w-5 h-5" />
+          ) : (
+            <Moon className="w-5 h-5" />
+          )}
         </button>
 
         {/* Notifications Dropdown */}
@@ -75,7 +93,9 @@ export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotifi
                 className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-gray-100 dark:border-zinc-800 overflow-hidden z-50"
               >
                 <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50 dark:bg-zinc-950">
-                  <h3 className="font-bold text-gray-900 dark:text-zinc-100">Notifications</h3>
+                  <h3 className="font-bold text-gray-900 dark:text-zinc-100">
+                    Notifications
+                  </h3>
                   <span className="text-xs font-medium bg-gray-200 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 px-2 py-1 rounded-full">
                     {unreadCount} New
                   </span>
@@ -94,10 +114,10 @@ export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotifi
                           onNotificationClick(notif.link);
                           setShowNotifications(false);
                         }}
-                        className={`p-4 border-b border-gray-50 dark:border-zinc-800 hover:bg-orange-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? 'bg-orange-50/50 dark:bg-violet-900/20' : ''}`}
+                        className={`p-4 border-b border-gray-50 dark:border-zinc-800 hover:bg-orange-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? "bg-orange-50/50 dark:bg-violet-900/20" : ""}`}
                       >
                         <p
-                          className={`text-sm ${!notif.read ? 'font-medium text-gray-900 dark:text-zinc-100' : 'text-gray-600 dark:text-zinc-400'}`}
+                          className={`text-sm ${!notif.read ? "font-medium text-gray-900 dark:text-zinc-100" : "text-gray-600 dark:text-zinc-400"}`}
                         >
                           {notif.message}
                         </p>
@@ -118,7 +138,7 @@ export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotifi
           onClick={onOpenProfile}
         >
           <img
-            src={user.photoURL || ''}
+            src={user.photoURL || ""}
             className="w-8 h-8 rounded-full border border-gray-200 dark:border-zinc-700"
             alt="Profile"
           />

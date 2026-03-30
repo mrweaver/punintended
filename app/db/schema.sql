@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255),
     display_name VARCHAR(255),
     photo_url TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Game sessions
@@ -27,15 +27,15 @@ CREATE TABLE IF NOT EXISTS game_sessions (
     challenge_topic VARCHAR(500),
     challenge_focus VARCHAR(500),
     challenge_id VARCHAR(10),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Session players (normalised from players array)
 CREATE TABLE IF NOT EXISTS session_players (
     session_id UUID REFERENCES game_sessions(id) ON DELETE CASCADE,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    joined_at TIMESTAMP DEFAULT NOW(),
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (session_id, user_id)
 );
 
@@ -49,17 +49,17 @@ CREATE TABLE IF NOT EXISTS puns (
     ai_score NUMERIC(3,1),
     ai_feedback TEXT,
     response_time_ms INTEGER,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Pun reactions (single reaction per user per pun)
 CREATE TABLE IF NOT EXISTS pun_reactions (
     pun_id UUID REFERENCES puns(id) ON DELETE CASCADE,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    reaction VARCHAR(20) NOT NULL CHECK (reaction IN ('clever', 'laugh', 'groan', 'fire', 'wild')),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    reaction VARCHAR(20) NOT NULL CHECK (reaction IN ('groan')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (pun_id, user_id)
 );
 
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS messages (
     session_id UUID REFERENCES game_sessions(id) ON DELETE CASCADE,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     text TEXT NOT NULL CHECK (char_length(text) BETWEEN 1 AND 500),
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Pun comments
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS pun_comments (
     session_id UUID REFERENCES game_sessions(id) ON DELETE CASCADE,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     text TEXT NOT NULL CHECK (char_length(text) BETWEEN 1 AND 500),
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Notifications
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     message TEXT NOT NULL,
     read BOOLEAN DEFAULT FALSE,
     link UUID,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Challenge history (one row per session per day)

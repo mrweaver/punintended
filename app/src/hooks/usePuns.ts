@@ -4,26 +4,8 @@ import { createSSE } from "../api/sse";
 
 export type PunSortMode = "unviewed" | "top" | "new";
 
-const DEFAULT_REACTIONS = {
-  clever: 0,
-  laugh: 0,
-  groan: 0,
-  fire: 0,
-  wild: 0,
-};
-
-function getSpeedScore(ms: number): number {
-  return 10 * Math.max(0, 1 - ms / 300_000);
-}
-
 export function getPunScore(pun: Pun) {
-  if (pun.responseTimeMs != null) {
-    const speed = getSpeedScore(pun.responseTimeMs);
-    return (
-      (pun.aiScore || 0) * 0.5 + (pun.reactionTotal || 0) * 0.35 + speed * 0.15
-    );
-  }
-  return (pun.aiScore || 0) * 0.6 + (pun.reactionTotal || 0) * 0.4;
+  return pun.aiScore || 0;
 }
 
 export function usePuns(
@@ -74,8 +56,6 @@ export function usePuns(
     setPuns(
       result.map((pun) => ({
         ...pun,
-        reactions: pun.reactions || DEFAULT_REACTIONS,
-        reactionTotal: pun.reactionTotal || 0,
         viewed: viewedIds.has(pun.id),
       })),
     );
@@ -131,11 +111,11 @@ export function usePuns(
   }, [puns, sortMode]);
 
   const submitPun = useCallback(
-    async (text: string, responseTimeMs: number | null) => {
+    async (text: string) => {
       if (!sessionId) return;
       setSubmitting(true);
       try {
-        await punsApi.submit(sessionId, text, responseTimeMs);
+        await punsApi.submit(sessionId, text, null);
       } finally {
         setSubmitting(false);
       }

@@ -24,14 +24,6 @@ interface PunCardProps {
   onComment: (punId: string, text: string) => void;
 }
 
-const REACTIONS: Array<{ key: PunReaction; emoji: string }> = [
-  { key: "groan", emoji: "🙄" },
-  { key: "laugh", emoji: "😄" },
-  { key: "clever", emoji: "🧠" },
-  { key: "fire", emoji: "🔥" },
-  { key: "wild", emoji: "🤯" },
-];
-
 export function PunCard({
   pun,
   index,
@@ -48,7 +40,6 @@ export function PunCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [commentText, setCommentText] = useState("");
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
 
   const isAuthor = pun.authorId === user?.uid;
 
@@ -60,9 +51,9 @@ export function PunCard({
     onViewed(pun.id);
   };
 
-  const handleReaction = (reaction: PunReaction) => {
-    const nextReaction = pun.myReaction === reaction ? null : reaction;
-    onReact(pun.id, nextReaction);
+  const handleGroan = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onReact(pun.id, pun.myReaction ? null : "groan");
     onViewed(pun.id);
   };
 
@@ -151,18 +142,9 @@ export function PunCard({
           </div>
         </div>
       ) : (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowReactionPicker(!showReactionPicker);
-            onViewed(pun.id);
-          }}
-          className="text-left w-full"
-        >
-          <p className="text-xl sm:text-2xl font-serif italic text-gray-800 dark:text-zinc-200 select-none">
-            "{pun.text}"
-          </p>
-        </button>
+        <p className="text-xl sm:text-2xl font-serif italic text-gray-800 dark:text-zinc-200">
+          "{pun.text}"
+        </p>
       )}
 
       {/* AI feedback */}
@@ -177,22 +159,6 @@ export function PunCard({
               <span className="text-sm font-bold text-orange-700 dark:text-violet-300">
                 AI Score: {pun.aiScore}/10
               </span>
-              {pun.responseTimeMs != null && (
-                <span
-                  className={`text-xs font-mono ${
-                    pun.responseTimeMs <= 30_000
-                      ? "text-green-600 dark:text-green-400"
-                      : pun.responseTimeMs <= 120_000
-                        ? "text-orange-500 dark:text-orange-400"
-                        : "text-gray-400 dark:text-zinc-500"
-                  }`}
-                >
-                  ⚡{" "}
-                  {pun.responseTimeMs < 60_000
-                    ? `${Math.round(pun.responseTimeMs / 1000)}s`
-                    : `${Math.floor(pun.responseTimeMs / 60_000)}m ${Math.round((pun.responseTimeMs % 60_000) / 1000)}s`}
-                </span>
-              )}
             </div>
             <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">
               {pun.aiFeedback}
@@ -213,57 +179,23 @@ export function PunCard({
         </div>
       )}
 
-      {/* Inline reaction picker */}
-      <AnimatePresence>
-        {showReactionPicker && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.85, height: 0 }}
-            animate={{ opacity: 1, scale: 1, height: "auto" }}
-            exit={{ opacity: 0, scale: 0.85, height: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="overflow-hidden"
-          >
-            <div className="flex items-center gap-1 bg-gray-50 dark:bg-zinc-800 rounded-full w-fit px-2 py-1.5 border border-gray-100 dark:border-zinc-700 shadow-sm">
-              {REACTIONS.map((item) => {
-                const active = pun.myReaction === item.key;
-                return (
-                  <motion.button
-                    key={item.key}
-                    whileTap={{ scale: 1.3 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleReaction(item.key);
-                      setShowReactionPicker(false);
-                    }}
-                    className={`w-10 h-10 rounded-full transition-all flex items-center justify-center ${
-                      active
-                        ? "bg-orange-100 dark:bg-violet-900/40 scale-110"
-                        : "hover:bg-white dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    <span className="text-xl leading-none">{item.emoji}</span>
-                  </motion.button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Card footer */}
       <div className="flex items-center gap-2">
-        {pun.myReaction && !showReactionPicker && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowReactionPicker(true);
-            }}
-            className="text-lg leading-none opacity-70 hover:opacity-100 hover:scale-110 transition-all"
-            title="Change reaction"
-          >
-            {REACTIONS.find((r) => r.key === pun.myReaction)?.emoji}
-          </button>
-        )}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={handleGroan}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${
+            pun.myReaction
+              ? "bg-orange-100 dark:bg-violet-900/40 text-orange-700 dark:text-violet-300"
+              : "bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 hover:bg-orange-50 dark:hover:bg-violet-900/20"
+          }`}
+        >
+          😩{" "}
+          <span>Groan</span>
+          {pun.groanCount > 0 && (
+            <span className="font-mono text-xs">{pun.groanCount}</span>
+          )}
+        </motion.button>
         <div className="flex-1" />
         <button
           onClick={(e) => {

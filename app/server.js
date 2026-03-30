@@ -31,7 +31,10 @@ import {
   setPunReaction,
   getPunsByAuthor,
   countPunsByAuthorInSession,
-  getMinPunCountInSession,
+  getWeeklyBestScores,
+  getGlobalDailyLeaderboard,
+  getGlobalShameLeaderboard,
+  getGlobalAllTimeGroaners,
   getMessagesBySession,
   createMessage,
   getCommentsBySession,
@@ -100,6 +103,21 @@ async function getOrCreateGlobalChallenge(dateId) {
     await saveGlobalChallenge(dateId, challenge.topic, challenge.focus);
   }
   return challenge;
+}
+
+// Canonical server date — always AEST/AEDT (Australia/Sydney handles DST automatically).
+function getAESTDateId() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Australia/Sydney" });
+}
+
+// Returns true if dateId is within 1 day of the current AEST date.
+function isPlausibleLocalDate(dateId) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateId)) return false;
+  const serverDate = getAESTDateId();
+  const serverMs = new Date(serverDate + "T00:00:00Z").getTime();
+  const claimedMs = new Date(dateId + "T00:00:00Z").getTime();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  return Math.abs(claimedMs - serverMs) <= oneDayMs;
 }
 
 async function scorePunText(topic, focus, punText) {
@@ -180,6 +198,9 @@ async function generateGauntletPrompts() {
 const sessionClients = new Map(); // sessionId -> Set<res>
 const notificationClients = new Map(); // userId -> Set<res>
 const gauntletClients = new Map(); // runId -> Set<res>
+
+// Ephemeral typing presence store: sessionId -> Map<userId, {name, photoURL, status, updatedAt}>
+const typingStatus = new Map();
 
 function addSessionClient(sessionId, res) {
   if (!sessionClients.has(sessionId)) sessionClients.set(sessionId, new Set());
@@ -286,6 +307,23 @@ async function broadcastCommentsUpdate(sessionId) {
 async function broadcastNotificationUpdate(userId) {
   const notifications = await getNotificationsByUser(userId);
   broadcastToUser(userId, "notifications-update", notifications);
+}
+
+function broadcastTypingUpdate(sessionId) {
+  const statusMap = typingStatus.get(sessionId);
+  const data = statusMap
+    ? Array.from(statusMap.entries()).map(([uid, info]) => ({ uid: Number(uid), ...info }))
+    : [];
+  broadcastToSession(sessionId, "typing-update", data);
+}
+
+function setTypingStatus(sessionId, userId, name, photoURL, status) {
+  if (!typingStatus.has(sessionId)) typingStatus.set(sessionId, new Map());
+  typingStatus.get(sessionId).set(String(userId), { name, photoURL, status, updatedAt: Date.now() });
+}
+
+function clearTypingStatus(sessionId, userId) {
+  typingStatus.get(sessionId)?.delete(String(userId));
 }
 
 // Heartbeat every 30s to prevent proxy timeouts
@@ -531,7 +569,7 @@ app.post("/api/sessions", ensureAuthenticated, async (req, res) => {
     return res.status(400).json({ error: "Session name required" });
 
   try {
-    const todayId = new Date().toLocaleDateString("en-CA");
+    const todayId = getAESTDateId();
     const challenge = await getOrCreateGlobalChallenge(todayId);
     const session = await createSession(name.trim(), req.user.id, {
       ...challenge,
@@ -589,9 +627,9 @@ app.post(
 
       const { localDateId } = req.body;
       const dateId =
-        localDateId && /^\d{4}-\d{2}-\d{2}$/.test(localDateId)
+        localDateId && isPlausibleLocalDate(localDateId)
           ? localDateId
-          : new Date().toLocaleDateString("en-CA");
+          : getAESTDateId();
 
       const challenge = await getOrCreateGlobalChallenge(dateId);
 
@@ -631,7 +669,7 @@ app.get("/api/sessions/:id/history", ensureAuthenticated, async (req, res) => {
 // --- Pun API ---
 app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
   try {
-    const today = new Date().toLocaleDateString("en-CA");
+    const today = getAESTDateId();
     const challengeId = req.query.challengeId || today;
     const puns = await getPunsBySessionAndChallenge(
       req.params.id,
@@ -675,23 +713,14 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
     const session = await getSessionById(sessionId);
     if (!session) return res.status(404).json({ error: "Session not found" });
 
-    const todayId =
-      session.challengeId || new Date().toISOString().split("T")[0];
+    const todayId = session.challengeId || getAESTDateId();
 
-    // Fair play enforcement: server-side
-    if (session.players.length > 1) {
-      const myCount = await countPunsByAuthorInSession(
-        sessionId,
-        todayId,
-        req.user.id,
-      );
-      const minCount = await getMinPunCountInSession(sessionId, todayId);
-      if (myCount > minCount) {
-        return res.status(429).json({
-          error:
-            "Wait for others to catch up! Everyone must submit a pun before you can go again.",
-        });
-      }
+    // Hard cap: 3 submissions per player per day per group
+    const myCount = await countPunsByAuthorInSession(sessionId, todayId, req.user.id);
+    if (myCount >= 3) {
+      return res.status(429).json({
+        error: "You've used all 3 of your submissions for today. Come back tomorrow!",
+      });
     }
 
     const pun = await createPun(
@@ -702,6 +731,8 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
       validatedResponseTimeMs,
     );
     broadcastPunsUpdate(sessionId, todayId);
+    clearTypingStatus(sessionId, req.user.id);
+    broadcastTypingUpdate(sessionId);
 
     // Score asynchronously
     if (session.challenge) {
@@ -734,6 +765,33 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
     console.error("Failed to submit pun:", error);
     res.status(500).json({ error: "Failed to submit pun" });
   }
+});
+
+app.post("/api/sessions/:id/typing", ensureAuthenticated, (req, res) => {
+  const { status } = req.body;
+  const sessionId = req.params.id;
+  const { id: userId, display_name: name, photo_url: photoURL } = req.user;
+
+  if (status === "idle") {
+    clearTypingStatus(sessionId, userId);
+  } else if (status === "typing" || status === "submitted") {
+    setTypingStatus(sessionId, userId, name, photoURL, status);
+    if (status === "typing") {
+      const updatedAt = Date.now();
+      setTimeout(() => {
+        const entry = typingStatus.get(sessionId)?.get(String(userId));
+        if (entry && entry.status === "typing" && entry.updatedAt === updatedAt) {
+          clearTypingStatus(sessionId, userId);
+          broadcastTypingUpdate(sessionId);
+        }
+      }, 10000);
+    }
+  } else {
+    return res.status(400).json({ error: "Invalid status" });
+  }
+
+  broadcastTypingUpdate(sessionId);
+  res.json({ success: true });
 });
 
 app.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
@@ -791,19 +849,9 @@ app.delete("/api/puns/:id", ensureAuthenticated, async (req, res) => {
 
 app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
   const { reaction } = req.body;
-  const allowedReactions = new Set([
-    "clever",
-    "laugh",
-    "groan",
-    "fire",
-    "wild",
-  ]);
 
-  if (
-    reaction !== null &&
-    reaction !== undefined &&
-    !allowedReactions.has(reaction)
-  ) {
+  // Only "groan" is accepted; null/undefined clears the reaction
+  if (reaction !== null && reaction !== undefined && reaction !== "groan") {
     return res.status(400).json({ error: "Invalid reaction" });
   }
 
@@ -817,18 +865,14 @@ app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
       reaction || null,
     );
 
-    // Notify pun author on positive reactions only.
-    if (
-      selectedReaction &&
-      pun.author_id !== req.user.id &&
-      ["clever", "laugh", "fire", "wild"].includes(selectedReaction)
-    ) {
+    // Notify pun author when someone groans at their pun (positive in this game)
+    if (selectedReaction && pun.author_id !== req.user.id) {
       const punText =
         pun.text.length > 30 ? pun.text.substring(0, 30) + "..." : pun.text;
       await createNotification(
         pun.author_id,
         "reaction",
-        `${req.user.display_name || "Someone"} reacted (${selectedReaction}) to your pun: "${punText}"`,
+        `${req.user.display_name || "Someone"} groaned at your pun: "${punText}"`,
         pun.session_id,
       );
       broadcastNotificationUpdate(pun.author_id);
@@ -928,6 +972,45 @@ app.put(
     }
   },
 );
+
+// --- Leaderboard API ---
+app.get("/api/sessions/:id/weekly-scores", ensureAuthenticated, async (req, res) => {
+  try {
+    const { weekStart, weekEnd } = req.query;
+    if (!weekStart || !weekEnd) {
+      return res.status(400).json({ error: "weekStart and weekEnd required" });
+    }
+    const scores = await getWeeklyBestScores(req.params.id, weekStart, weekEnd);
+    res.json(scores);
+  } catch (error) {
+    console.error("Failed to get weekly scores:", error);
+    res.status(500).json({ error: "Failed to get weekly scores" });
+  }
+});
+
+app.get("/api/leaderboard/daily", ensureAuthenticated, async (req, res) => {
+  try {
+    const date = req.query.date || getAESTDateId();
+    const [crown, shame] = await Promise.all([
+      getGlobalDailyLeaderboard(date),
+      getGlobalShameLeaderboard(date),
+    ]);
+    res.json({ date, crown, shame });
+  } catch (error) {
+    console.error("Failed to get daily leaderboard:", error);
+    res.status(500).json({ error: "Failed to get daily leaderboard" });
+  }
+});
+
+app.get("/api/leaderboard/alltime", ensureAuthenticated, async (_req, res) => {
+  try {
+    const groaners = await getGlobalAllTimeGroaners();
+    res.json(groaners);
+  } catch (error) {
+    console.error("Failed to get all-time leaderboard:", error);
+    res.status(500).json({ error: "Failed to get all-time leaderboard" });
+  }
+});
 
 // --- Profile API ---
 app.get("/api/profile/puns", ensureAuthenticated, async (req, res) => {

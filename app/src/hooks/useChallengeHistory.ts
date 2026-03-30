@@ -1,14 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { sessionsApi, punsApi, type ChallengeHistoryEntry, type Pun } from '../api/client';
 
-const DEFAULT_REACTIONS = {
-  clever: 0,
-  laugh: 0,
-  groan: 0,
-  fire: 0,
-  wild: 0,
-};
-
 export function useChallengeHistory(sessionId: string | null, challengeId?: string | null) {
   const [history, setHistory] = useState<ChallengeHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -45,14 +37,7 @@ export function useChallengeHistory(sessionId: string | null, challengeId?: stri
         setLoadingDate(challengeId);
         try {
           const result = await punsApi.list(sessionId, challengeId);
-          setPunsByDate((prev) => ({
-            ...prev,
-            [challengeId]: result.map((pun) => ({
-              ...pun,
-              reactions: pun.reactions || DEFAULT_REACTIONS,
-              reactionTotal: pun.reactionTotal || 0,
-            })),
-          }));
+          setPunsByDate((prev) => ({ ...prev, [challengeId]: result }));
         } catch (err) {
           console.error('Failed to load history puns:', err);
         } finally {

@@ -9,6 +9,7 @@ import { Header } from './components/Header';
 import { SessionLobby } from './components/SessionLobby';
 import { GameBoard } from './components/GameBoard';
 import { GauntletMode } from './components/GauntletMode';
+import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import { ProfileModal } from './components/modals/ProfileModal';
 import { AboutModal } from './components/modals/AboutModal';
 import { DeleteConfirmModal } from './components/modals/DeleteConfirmModal';
@@ -24,6 +25,7 @@ export default function App() {
     loading,
     createNewSession,
     joinExistingSession,
+    joinSessionById,
     leaveSession,
     deleteExistingSession,
   } = useSession();
@@ -34,6 +36,7 @@ export default function App() {
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   // Auto-enter gauntlet from a shared ?gauntlet= URL (mirrors ?session= handling)
   useEffect(() => {
@@ -86,6 +89,7 @@ export default function App() {
         <Header
           onOpenProfile={() => setShowProfile(true)}
           onOpenAbout={() => setShowAbout(true)}
+          onOpenLeaderboard={() => setShowLeaderboard(true)}
           onNotificationClick={(link) => {
             if (link) {
               const targetSession = sessions.find((s) => s.id === link);
@@ -105,12 +109,18 @@ export default function App() {
                   setSharedGauntletId(null);
                 }}
               />
+            ) : showLeaderboard ? (
+              <GlobalLeaderboard
+                key="leaderboard"
+                onClose={() => setShowLeaderboard(false)}
+              />
             ) : !currentSession ? (
               <SessionLobby
                 sessions={sessions}
                 loading={loading}
                 onCreateSession={createNewSession}
                 onJoinSession={joinExistingSession}
+                onJoinById={joinSessionById}
                 onDeleteSession={(id) => setSessionToDelete(id)}
                 onStartGauntlet={() => setGauntletMode(true)}
               />

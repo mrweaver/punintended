@@ -1,10 +1,5 @@
 import pg from "pg";
-const { Pool, types } = pg;
-
-// TIMESTAMP WITHOUT TIME ZONE (OID 1114) — pg returns a raw space-separated
-// string with no timezone marker. Browsers parse that as local time, which
-// makes every timestamp appear wrong for users outside UTC. Force UTC.
-types.setTypeParser(1114, (val) => new Date(val.replace(" ", "T") + "Z"));
+const { Pool } = pg;
 
 const poolConfig = {
   host: process.env.PGHOST || "punintended-db",
@@ -214,7 +209,7 @@ async function runMigrations() {
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       rounds JSONB NOT NULL DEFAULT '[]',
-      created_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
   await query(`
@@ -226,8 +221,8 @@ async function runMigrations() {
       status VARCHAR(20) NOT NULL DEFAULT 'in_progress'
         CHECK (status IN ('in_progress', 'scoring', 'complete')),
       total_score INTEGER,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`);
@@ -248,6 +243,43 @@ async function runMigrations() {
       focus VARCHAR(500) NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
+  `);
+  // Migrate bare TIMESTAMP columns to TIMESTAMP WITH TIME ZONE.
+  // USING ... AT TIME ZONE 'UTC' preserves stored values (they were always UTC).
+  const alterToTz = (table, col) => query(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_name = '${table}' AND column_name = '${col}'
+          AND data_type = 'timestamp without time zone')
+      THEN ALTER TABLE ${table} ALTER COLUMN ${col} TYPE TIMESTAMP WITH TIME ZONE
+        USING ${col} AT TIME ZONE 'UTC'; END IF;
+    END $$
+  `);
+  await alterToTz("users", "created_at");
+  await alterToTz("users", "updated_at");
+  await alterToTz("game_sessions", "created_at");
+  await alterToTz("game_sessions", "updated_at");
+  await alterToTz("session_players", "joined_at");
+  await alterToTz("puns", "created_at");
+  await alterToTz("puns", "updated_at");
+  await alterToTz("pun_reactions", "created_at");
+  await alterToTz("pun_reactions", "updated_at");
+  await alterToTz("messages", "created_at");
+  await alterToTz("pun_comments", "created_at");
+  await alterToTz("notifications", "created_at");
+  await alterToTz("gauntlets", "created_at");
+  await alterToTz("gauntlet_runs", "created_at");
+  await alterToTz("gauntlet_runs", "updated_at");
+
+  // Migrate pun_reactions constraint from 5 reactions to groan-only.
+  // Existing non-groan reactions are deleted first to satisfy the new constraint.
+  await query(`DELETE FROM pun_reactions WHERE reaction != 'groan'`);
+  await query(`
+    DO $$ BEGIN
+      ALTER TABLE pun_reactions DROP CONSTRAINT IF EXISTS pun_reactions_reaction_check;
+      ALTER TABLE pun_reactions ADD CONSTRAINT pun_reactions_reaction_check
+        CHECK (reaction IN ('groan'));
+    END $$
   `);
 }
 
@@ -335,30 +367,14 @@ async function getPunsBySessionAndChallenge(
     `SELECT p.*,
        u.display_name AS author_name,
        u.photo_url AS author_photo,
-       jsonb_build_object(
-         'clever', COUNT(*) FILTER (WHERE pr.reaction = 'clever'),
-         'laugh', COUNT(*) FILTER (WHERE pr.reaction = 'laugh'),
-         'groan', COUNT(*) FILTER (WHERE pr.reaction = 'groan'),
-         'fire', COUNT(*) FILTER (WHERE pr.reaction = 'fire'),
-         'wild', COUNT(*) FILTER (WHERE pr.reaction = 'wild')
-       ) AS reaction_counts,
-       COALESCE(SUM(
-         CASE pr.reaction
-           WHEN 'clever' THEN 2
-           WHEN 'laugh' THEN 2
-           WHEN 'groan' THEN 1
-           WHEN 'fire' THEN 3
-           WHEN 'wild' THEN 3
-           ELSE 0
-         END
-       ), 0) AS reaction_total,
-       MAX(pr.reaction) FILTER (WHERE pr.user_id = $3) AS my_reaction
+       COUNT(pr.pun_id) AS groan_count,
+       COUNT(*) FILTER (WHERE pr.user_id = $3) > 0 AS my_groan
      FROM puns p
      JOIN users u ON p.author_id = u.id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      WHERE p.session_id = $1 AND p.challenge_id = $2
      GROUP BY p.id, u.display_name, u.photo_url
-     ORDER BY reaction_total DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
+     ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
     [sessionId, challengeId, viewerId],
   );
   return result.rows.map(formatPun);
@@ -428,24 +444,8 @@ async function getPunsByAuthor(authorId) {
     `SELECT p.*,
        u.display_name AS author_name,
        u.photo_url AS author_photo,
-       jsonb_build_object(
-         'clever', COUNT(*) FILTER (WHERE pr.reaction = 'clever'),
-         'laugh', COUNT(*) FILTER (WHERE pr.reaction = 'laugh'),
-         'groan', COUNT(*) FILTER (WHERE pr.reaction = 'groan'),
-         'fire', COUNT(*) FILTER (WHERE pr.reaction = 'fire'),
-         'wild', COUNT(*) FILTER (WHERE pr.reaction = 'wild')
-       ) AS reaction_counts,
-       COALESCE(SUM(
-         CASE pr.reaction
-           WHEN 'clever' THEN 2
-           WHEN 'laugh' THEN 2
-           WHEN 'groan' THEN 1
-           WHEN 'fire' THEN 3
-           WHEN 'wild' THEN 3
-           ELSE 0
-         END
-       ), 0) AS reaction_total,
-       NULL::varchar AS my_reaction
+       COUNT(pr.pun_id) AS groan_count,
+       FALSE AS my_groan
      FROM puns p
      JOIN users u ON p.author_id = u.id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
@@ -488,14 +488,6 @@ async function getMinPunCountInSession(sessionId, challengeId) {
 }
 
 function formatPun(row) {
-  const reactionCounts = row.reaction_counts || {
-    clever: 0,
-    laugh: 0,
-    groan: 0,
-    fire: 0,
-    wild: 0,
-  };
-
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -506,19 +498,127 @@ function formatPun(row) {
     text: row.text,
     aiScore: row.ai_score ? parseFloat(row.ai_score) : null,
     aiFeedback: row.ai_feedback,
-    reactions: {
-      clever: Number(reactionCounts.clever || 0),
-      laugh: Number(reactionCounts.laugh || 0),
-      groan: Number(reactionCounts.groan || 0),
-      fire: Number(reactionCounts.fire || 0),
-      wild: Number(reactionCounts.wild || 0),
-    },
-    reactionTotal: Number(row.reaction_total || 0),
-    myReaction: row.my_reaction || null,
-    responseTimeMs:
-      row.response_time_ms != null ? parseInt(row.response_time_ms, 10) : null,
+    groanCount: Number(row.groan_count || 0),
+    myReaction: row.my_groan ? "groan" : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+// Returns each player's best AI score per day for a given week, plus weekly total (drop lowest).
+async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
+  const result = await query(
+    `SELECT
+       u.id AS author_id,
+       u.display_name AS author_name,
+       u.photo_url AS author_photo,
+       p.challenge_id AS date,
+       MAX(p.ai_score) AS daily_best
+     FROM puns p
+     JOIN users u ON u.id = p.author_id
+     WHERE p.session_id = $1
+       AND p.challenge_id >= $2
+       AND p.challenge_id <= $3
+       AND p.ai_score IS NOT NULL
+     GROUP BY u.id, u.display_name, u.photo_url, p.challenge_id
+     ORDER BY u.id, p.challenge_id`,
+    [sessionId, weekStart, weekEnd],
+  );
+
+  // Group rows by player
+  const playerMap = new Map();
+  for (const row of result.rows) {
+    const key = row.author_id;
+    if (!playerMap.has(key)) {
+      playerMap.set(key, {
+        authorId: row.author_id,
+        authorName: row.author_name,
+        authorPhoto: row.author_photo,
+        dailyScores: {},
+      });
+    }
+    playerMap.get(key).dailyScores[row.date] = parseFloat(row.daily_best);
+  }
+
+  // Compute weekly total: sum of daily bests minus the single lowest
+  return Array.from(playerMap.values()).map((player) => {
+    const scores = Object.values(player.dailyScores);
+    const sum = scores.reduce((a, b) => a + b, 0);
+    const lowest = scores.length > 1 ? Math.min(...scores) : 0;
+    return { ...player, weekTotal: parseFloat((sum - lowest).toFixed(1)) };
+  });
+}
+
+// Global leaderboard: perfect 10s for a given challenge date, ordered by groan count
+async function getGlobalDailyLeaderboard(challengeId) {
+  const result = await query(
+    `SELECT p.id, p.text, p.ai_score, p.created_at,
+       u.display_name AS author_name, u.photo_url AS author_photo,
+       gs.name AS session_name,
+       COUNT(pr.pun_id) AS groan_count
+     FROM puns p
+     JOIN users u ON u.id = p.author_id
+     JOIN game_sessions gs ON gs.id = p.session_id
+     LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
+     WHERE p.challenge_id = $1 AND p.ai_score >= 9.5
+     GROUP BY p.id, u.display_name, u.photo_url, gs.name
+     ORDER BY groan_count DESC, p.created_at ASC
+     LIMIT 50`,
+    [challengeId],
+  );
+  return result.rows.map(formatLeaderboardRow);
+}
+
+// Global leaderboard: shame list (low scores) for a given challenge date
+async function getGlobalShameLeaderboard(challengeId) {
+  const result = await query(
+    `SELECT p.id, p.text, p.ai_score, p.created_at,
+       u.display_name AS author_name, u.photo_url AS author_photo,
+       gs.name AS session_name,
+       COUNT(pr.pun_id) AS groan_count
+     FROM puns p
+     JOIN users u ON u.id = p.author_id
+     JOIN game_sessions gs ON gs.id = p.session_id
+     LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
+     WHERE p.challenge_id = $1 AND p.ai_score <= 2
+     GROUP BY p.id, u.display_name, u.photo_url, gs.name
+     ORDER BY groan_count DESC, p.created_at ASC
+     LIMIT 50`,
+    [challengeId],
+  );
+  return result.rows.map(formatLeaderboardRow);
+}
+
+// All-time: perfect 10s across all time, ordered by total groans
+async function getGlobalAllTimeGroaners() {
+  const result = await query(
+    `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
+       u.display_name AS author_name, u.photo_url AS author_photo,
+       gs.name AS session_name,
+       COUNT(pr.pun_id) AS groan_count
+     FROM puns p
+     JOIN users u ON u.id = p.author_id
+     JOIN game_sessions gs ON gs.id = p.session_id
+     LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
+     WHERE p.ai_score >= 9.5
+     GROUP BY p.id, u.display_name, u.photo_url, gs.name
+     ORDER BY groan_count DESC, p.created_at ASC
+     LIMIT 50`,
+  );
+  return result.rows.map(formatLeaderboardRow);
+}
+
+function formatLeaderboardRow(row) {
+  return {
+    id: row.id,
+    text: row.text,
+    aiScore: parseFloat(row.ai_score),
+    challengeId: row.challenge_id || null,
+    authorName: row.author_name,
+    authorPhoto: row.author_photo,
+    sessionName: row.session_name,
+    groanCount: Number(row.groan_count || 0),
+    createdAt: row.created_at,
   };
 }
 
@@ -788,6 +888,10 @@ export {
   getPunsByAuthor,
   countPunsByAuthorInSession,
   getMinPunCountInSession,
+  getWeeklyBestScores,
+  getGlobalDailyLeaderboard,
+  getGlobalShameLeaderboard,
+  getGlobalAllTimeGroaners,
   getMessagesBySession,
   createMessage,
   getCommentsBySession,

@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { LogOut, Bell, Sun, Moon, Info } from 'lucide-react';
+import { LogOut, Bell, Sun, Moon, Info, Trophy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { Button } from './ui/Button';
 import { Logo } from './ui/Logo';
-import type { Session } from '../api/client';
 
 interface HeaderProps {
   onOpenProfile: () => void;
   onOpenAbout: () => void;
+  onOpenLeaderboard: () => void;
   onNotificationClick: (link: string | null) => void;
 }
 
-export function Header({ onOpenProfile, onOpenAbout, onNotificationClick }: HeaderProps) {
+export function Header({ onOpenProfile, onOpenAbout, onOpenLeaderboard, onNotificationClick }: HeaderProps) {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const { notifications, unreadCount, markRead } = useNotifications();
@@ -31,6 +31,13 @@ export function Header({ onOpenProfile, onOpenAbout, onNotificationClick }: Head
         <span className="text-lg sm:text-xl font-serif italic font-bold">PunIntended</span>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
+        <button
+          onClick={onOpenLeaderboard}
+          className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
+          aria-label="Leaderboards"
+        >
+          <Trophy className="w-5 h-5" />
+        </button>
         <button
           onClick={onOpenAbout}
           className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"

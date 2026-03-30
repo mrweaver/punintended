@@ -46,6 +46,11 @@ export const sessionsApi = {
     }),
   history: (id: string) =>
     request<ChallengeHistoryEntry[]>(`/api/sessions/${id}/history`),
+  reportTyping: (id: string, status: "typing" | "idle" | "submitted") =>
+    request<{ success: boolean }>(`/api/sessions/${id}/typing`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
 };
 
 // Puns
@@ -106,6 +111,17 @@ export const notificationsApi = {
 // Profile
 export const profileApi = {
   getPuns: () => request<Pun[]>("/api/profile/puns"),
+};
+
+// Leaderboards
+export const leaderboardApi = {
+  weekly: (sessionId: string, weekStart: string, weekEnd: string) =>
+    request<WeeklyScore[]>(
+      `/api/sessions/${sessionId}/weekly-scores?weekStart=${weekStart}&weekEnd=${weekEnd}`,
+    ),
+  daily: (date?: string) =>
+    request<DailyLeaderboard>(`/api/leaderboard/daily${date ? `?date=${date}` : ""}`),
+  allTime: () => request<LeaderboardEntry[]>("/api/leaderboard/alltime"),
 };
 
 // Gauntlet
@@ -196,16 +212,40 @@ export interface Pun {
   text: string;
   aiScore: number | null;
   aiFeedback: string | null;
-  reactions: Record<PunReaction, number>;
-  reactionTotal: number;
-  myReaction: PunReaction | null;
-  responseTimeMs: number | null;
+  groanCount: number;
+  myReaction: "groan" | null;
   viewed?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export type PunReaction = "clever" | "laugh" | "groan" | "fire" | "wild";
+export type PunReaction = "groan";
+
+export interface WeeklyScore {
+  authorId: number;
+  authorName: string;
+  authorPhoto: string;
+  dailyScores: Record<string, number>;
+  weekTotal: number;
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  text: string;
+  aiScore: number;
+  challengeId: string | null;
+  authorName: string;
+  authorPhoto: string;
+  sessionName: string;
+  groanCount: number;
+  createdAt: string;
+}
+
+export interface DailyLeaderboard {
+  date: string;
+  crown: LeaderboardEntry[];
+  shame: LeaderboardEntry[];
+}
 
 export interface ChatMessage {
   id: string;
@@ -234,6 +274,14 @@ export interface ChallengeHistoryEntry {
   focus: string;
   punCount: number;
   createdAt: string;
+}
+
+export interface TypingPlayer {
+  uid: number;
+  name: string;
+  photoURL: string;
+  status: "typing" | "submitted";
+  updatedAt: number;
 }
 
 export interface AppNotification {

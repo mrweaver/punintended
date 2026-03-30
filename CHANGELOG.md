@@ -4,6 +4,22 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.0] - 2026-03-30
+
+### Added
+
+- **Global Daily Challenge:** Single shared challenge per calendar day across all groups; all players see the same Topic/Focus regardless of which group they're in.
+- **Blind Submission Gate:** Players cannot see other submissions until they've submitted their own pun, preventing anchoring bias.
+
+### Changed
+
+- **Sessions → Groups:** Renamed "sessions" to "groups" throughout the UI and codebase for clarity.
+
+### Fixed
+
+- **Changelog Serving:** `changelog.md` now served from `public/` so the ChangelogModal can fetch it in production builds.
+- **Markdown Lint:** Resolved markdown formatting issues in changelog entries.
+
 ## [1.5.1] - 2026-03-30
 
 ### Fixed

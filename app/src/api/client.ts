@@ -155,6 +155,51 @@ export interface GauntletStartResponse {
   rounds: GauntletRoundPrompt[];
 }
 
+export interface GauntletComparisonRun {
+  id: string;
+  playerId: number;
+  playerName: string;
+  playerPhoto: string;
+  rounds: GauntletRunRound[];
+  totalScore: number | null;
+  createdAt: string;
+}
+
+export interface GauntletComparison {
+  id: string;
+  createdBy: number;
+  rounds: GauntletRoundPrompt[];
+  createdAt: string;
+  runs: GauntletComparisonRun[];
+}
+
+export interface GauntletHistoryParticipant {
+  playerId: number;
+  playerName: string;
+  playerPhoto: string;
+  totalScore: number | null;
+}
+
+export interface GauntletHistoryEntry {
+  gauntletId: string;
+  myRunId: string;
+  myScore: number | null;
+  createdAt: string;
+  participants: GauntletHistoryParticipant[];
+}
+
+export interface GauntletComment {
+  id: string;
+  gauntletId: string;
+  runId: string;
+  roundIndex: number;
+  authorId: number;
+  authorName: string;
+  authorPhoto: string;
+  text: string;
+  createdAt: string;
+}
+
 export const gauntletApi = {
   generate: () =>
     request<GauntletStartResponse>("/api/gauntlet/generate", {
@@ -175,6 +220,17 @@ export const gauntletApi = {
     }),
   getRun: (gauntletId: string, runId: string) =>
     request<GauntletRun>(`/api/gauntlet/${gauntletId}/run/${runId}`),
+  history: () =>
+    request<GauntletHistoryEntry[]>("/api/gauntlet/history"),
+  comparison: (gauntletId: string) =>
+    request<GauntletComparison>(`/api/gauntlet/${gauntletId}/comparison`),
+  getComments: (gauntletId: string) =>
+    request<GauntletComment[]>(`/api/gauntlet/${gauntletId}/comments`),
+  addComment: (gauntletId: string, runId: string, roundIndex: number, text: string) =>
+    request<GauntletComment>(`/api/gauntlet/${gauntletId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ runId, roundIndex, text }),
+    }),
 };
 
 // Types used by the API client

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Copy, Check, RotateCcw, LogOut, Trophy } from "lucide-react";
+import { Copy, Check, RotateCcw, LogOut, Trophy, BarChart2 } from "lucide-react";
 import type { GauntletRun, GauntletRoundPrompt } from "../api/client";
 import { Button } from "./ui/Button";
 
@@ -10,6 +10,7 @@ interface GauntletReceiptProps {
   rounds: GauntletRoundPrompt[];
   onPlayAgain: () => void;
   onExit: () => void;
+  onViewComparison: () => void;
 }
 
 function getScoreRating(total: number): string {
@@ -28,6 +29,7 @@ export function GauntletReceipt({
   rounds,
   onPlayAgain,
   onExit,
+  onViewComparison,
 }: GauntletReceiptProps) {
   const [copied, setCopied] = useState(false);
 
@@ -175,6 +177,10 @@ export function GauntletReceipt({
               Challenge a Mate
             </>
           )}
+        </Button>
+        <Button onClick={onViewComparison} variant="outline" className="flex-1">
+          <BarChart2 className="w-4 h-4" />
+          View Comparison
         </Button>
         <Button onClick={onPlayAgain} variant="outline" className="flex-1">
           <RotateCcw className="w-4 h-4" />

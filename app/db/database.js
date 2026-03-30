@@ -228,6 +228,18 @@ async function runMigrations() {
   await query(`CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_comments (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
+      run_id UUID NOT NULL REFERENCES gauntlet_runs(id) ON DELETE CASCADE,
+      round_index INTEGER NOT NULL CHECK (round_index >= 0 AND round_index <= 4),
+      author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text VARCHAR(280) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`);
   // Fix notifications constraint — original DB was created without 'reaction' type
   await query(`
     ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check
@@ -835,6 +847,119 @@ async function setGauntletRunScoring(runId) {
   return formatGauntletRun(result.rows[0]);
 }
 
+async function getGauntletComparison(gauntletId) {
+  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [gauntletId]);
+  if (!gauntletResult.rows[0]) return null;
+  const gauntlet = formatGauntlet(gauntletResult.rows[0]);
+
+  const runsResult = await query(
+    `SELECT gr.id, gr.player_id, gr.rounds, gr.total_score, gr.created_at,
+            u.display_name, u.photo_url
+     FROM gauntlet_runs gr
+     JOIN users u ON u.id = gr.player_id
+     WHERE gr.gauntlet_id = $1 AND gr.status = 'complete'
+     ORDER BY gr.total_score DESC NULLS LAST`,
+    [gauntletId],
+  );
+
+  return {
+    ...gauntlet,
+    runs: runsResult.rows.map((row) => ({
+      id: row.id,
+      playerId: row.player_id,
+      playerName: row.display_name,
+      playerPhoto: row.photo_url,
+      rounds: row.rounds,
+      totalScore: row.total_score,
+      createdAt: row.created_at,
+    })),
+  };
+}
+
+async function getUserGauntletHistory(userId, limit = 20) {
+  const result = await query(
+    `SELECT
+       g.id AS gauntlet_id,
+       my_run.id AS my_run_id,
+       my_run.total_score AS my_score,
+       my_run.created_at AS run_created_at,
+       json_agg(
+         json_build_object(
+           'playerId', gr.player_id,
+           'playerName', u.display_name,
+           'playerPhoto', u.photo_url,
+           'totalScore', gr.total_score
+         ) ORDER BY gr.total_score DESC NULLS LAST
+       ) AS participants
+     FROM gauntlets g
+     JOIN gauntlet_runs my_run
+       ON my_run.gauntlet_id = g.id
+      AND my_run.player_id = $1
+      AND my_run.status = 'complete'
+     JOIN gauntlet_runs gr
+       ON gr.gauntlet_id = g.id AND gr.status = 'complete'
+     JOIN users u ON u.id = gr.player_id
+     GROUP BY g.id, my_run.id, my_run.total_score, my_run.created_at
+     ORDER BY my_run.created_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+
+  return result.rows.map((row) => ({
+    gauntletId: row.gauntlet_id,
+    myRunId: row.my_run_id,
+    myScore: row.my_score,
+    createdAt: row.run_created_at,
+    participants: row.participants,
+  }));
+}
+
+async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text) {
+  const result = await query(
+    `INSERT INTO gauntlet_comments (gauntlet_id, run_id, round_index, author_id, text)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, gauntlet_id, run_id, round_index, author_id, text, created_at`,
+    [gauntletId, runId, roundIndex, authorId, text],
+  );
+  const row = result.rows[0];
+  const userResult = await query(`SELECT display_name, photo_url FROM users WHERE id = $1`, [authorId]);
+  const user = userResult.rows[0];
+  return {
+    id: row.id,
+    gauntletId: row.gauntlet_id,
+    runId: row.run_id,
+    roundIndex: row.round_index,
+    authorId: row.author_id,
+    authorName: user?.display_name ?? 'Unknown',
+    authorPhoto: user?.photo_url ?? '',
+    text: row.text,
+    createdAt: row.created_at,
+  };
+}
+
+async function getGauntletComments(gauntletId) {
+  const result = await query(
+    `SELECT gc.id, gc.gauntlet_id, gc.run_id, gc.round_index, gc.author_id,
+            gc.text, gc.created_at, u.display_name, u.photo_url
+     FROM gauntlet_comments gc
+     JOIN users u ON u.id = gc.author_id
+     WHERE gc.gauntlet_id = $1
+     ORDER BY gc.created_at ASC`,
+    [gauntletId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    gauntletId: row.gauntlet_id,
+    runId: row.run_id,
+    roundIndex: row.round_index,
+    authorId: row.author_id,
+    authorName: row.display_name,
+    authorPhoto: row.photo_url,
+    text: row.text,
+    createdAt: row.created_at,
+  }));
+}
+
 function formatGauntlet(row) {
   return {
     id: row.id,
@@ -908,4 +1033,8 @@ export {
   updateGauntletRoundScore,
   finalizeGauntletRun,
   setGauntletRunScoring,
+  getGauntletComparison,
+  getUserGauntletHistory,
+  addGauntletComment,
+  getGauntletComments,
 };

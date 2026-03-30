@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Swords } from "lucide-react";
 import { useGauntlet } from "../hooks/useGauntlet";
 import { GauntletReceipt } from "./GauntletReceipt";
+import { GauntletComparison } from "./GauntletComparison";
+import { GauntletHistory } from "./GauntletHistory";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 
@@ -77,6 +79,8 @@ export function GauntletMode({ initialGauntletId, onExit }: GauntletModeProps) {
     reset,
   } = useGauntlet(initialGauntletId);
 
+  const [comparisonGauntletId, setComparisonGauntletId] = useState<string | null>(null);
+
   const [punText, setPunText] = useState("");
   const [localSeconds, setLocalSeconds] = useState(ROUND_SECONDS);
   const startTimeRef = useRef<number | null>(null);
@@ -122,12 +126,22 @@ export function GauntletMode({ initialGauntletId, onExit }: GauntletModeProps) {
     }
   }
 
+  if (comparisonGauntletId) {
+    return (
+      <GauntletComparison
+        gauntletId={comparisonGauntletId}
+        onBack={() => setComparisonGauntletId(null)}
+      />
+    );
+  }
+
   if (phase === "complete" && runData && gauntletId) {
     return (
       <GauntletReceipt
         run={runData}
         gauntletId={gauntletId}
         rounds={rounds}
+        onViewComparison={() => setComparisonGauntletId(gauntletId)}
         onPlayAgain={() => {
           reset();
           startGauntlet();
@@ -156,6 +170,7 @@ export function GauntletMode({ initialGauntletId, onExit }: GauntletModeProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
+            className="space-y-6"
           >
             <Card className="text-center space-y-6 py-10">
               <div className="inline-flex p-4 rounded-2xl bg-orange-100 dark:bg-violet-900/30">
@@ -185,6 +200,10 @@ export function GauntletMode({ initialGauntletId, onExit }: GauntletModeProps) {
                 </Button>
               </div>
             </Card>
+
+            <GauntletHistory
+              onViewComparison={(id) => setComparisonGauntletId(id)}
+            />
           </motion.div>
         )}
 

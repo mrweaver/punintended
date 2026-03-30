@@ -468,10 +468,14 @@ async function getPunsByAuthor(authorId) {
        u.display_name AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
-       FALSE AS my_groan
+       FALSE AS my_groan,
+       MAX(COALESCE(gdc.topic, sch.topic)) AS challenge_topic,
+       MAX(COALESCE(gdc.focus, sch.focus)) AS challenge_focus
      FROM puns p
      JOIN users u ON p.author_id = u.id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
+     LEFT JOIN global_daily_challenges gdc ON p.challenge_id = gdc.challenge_id
+     LEFT JOIN session_challenge_history sch ON p.session_id = sch.session_id AND p.challenge_id = sch.challenge_id
      WHERE p.author_id = $1
      GROUP BY p.id, u.display_name, u.photo_url
      ORDER BY p.created_at DESC`,
@@ -523,6 +527,8 @@ function formatPun(row) {
     aiFeedback: row.ai_feedback,
     groanCount: Number(row.groan_count || 0),
     myReaction: row.my_groan ? "groan" : null,
+    challengeTopic: row.challenge_topic || null,
+    challengeFocus: row.challenge_focus || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -280,6 +280,8 @@ export interface Pun {
   groanCount: number;
   myReaction: "groan" | null;
   viewed?: boolean;
+  challengeTopic?: string | null;
+  challengeFocus?: string | null;
   createdAt: string;
   updatedAt: string;
 }

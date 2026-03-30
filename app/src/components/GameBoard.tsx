@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Trophy,
@@ -13,11 +13,15 @@ import { usePuns } from "../hooks/usePuns";
 import { useChallengeHistory } from "../hooks/useChallengeHistory";
 import { useMessages } from "../hooks/useMessages";
 import { useComments } from "../hooks/useComments";
+import { useScoreSound } from "../hooks/useScoreSound";
+import { useTypingStatus } from "../hooks/useTypingStatus";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { PunCard } from "./PunCard";
 import { ChallengeHistoryPanel } from "./ChallengeHistoryPanel";
 import { ChatBox } from "./ChatBox";
+import { PlayerLeaderboard } from "./PlayerLeaderboard";
+import { WeeklyLeaderboard } from "./WeeklyLeaderboard";
 import { ShareModal } from "./modals/ShareModal";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
 import type { Session } from "../api/client";
@@ -54,15 +58,13 @@ export function GameBoard({
   const historyState = useChallengeHistory(session.id, session.challengeId);
   const { messages, sendMessage } = useMessages(session.id);
   const { addComment, getCommentsForPun } = useComments(session.id);
-  const hasSubmittedToday = puns.some((p) => p.authorId === user?.uid);
-  const challengeViewedAtRef = useRef<number | null>(null);
+  const { unlock: unlockAudio, playScore } = useScoreSound();
+  const { typingPlayers, reportTyping, onTextChange } = useTypingStatus(session.id);
+  const myPunCount = puns.filter((p) => p.authorId === user?.uid).length;
+  const attemptsLeft = Math.max(0, 3 - myPunCount);
+  const hasSubmittedToday = myPunCount > 0;
+  const prevPunsRef = useRef<typeof puns>([]);
   const [showHistory, setShowHistory] = useState(false);
-
-  useEffect(() => {
-    if (session.challenge && !challengeViewedAtRef.current) {
-      challengeViewedAtRef.current = Date.now();
-    }
-  }, [session.challenge]);
 
   const [punText, setPunText] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
@@ -84,20 +86,31 @@ export function GameBoard({
 
   const unreadChatCount = chatOpen ? 0 : Math.max(0, messages.length - lastReadCountRef.current);
 
-  const handleSubmitPun = async () => {
-    if (!punText.trim()) return;
-    const responseTimeMs = challengeViewedAtRef.current
-      ? Date.now() - challengeViewedAtRef.current
-      : null;
+  // Play a sound when the current user's pun gets AI-scored
+  useEffect(() => {
+    for (const current of puns.filter((p) => p.authorId === user?.uid)) {
+      const prev = prevPunsRef.current.find((p) => p.id === current.id);
+      if (current.aiScore !== null && prev?.aiScore == null) {
+        playScore(current.aiScore);
+        break;
+      }
+    }
+    prevPunsRef.current = puns;
+  }, [puns, user?.uid, playScore]);
+
+  const handleSubmitPun = useCallback(async () => {
+    if (!punText.trim() || attemptsLeft === 0) return;
+    unlockAudio();
     try {
-      await submitPun(punText.trim(), responseTimeMs);
+      await submitPun(punText.trim());
+      reportTyping("submitted");
       setPunText("");
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Failed to submit pun";
       alert(message);
     }
-  };
+  }, [punText, attemptsLeft, unlockAudio, submitPun, reportTyping]);
 
   const isOwner = session.ownerId === user?.uid;
 
@@ -214,27 +227,38 @@ export function GameBoard({
       <Card className="border-2 border-orange-100 dark:border-violet-900/50">
         <div className="flex flex-col gap-4">
           <textarea
-            placeholder="Type your pun here..."
+            placeholder={attemptsLeft === 0 ? "No submissions remaining today." : "Type your pun here..."}
             value={punText}
-            onChange={(e) => setPunText(e.target.value)}
+            disabled={attemptsLeft === 0}
+            onChange={(e) => {
+              setPunText(e.target.value);
+              onTextChange(e.target.value.trim().length > 0);
+            }}
+            onBlur={() => reportTyping("idle")}
             onKeyDown={(e) => {
               if (e.key === "Enter" && e.ctrlKey) {
                 e.preventDefault();
                 handleSubmitPun();
               }
             }}
-            className="w-full p-4 sm:p-6 text-lg sm:text-xl font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl sm:rounded-2xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[100px] sm:min-h-[120px] resize-none"
+            className="w-full p-4 sm:p-6 text-lg sm:text-xl font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl sm:rounded-2xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[100px] sm:min-h-[120px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-              Tip: Combine {session.challenge?.topic} and{" "}
-              {session.challenge?.focus} for maximum points!{" "}
-              <span className="text-xs opacity-60">Ctrl+Enter to submit.</span>
-            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
+                Tip: Combine {session.challenge?.topic} and{" "}
+                {session.challenge?.focus} for maximum points!
+              </p>
+              <p className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}>
+                {attemptsLeft === 0
+                  ? "No submissions remaining today — come back tomorrow!"
+                  : `${attemptsLeft} submission${attemptsLeft !== 1 ? "s" : ""} remaining today`}
+              </p>
+            </div>
             <Button
               variant="secondary"
               onClick={handleSubmitPun}
-              disabled={!punText.trim() || submitting}
+              disabled={!punText.trim() || submitting || attemptsLeft === 0}
               loading={submitting}
               className="w-full sm:w-auto"
             >
@@ -245,9 +269,17 @@ export function GameBoard({
         </div>
       </Card>
 
+      {/* Live Leaderboard */}
+      {hasSubmittedToday && puns.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <PlayerLeaderboard puns={puns} players={session.players} />
+          <WeeklyLeaderboard sessionId={session.id} puns={puns} />
+        </div>
+      )}
+
       {/* Puns Feed and Chat */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-        <div className="lg:col-span-2 flex flex-col h-full">
+        <div className="lg:col-span-2 flex flex-col">
           {/* Board header + controls */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
             <h2 className="text-2xl sm:text-3xl font-serif italic flex items-center gap-3 dark:text-zinc-100">
@@ -328,7 +360,7 @@ export function GameBoard({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.15 }}
-                className="grid grid-cols-1 gap-4 sm:gap-6 flex-1"
+                className="grid grid-cols-1 gap-4 sm:gap-6"
               >
                 {!hasSubmittedToday ? (
                   <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-orange-200 dark:border-violet-800">
@@ -343,20 +375,60 @@ export function GameBoard({
                     </p>
                   </div>
                 ) : (
-                  puns.map((pun, i) => (
-                    <PunCard
-                      key={pun.id}
-                      pun={pun}
-                      index={i}
-                      comments={getCommentsForPun(pun.id)}
-                      submitting={submitting}
-                      onReact={reactPun}
-                      onViewed={markPunViewed}
-                      onEdit={editPun}
-                      onDelete={deletePun}
-                      onComment={addComment}
-                    />
-                  ))
+                  <>
+                    {puns.map((pun, i) => (
+                      <PunCard
+                        key={pun.id}
+                        pun={pun}
+                        index={i}
+                        comments={getCommentsForPun(pun.id)}
+                        submitting={submitting}
+                        onReact={reactPun}
+                        onViewed={markPunViewed}
+                        onEdit={editPun}
+                        onDelete={deletePun}
+                        onComment={addComment}
+                      />
+                    ))}
+                    <AnimatePresence>
+                      {typingPlayers
+                        .filter((p) => p.uid !== user?.uid)
+                        .map((player) => (
+                          <motion.div
+                            key={`typing-${player.uid}`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.2 }}
+                            className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-dashed border-orange-200 dark:border-violet-800/50 opacity-70"
+                          >
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={player.photoURL}
+                                className="w-6 h-6 rounded-full"
+                                alt={player.name}
+                              />
+                              <span className="text-sm text-gray-500 dark:text-zinc-400 italic">
+                                {player.status === "typing"
+                                  ? `${player.name.split(" ")[0]} is cooking up a pun...`
+                                  : `${player.name.split(" ")[0]} has submitted ✓`}
+                              </span>
+                              {player.status === "typing" && (
+                                <span className="flex gap-0.5 ml-1">
+                                  {[0, 1, 2].map((i) => (
+                                    <span
+                                      key={i}
+                                      className="w-1 h-1 rounded-full bg-orange-400 dark:bg-violet-400 animate-bounce"
+                                      style={{ animationDelay: `${i * 0.15}s` }}
+                                    />
+                                  ))}
+                                </span>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
+                    </AnimatePresence>
+                  </>
                 )}
               </motion.div>
             )}

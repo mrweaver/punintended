@@ -43,7 +43,7 @@ export function ChatBox({ messages, onSendMessage, onClose, isMobileModal }: Cha
         </h2>
       )}
       <Card className={`flex flex-col border-2 border-gray-100 dark:border-zinc-800 p-0 overflow-hidden bg-white dark:bg-zinc-900 ${
-        isMobileModal ? 'flex-1 rounded-none' : 'h-[400px] sm:h-[calc(100vh-200px)] sticky top-24'
+        isMobileModal ? 'flex-1 rounded-none' : 'h-[400px] sm:h-[min(520px,calc(100vh-350px))] sticky top-24'
       }`}>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 ? (

@@ -117,6 +117,17 @@ export function useSession() {
     localStorage.setItem('pun_session_id', session.id);
   }, []);
 
+  const joinSessionById = useCallback(async (id: string) => {
+    await sessionsApi.join(id);
+    const updated = await sessionsApi.list();
+    setSessions(updated);
+    const fresh = updated.find((s) => s.id === id);
+    if (fresh) {
+      setCurrentSession(fresh);
+      localStorage.setItem('pun_session_id', fresh.id);
+    }
+  }, []);
+
   const leaveSession = useCallback(() => {
     setCurrentSession(null);
     localStorage.removeItem('pun_session_id');
@@ -140,6 +151,7 @@ export function useSession() {
     loading,
     createNewSession,
     joinExistingSession,
+    joinSessionById,
     leaveSession,
     deleteExistingSession,
   };

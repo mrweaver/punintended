@@ -37,8 +37,17 @@ export const sessionsApi = {
     }),
   join: (id: string) =>
     request<Session>(`/api/sessions/${id}/join`, { method: "POST" }),
+  rename: (id: string, name: string) =>
+    request<Session>(`/api/sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
   delete: (id: string) =>
     request<{ success: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
+  kickPlayer: (id: string, uid: number) =>
+    request<{ success: boolean }>(`/api/sessions/${id}/players/${uid}`, {
+      method: "DELETE",
+    }),
   refreshChallenge: (id: string, localDateId: string, force = false) =>
     request<Session>(`/api/sessions/${id}/refresh-challenge`, {
       method: "POST",

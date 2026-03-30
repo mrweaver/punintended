@@ -7,6 +7,10 @@ import {
   Calendar,
   ArrowLeft,
   MessageSquare,
+  Pencil,
+  Check,
+  X,
+  UserMinus,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { usePuns } from "../hooks/usePuns";
@@ -32,6 +36,8 @@ interface GameBoardProps {
 
   onLeave: () => void;
   onDelete: (sessionId: string) => Promise<void>;
+  onRename: (sessionId: string, name: string) => Promise<void>;
+  onKick: (uid: number) => Promise<void>;
 }
 
 export function GameBoard({
@@ -40,6 +46,8 @@ export function GameBoard({
 
   onLeave,
   onDelete,
+  onRename,
+  onKick,
 }: GameBoardProps) {
   const { user } = useAuth();
   const todayId = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
@@ -70,6 +78,9 @@ export function GameBoard({
   const [showShareModal, setShowShareModal] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(session.name);
+  const [playerToKick, setPlayerToKick] = useState<number | null>(null);
   const lastReadCountRef = useRef<number>(0);
   const chatInitializedRef = useRef<boolean>(false);
 
@@ -112,6 +123,16 @@ export function GameBoard({
     }
   }, [punText, attemptsLeft, unlockAudio, submitPun, reportTyping]);
 
+  const handleRename = useCallback(async () => {
+    const trimmed = nameInput.trim();
+    if (trimmed && trimmed !== session.name) {
+      await onRename(session.id, trimmed);
+    } else {
+      setNameInput(session.name);
+    }
+    setEditingName(false);
+  }, [nameInput, session.name, session.id, onRename]);
+
   const isOwner = session.ownerId === user?.uid;
 
   const SORT_LABELS: Record<typeof sortMode, string> = {
@@ -134,11 +155,43 @@ export function GameBoard({
           <Button variant="ghost" onClick={onLeave} className="mb-2 -ml-4">
             ← Back to Lobby
           </Button>
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl sm:text-4xl font-serif italic font-bold dark:text-zinc-100">
-              {session.name}
-            </h1>
-            {isOwner && (
+          <div className="flex items-center gap-3">
+            {isOwner && editingName ? (
+              <>
+                <input
+                  autoFocus
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRename();
+                    if (e.key === "Escape") { setNameInput(session.name); setEditingName(false); }
+                  }}
+                  className="text-2xl sm:text-4xl font-serif italic font-bold dark:text-zinc-100 bg-transparent border-b-2 border-orange-500 dark:border-violet-500 outline-none w-48 sm:w-72"
+                />
+                <button onClick={handleRename} className="text-green-500 hover:text-green-600">
+                  <Check className="w-5 h-5" />
+                </button>
+                <button onClick={() => { setNameInput(session.name); setEditingName(false); }} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl sm:text-4xl font-serif italic font-bold dark:text-zinc-100">
+                  {session.name}
+                </h1>
+                {isOwner && (
+                  <button
+                    onClick={() => { setNameInput(session.name); setEditingName(true); }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300"
+                    title="Rename group"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+              </>
+            )}
+            {isOwner && !editingName && (
               <Button
                 variant="ghost"
                 onClick={() => setSessionToDelete(session.id)}
@@ -152,13 +205,23 @@ export function GameBoard({
         <div className="flex items-center gap-3">
           <div className="flex -space-x-2">
             {session.players.map((p) => (
-              <img
-                key={p.uid}
-                src={p.photoURL}
-                className="w-10 h-10 rounded-full border-2 border-white dark:border-zinc-950"
-                title={p.name}
-                alt={p.name}
-              />
+              <div key={p.uid} className="relative group">
+                <img
+                  src={p.photoURL}
+                  className="w-10 h-10 rounded-full border-2 border-white dark:border-zinc-950"
+                  title={p.name}
+                  alt={p.name}
+                />
+                {isOwner && p.uid !== user?.uid && (
+                  <button
+                    onClick={() => setPlayerToKick(p.uid)}
+                    title={`Kick ${p.name}`}
+                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white items-center justify-center hidden group-hover:flex"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
           <Button
@@ -501,6 +564,18 @@ export function GameBoard({
             setSessionToDelete(null);
           }}
           onCancel={() => setSessionToDelete(null)}
+        />
+      )}
+
+      {playerToKick !== null && (
+        <DeleteConfirmModal
+          message={`Remove ${session.players.find((p) => p.uid === playerToKick)?.name ?? "this player"} from the group?`}
+          confirmLabel="Kick"
+          onConfirm={async () => {
+            await onKick(playerToKick);
+            setPlayerToKick(null);
+          }}
+          onCancel={() => setPlayerToKick(null)}
         />
       )}
     </motion.div>

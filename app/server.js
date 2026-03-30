@@ -16,6 +16,8 @@ import {
   joinSession,
   deleteSession,
   updateSessionChallenge,
+  renameSession,
+  removePlayerFromSession,
   saveChallengeToHistory,
   getChallengeHistory,
   getGlobalChallengeForDate,
@@ -643,6 +645,44 @@ app.delete("/api/sessions/:id", ensureAuthenticated, async (req, res) => {
   } catch (error) {
     console.error("Failed to delete session:", error);
     res.status(500).json({ error: "Failed to delete session" });
+  }
+});
+
+app.patch("/api/sessions/:id", ensureAuthenticated, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim())
+    return res.status(400).json({ error: "Name required" });
+  try {
+    const session = await getSessionById(req.params.id);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (session.ownerId !== req.user.id)
+      return res.status(403).json({ error: "Only the owner can rename" });
+    await renameSession(req.params.id, name.trim());
+    broadcastSessionUpdate(req.params.id);
+    const updated = await getSessionById(req.params.id);
+    res.json(updated);
+  } catch (error) {
+    console.error("Failed to rename session:", error);
+    res.status(500).json({ error: "Failed to rename session" });
+  }
+});
+
+app.delete("/api/sessions/:id/players/:uid", ensureAuthenticated, async (req, res) => {
+  try {
+    const session = await getSessionById(req.params.id);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (session.ownerId !== req.user.id)
+      return res.status(403).json({ error: "Only the owner can kick players" });
+    const targetUid = parseInt(req.params.uid, 10);
+    if (targetUid === req.user.id)
+      return res.status(400).json({ error: "Cannot kick yourself" });
+    await removePlayerFromSession(req.params.id, targetUid);
+    broadcastToSession(req.params.id, "player-kicked", { uid: targetUid });
+    broadcastSessionUpdate(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to kick player:", error);
+    res.status(500).json({ error: "Failed to kick player" });
   }
 });
 

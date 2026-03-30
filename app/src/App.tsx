@@ -28,6 +28,8 @@ export default function App() {
     joinSessionById,
     leaveSession,
     deleteExistingSession,
+    renameCurrentSession,
+    kickPlayer,
   } = useSession();
 
   const [showProfile, setShowProfile] = useState(false);
@@ -145,6 +147,8 @@ export default function App() {
                 loading={loading}
                 onLeave={leaveSession}
                 onDelete={deleteExistingSession}
+                onRename={renameCurrentSession}
+                onKick={(uid) => kickPlayer(currentSession.id, uid)}
               />
             )}
           </AnimatePresence>

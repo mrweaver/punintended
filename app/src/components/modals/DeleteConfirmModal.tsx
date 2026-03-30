@@ -4,9 +4,11 @@ import { Button } from '../ui/Button';
 interface DeleteConfirmModalProps {
   onConfirm: () => void;
   onCancel: () => void;
+  message?: string;
+  confirmLabel?: string;
 }
 
-export function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalProps) {
+export function DeleteConfirmModal({ onConfirm, onCancel, message, confirmLabel }: DeleteConfirmModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
       <motion.div
@@ -16,9 +18,9 @@ export function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalPr
         animate={{ opacity: 1, scale: 1 }}
         className="bg-white dark:bg-zinc-900 rounded-3xl p-8 max-w-sm w-full text-center relative shadow-2xl border border-gray-100 dark:border-zinc-800"
       >
-        <h3 className="text-2xl font-serif italic mb-4 dark:text-zinc-100">Delete Session?</h3>
+        <h3 className="text-2xl font-serif italic mb-4 dark:text-zinc-100">Are you sure?</h3>
         <p className="text-gray-600 dark:text-zinc-400 mb-8">
-          Are you sure you want to delete this session? This action cannot be undone.
+          {message ?? "Are you sure you want to delete this session? This action cannot be undone."}
         </p>
         <div className="flex gap-4">
           <Button variant="outline" onClick={onCancel} className="flex-1">
@@ -29,7 +31,7 @@ export function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalPr
             onClick={onConfirm}
             className="flex-1 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 border-none text-white"
           >
-            Delete
+            {confirmLabel ?? "Delete"}
           </Button>
         </div>
       </motion.div>

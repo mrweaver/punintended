@@ -87,6 +87,12 @@ export function useSession() {
           localStorage.removeItem('pun_session_id');
           setSessions((prev) => prev.filter((s) => s.id !== currentSession.id));
         },
+        'player-kicked': (data: { uid: number }) => {
+          if (data.uid === user?.uid) {
+            setCurrentSession(null);
+            localStorage.removeItem('pun_session_id');
+          }
+        },
       },
     });
 
@@ -145,6 +151,22 @@ export function useSession() {
     [currentSession?.id]
   );
 
+  const renameCurrentSession = useCallback(
+    async (sessionId: string, name: string) => {
+      const updated = await sessionsApi.rename(sessionId, name);
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      setCurrentSession(updated);
+    },
+    []
+  );
+
+  const kickPlayer = useCallback(
+    async (sessionId: string, uid: number) => {
+      await sessionsApi.kickPlayer(sessionId, uid);
+    },
+    []
+  );
+
   return {
     sessions,
     currentSession,
@@ -154,5 +176,7 @@ export function useSession() {
     joinSessionById,
     leaveSession,
     deleteExistingSession,
+    renameCurrentSession,
+    kickPlayer,
   };
 }

@@ -173,6 +173,17 @@ async function updateSessionChallenge(sessionId, topic, focus, challengeId) {
   );
 }
 
+async function renameSession(sessionId, name) {
+  await query("UPDATE game_sessions SET name = $1 WHERE id = $2", [name, sessionId]);
+}
+
+async function removePlayerFromSession(sessionId, userId) {
+  await query(
+    "DELETE FROM session_players WHERE session_id = $1 AND user_id = $2",
+    [sessionId, userId],
+  );
+}
+
 function formatSession(row) {
   return {
     id: row.id,
@@ -995,6 +1006,8 @@ export {
   joinSession,
   deleteSession,
   updateSessionChallenge,
+  renameSession,
+  removePlayerFromSession,
   saveChallengeToHistory,
   getChallengeHistory,
   getPastChallengeTopics,

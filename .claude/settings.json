@@ -22,7 +22,9 @@
       "Bash(docker exec:*)",
       "Bash(npm install:*)",
       "Bash(find /opt/stacks/punintended -not -path */node_modules* -not -path */dist* -type d)",
-      "Bash(find /opt/stacks/punintended -name routes* -o -name api* -type d)"
+      "Bash(find /opt/stacks/punintended -name routes* -o -name api* -type d)",
+      "Bash(node /opt/stacks/punintended/app/scripts/sync-changelog.js)",
+      "Bash(node scripts/sync-changelog.js)"
     ]
   }
 }

@@ -4,7 +4,10 @@
   "version": "1.6.0",
   "type": "module",
   "scripts": {
+    "sync:changelog": "node scripts/sync-changelog.js",
+    "predev": "npm run sync:changelog",
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "prebuild": "npm run sync:changelog",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

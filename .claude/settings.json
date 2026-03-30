@@ -21,7 +21,8 @@
       "Bash(docker exec punintended-db psql -U punintended punintended -c \":*)",
       "Bash(docker exec:*)",
       "Bash(npm install:*)",
-      "Bash(find /opt/stacks/punintended -not -path */node_modules* -not -path */dist* -type d)"
+      "Bash(find /opt/stacks/punintended -not -path */node_modules* -not -path */dist* -type d)",
+      "Bash(find /opt/stacks/punintended -name routes* -o -name api* -type d)"
     ]
   }
 }

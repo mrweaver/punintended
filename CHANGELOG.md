@@ -4,6 +4,17 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.9.0] - 2026-03-31
+
+### Added
+
+- **Rename Group:** Group hosts can click the pencil icon next to the group name to rename it inline; the change broadcasts to all players via SSE.
+- **Kick Players:** Group hosts can hover a player avatar and click the ✕ button to remove them from the group; kicked players are automatically returned to the lobby.
+
+### Fixed
+
+- **Profile Modal Crash:** Opening the user account modal no longer throws "Cannot convert undefined or null to object" — reaction totals now correctly use `groanCount`.
+
 ## [1.8.0] - 2026-03-31
 
 ### Added

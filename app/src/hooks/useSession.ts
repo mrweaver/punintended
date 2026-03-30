@@ -12,7 +12,6 @@ export function useSession() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [staleChallengeDetected, setStaleChallengeDetected] = useState(false);
   const autoRefreshedRef = useRef<string | null>(null); // tracks sessionId already auto-refreshed
 
   // Load sessions on mount
@@ -49,22 +48,16 @@ export function useSession() {
       .catch(() => setLoading(false));
   }, [user]);
 
-  // Auto-refresh stale challenge when session is set
+  // Auto-refresh stale challenge when session is set (any player can trigger global challenge)
   useEffect(() => {
     if (!currentSession || !user) return;
 
     const today = getLocalDateId();
     const isStale = currentSession.challengeId && currentSession.challengeId < today;
 
-    if (!isStale) {
-      setStaleChallengeDetected(false);
-      return;
-    }
+    if (!isStale) return;
 
-    const isOwner = currentSession.ownerId === user.uid;
-
-    if (isOwner && autoRefreshedRef.current !== currentSession.id) {
-      // Auto-refresh once per session load for the owner
+    if (autoRefreshedRef.current !== currentSession.id) {
       autoRefreshedRef.current = currentSession.id;
       setLoading(true);
       sessionsApi
@@ -72,12 +65,9 @@ export function useSession() {
         .then((updated) => {
           setCurrentSession(updated);
           setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-          setStaleChallengeDetected(false);
         })
         .catch(console.error)
         .finally(() => setLoading(false));
-    } else if (!isOwner) {
-      setStaleChallengeDetected(true);
     }
   }, [currentSession?.id, currentSession?.challengeId, user]);
 
@@ -148,7 +138,6 @@ export function useSession() {
     sessions,
     currentSession,
     loading,
-    staleChallengeDetected,
     createNewSession,
     joinExistingSession,
     leaveSession,

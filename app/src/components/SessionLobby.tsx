@@ -70,7 +70,7 @@ export function SessionLobby({
         <div className="space-y-3 sm:space-y-4">
           <input
             type="text"
-            placeholder="Session Name (e.g., Friday Fun)"
+            placeholder="Group Name (e.g., Friday Fun)"
             value={newSessionName}
             onChange={(e) => setNewSessionName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -83,7 +83,7 @@ export function SessionLobby({
             loading={loading}
           >
             <Plus className="w-5 h-5" />
-            Create Session
+            Create Group
           </Button>
         </div>
       </Card>
@@ -91,12 +91,12 @@ export function SessionLobby({
       {/* Join Session */}
       <div className="space-y-4 sm:space-y-6">
         <h2 className="text-2xl sm:text-3xl font-serif italic dark:text-zinc-100">
-          Join a Session
+          Join a Group
         </h2>
         <div className="grid grid-cols-1 gap-4 overflow-y-auto max-h-[60vh] pr-2">
           {sessions.length === 0 ? (
             <p className="text-gray-500 dark:text-zinc-500 italic">
-              No active sessions. Create one to get started!
+              No active groups. Create one to get started!
             </p>
           ) : (
             sessions.map((session) => (

@@ -18,8 +18,10 @@ import {
   updateSessionChallenge,
   saveChallengeToHistory,
   getChallengeHistory,
-  getPastChallengeTopics,
-  getChallengeForDate,
+  getGlobalChallengeForDate,
+  saveGlobalChallenge,
+  getPastGlobalChallengeTopics,
+  hasUserSubmittedForChallenge,
   getPunsBySessionAndChallenge,
   createPun,
   updatePunText,
@@ -60,7 +62,11 @@ const UMAMI_BASE_URL = process.env.UMAMI_BASE_URL || "http://umami:3000";
 // --- Gemini AI ---
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-async function generateDailyChallenge() {
+async function generateDailyChallenge(pastChallenges = []) {
+  const avoidClause =
+    pastChallenges.length > 0
+      ? `\n\n    AVOID repeating these past combinations:\n${pastChallenges.slice(0, 20).map((c) => `    - Topic: "${c.topic}", Focus: "${c.focus}"`).join("\n")}`
+      : "";
   const response = await ai.models.generateContent({
     model: "gemini-3.1-flash-lite-preview",
     contents: `Generate a unique 'Topic' and 'Focus' for a pun-making game inspired by Punderdome.
@@ -70,7 +76,7 @@ async function generateDailyChallenge() {
     - The 'Topic' should be a broad category (e.g., "Human Body", "IT Infrastructure", "History", "Power Tools").
     - The 'Focus' should be a specific, unrelated object, situation, or place (e.g., "Bread", "A Flat Tire", "Coffee", "A Retaining Wall").
 
-    The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON.`,
+    The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON.${avoidClause}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -84,6 +90,16 @@ async function generateDailyChallenge() {
     },
   });
   return JSON.parse(response.text);
+}
+
+async function getOrCreateGlobalChallenge(dateId) {
+  let challenge = await getGlobalChallengeForDate(dateId);
+  if (!challenge) {
+    const past = await getPastGlobalChallengeTopics();
+    challenge = await generateDailyChallenge(past);
+    await saveGlobalChallenge(dateId, challenge.topic, challenge.focus);
+  }
+  return challenge;
 }
 
 async function scorePunText(topic, focus, punText) {
@@ -515,8 +531,8 @@ app.post("/api/sessions", ensureAuthenticated, async (req, res) => {
     return res.status(400).json({ error: "Session name required" });
 
   try {
-    const todayId = new Date().toISOString().split("T")[0];
-    const challenge = await generateDailyChallenge();
+    const todayId = new Date().toLocaleDateString("en-CA");
+    const challenge = await getOrCreateGlobalChallenge(todayId);
     const session = await createSession(name.trim(), req.user.id, {
       ...challenge,
       challengeId: todayId,
@@ -570,31 +586,14 @@ app.post(
     try {
       const session = await getSessionById(req.params.id);
       if (!session) return res.status(404).json({ error: "Session not found" });
-      if (session.ownerId !== req.user.id)
-        return res.status(403).json({ error: "Only the owner can refresh" });
 
-      const { localDateId, force = false } = req.body;
+      const { localDateId } = req.body;
       const dateId =
         localDateId && /^\d{4}-\d{2}-\d{2}$/.test(localDateId)
           ? localDateId
-          : new Date().toISOString().split("T")[0];
+          : new Date().toLocaleDateString("en-CA");
 
-      let challenge;
-      if (!force) {
-        // Reuse today's challenge if it already exists — no AI call needed
-        challenge = await getChallengeForDate(req.params.id, dateId);
-      }
-
-      if (!challenge) {
-        const pastChallenges = await getPastChallengeTopics(req.params.id);
-        challenge = await generateDailyChallenge(pastChallenges);
-        await saveChallengeToHistory(
-          req.params.id,
-          dateId,
-          challenge.topic,
-          challenge.focus,
-        );
-      }
+      const challenge = await getOrCreateGlobalChallenge(dateId);
 
       await updateSessionChallenge(
         req.params.id,
@@ -602,19 +601,12 @@ app.post(
         challenge.focus,
         dateId,
       );
-
-      // Notify other players
-      for (const player of session.players) {
-        if (player.uid !== req.user.id) {
-          await createNotification(
-            player.uid,
-            "system",
-            `The host refreshed the challenge in "${session.name}".`,
-            session.id,
-          );
-          broadcastNotificationUpdate(player.uid);
-        }
-      }
+      await saveChallengeToHistory(
+        req.params.id,
+        dateId,
+        challenge.topic,
+        challenge.focus,
+      );
 
       broadcastSessionUpdate(req.params.id);
       const updated = await getSessionById(req.params.id);
@@ -639,13 +631,26 @@ app.get("/api/sessions/:id/history", ensureAuthenticated, async (req, res) => {
 // --- Pun API ---
 app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
   try {
-    const challengeId =
-      req.query.challengeId || new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA");
+    const challengeId = req.query.challengeId || today;
     const puns = await getPunsBySessionAndChallenge(
       req.params.id,
       challengeId,
       req.user.id,
     );
+
+    // Blind gate: for today's challenge, hide other players' puns until user submits
+    if (challengeId === today) {
+      const submitted = await hasUserSubmittedForChallenge(
+        req.params.id,
+        challengeId,
+        req.user.id,
+      );
+      if (!submitted) {
+        return res.json(puns.filter((p) => p.authorId === req.user.id));
+      }
+    }
+
     res.json(puns);
   } catch (error) {
     console.error("Failed to get puns:", error);

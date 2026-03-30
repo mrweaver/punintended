@@ -9,7 +9,7 @@ const DEFAULT_REACTIONS = {
   wild: 0,
 };
 
-export function useChallengeHistory(sessionId: string | null) {
+export function useChallengeHistory(sessionId: string | null, challengeId?: string | null) {
   const [history, setHistory] = useState<ChallengeHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
@@ -27,7 +27,7 @@ export function useChallengeHistory(sessionId: string | null) {
       .then(setHistory)
       .catch(console.error)
       .finally(() => setLoadingHistory(false));
-  }, [sessionId]);
+  }, [sessionId, challengeId]);
 
   const toggleDate = useCallback(
     async (challengeId: string) => {

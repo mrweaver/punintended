@@ -25,7 +25,7 @@ import type { Session } from "../api/client";
 interface GameBoardProps {
   session: Session;
   loading: boolean;
-  staleChallengeDetected: boolean;
+
   onLeave: () => void;
   onDelete: (sessionId: string) => Promise<void>;
 }
@@ -33,7 +33,7 @@ interface GameBoardProps {
 export function GameBoard({
   session,
   loading,
-  staleChallengeDetected,
+
   onLeave,
   onDelete,
 }: GameBoardProps) {
@@ -51,9 +51,10 @@ export function GameBoard({
     reactPun,
     markPunViewed,
   } = usePuns(session.id, todayId, user?.uid);
-  const historyState = useChallengeHistory(session.id);
+  const historyState = useChallengeHistory(session.id, session.challengeId);
   const { messages, sendMessage } = useMessages(session.id);
   const { addComment, getCommentsForPun } = useComments(session.id);
+  const hasSubmittedToday = puns.some((p) => p.authorId === user?.uid);
   const challengeViewedAtRef = useRef<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -68,6 +69,14 @@ export function GameBoard({
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const lastReadCountRef = useRef<number>(0);
+  const chatInitializedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!chatInitializedRef.current && messages.length > 0) {
+      chatInitializedRef.current = true;
+      lastReadCountRef.current = messages.length;
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     if (chatOpen) lastReadCountRef.current = messages.length;
@@ -150,23 +159,6 @@ export function GameBoard({
         </div>
       </div>
 
-      {/* Stale challenge banner (non-owners) */}
-      <AnimatePresence>
-        {staleChallengeDetected && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl text-amber-700 dark:text-amber-300 text-sm"
-          >
-            <span className="text-base">🌅</span>
-            <span>
-              New day — waiting for the host to start today's challenge.
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Daily Challenge Cards */}
       <div className="flex justify-between items-end mb-4">
         <div>
@@ -185,6 +177,10 @@ export function GameBoard({
       </div>
       <div className="grid grid-cols-2 gap-4 sm:gap-6">
         <motion.div
+          key={`topic-${session.challengeId}`}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
           whileHover={{ rotate: -1 }}
           className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-zinc-700"
         >
@@ -197,6 +193,10 @@ export function GameBoard({
           </h2>
         </motion.div>
         <motion.div
+          key={`focus-${session.challengeId}`}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.05 }}
           whileHover={{ rotate: 1 }}
           className="bg-orange-500 dark:bg-violet-600 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-violet-500"
         >
@@ -256,7 +256,7 @@ export function GameBoard({
             </h2>
 
             <div className="flex flex-wrap items-center gap-2">
-              {!showHistory && (
+              {!showHistory && hasSubmittedToday && (
                 <>
                   {(["unviewed", "top", "new"] as const).map((mode) => (
                     <Button
@@ -330,7 +330,13 @@ export function GameBoard({
                 transition={{ duration: 0.15 }}
                 className="grid grid-cols-1 gap-4 sm:gap-6 flex-1"
               >
-                {puns.length === 0 ? (
+                {!hasSubmittedToday ? (
+                  <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-orange-200 dark:border-violet-800">
+                    <p className="text-gray-500 dark:text-zinc-400 italic">
+                      Submit your pun above to reveal your group's submissions.
+                    </p>
+                  </div>
+                ) : puns.length === 0 ? (
                   <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-gray-300 dark:border-zinc-800">
                     <p className="text-gray-400 dark:text-zinc-500 italic">
                       No puns submitted yet. Be the first to break the ice!
@@ -367,7 +373,7 @@ export function GameBoard({
         <button
           onClick={() => setChatOpen(true)}
           className="relative w-14 h-14 rounded-full bg-orange-500 dark:bg-violet-600 text-white shadow-lg flex items-center justify-center"
-          aria-label="Open Session Chat"
+          aria-label="Open Group Chat"
         >
           <MessageSquare className="w-6 h-6" />
           {unreadChatCount > 0 && (

@@ -33,13 +33,13 @@ export function ChatBox({ messages, onSendMessage, onClose, isMobileModal }: Cha
       {isMobileModal ? (
         <div className="relative flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-gray-300 dark:bg-zinc-600" />
-          <h2 className="text-lg font-serif italic dark:text-zinc-100">Session Chat</h2>
+          <h2 className="text-lg font-serif italic dark:text-zinc-100">Group Chat</h2>
           <button onClick={onClose} className="p-2 text-gray-400 dark:text-zinc-500 hover:text-black dark:hover:text-white">✕</button>
         </div>
       ) : (
         <h2 className="text-2xl sm:text-3xl font-serif italic flex items-center gap-3 dark:text-zinc-100 mb-4 sm:mb-6">
           <MessageSquare className="text-orange-500 dark:text-violet-500" />
-          Session Chat
+          Group Chat
         </h2>
       )}
       <Card className={`flex flex-col border-2 border-gray-100 dark:border-zinc-800 p-0 overflow-hidden bg-white dark:bg-zinc-900 ${

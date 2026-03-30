@@ -22,7 +22,6 @@ export default function App() {
     sessions,
     currentSession,
     loading,
-    staleChallengeDetected,
     createNewSession,
     joinExistingSession,
     leaveSession,
@@ -119,7 +118,7 @@ export default function App() {
               <GameBoard
                 session={currentSession}
                 loading={loading}
-                staleChallengeDetected={staleChallengeDetected}
+
                 onLeave={leaveSession}
                 onDelete={deleteExistingSession}
               />

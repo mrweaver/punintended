@@ -241,6 +241,14 @@ async function runMigrations() {
     ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
       CHECK (type IN ('reaction', 'vote', 'system'))
   `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS global_daily_challenges (
+      challenge_id VARCHAR(10) PRIMARY KEY,
+      topic VARCHAR(500) NOT NULL,
+      focus VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
 }
 
 // --- Challenge history functions ---
@@ -248,7 +256,8 @@ async function runMigrations() {
 async function saveChallengeToHistory(sessionId, challengeId, topic, focus) {
   await query(
     `INSERT INTO session_challenge_history (session_id, challenge_id, topic, focus)
-     VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (session_id, challenge_id) DO UPDATE SET topic = EXCLUDED.topic, focus = EXCLUDED.focus`,
     [sessionId, challengeId, topic, focus],
   );
 }
@@ -287,6 +296,32 @@ async function getChallengeForDate(sessionId, challengeId) {
     [sessionId, challengeId],
   );
   return result.rows[0] || null;
+}
+
+// --- Global daily challenge functions ---
+
+async function getGlobalChallengeForDate(dateId) {
+  const result = await query(
+    `SELECT topic, focus FROM global_daily_challenges WHERE challenge_id = $1`,
+    [dateId],
+  );
+  return result.rows[0] || null;
+}
+
+async function saveGlobalChallenge(dateId, topic, focus) {
+  await query(
+    `INSERT INTO global_daily_challenges (challenge_id, topic, focus)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (challenge_id) DO UPDATE SET topic = EXCLUDED.topic, focus = EXCLUDED.focus`,
+    [dateId, topic, focus],
+  );
+}
+
+async function getPastGlobalChallengeTopics() {
+  const result = await query(
+    `SELECT topic, focus FROM global_daily_challenges ORDER BY challenge_id DESC`,
+  );
+  return result.rows;
 }
 
 // --- Pun functions ---
@@ -420,6 +455,14 @@ async function getPunsByAuthor(authorId) {
     [authorId],
   );
   return result.rows.map(formatPun);
+}
+
+async function hasUserSubmittedForChallenge(sessionId, challengeId, userId) {
+  const result = await query(
+    `SELECT 1 FROM puns WHERE session_id = $1 AND challenge_id = $2 AND author_id = $3 LIMIT 1`,
+    [sessionId, challengeId, userId],
+  );
+  return result.rows.length > 0;
 }
 
 async function countPunsByAuthorInSession(sessionId, challengeId, authorId) {
@@ -731,6 +774,10 @@ export {
   getChallengeHistory,
   getPastChallengeTopics,
   getChallengeForDate,
+  getGlobalChallengeForDate,
+  saveGlobalChallenge,
+  getPastGlobalChallengeTopics,
+  hasUserSubmittedForChallenge,
   getPunsBySessionAndChallenge,
   createPun,
   updatePunText,

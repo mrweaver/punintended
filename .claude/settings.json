@@ -26,7 +26,10 @@
       "Bash(node /opt/stacks/punintended/app/scripts/sync-changelog.js)",
       "Bash(node scripts/sync-changelog.js)",
       "Bash(grep '\"\"version\"\"' /opt/stacks/punintended/app/package.json)",
-      "Bash(node -e \"const p=require\\(''./app/package.json''\\);console.log\\(p.version\\)\")"
+      "Bash(node -e \"const p=require\\(''./app/package.json''\\);console.log\\(p.version\\)\")",
+      "Bash(find /opt/stacks/punintended -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js \\\\\\))",
+      "Bash(grep -rn \"Object\\\\.keys\\\\|Object\\\\.values\\\\|Object\\\\.entries\\\\|user\\\\.reactions\" /opt/stacks/punintended/app/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -rn reactionTotal /opt/stacks/punintended/app --include=*.ts --include=*.tsx --include=*.js)"
     ]
   }
 }

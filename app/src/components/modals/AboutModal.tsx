@@ -49,7 +49,7 @@ const DETAILS = [
   },
   {
     heading: "The Gauntlet ⚔️",
-    body: "A solo timed challenge — five rapid-fire rounds, no group required. Each round has its own prompt and a countdown. For the truly pun-ished. Find it in the lobby.",
+    body: "A solo endurance test: five rounds, sixty seconds each, no group required. Each prompt pairs a Topic with a Focus — your job is to bridge them with a pun. Score ≥5/10 and a speed bonus kicks in; idle thumbs forfeit it. Challenge a mate by sharing your link — they face the same five prompts blind. Both runs then appear side by side for comparison, with per-pun comment threads for the inevitable post-match debrief. Past gauntlets persist in the lobby history. For the truly pun-ished.",
   },
   {
     heading: "Challenge History",

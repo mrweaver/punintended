@@ -1,16 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Share2,
-  Check,
-  LogOut,
-  ChevronDown,
-  X,
-  Search,
-} from "lucide-react";
+import { Share2, Check, LogOut, ChevronDown, X, Search } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { profileApi, commentsApi } from "../../api/client";
 import { Button } from "../ui/Button";
+import { GroanBadge } from "../ui/GroanBadge";
 import type { Pun, PunComment } from "../../api/client";
 
 interface ProfileModalProps {
@@ -85,6 +79,17 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
     profileApi.getPuns().then(setUserPuns).catch(console.error);
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const streak = useMemo(() => calculateStreak(userPuns), [userPuns]);
 
   const avgScore = useMemo(() => {
@@ -154,7 +159,14 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
   if (!user) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <motion.div
         role="dialog"
         aria-modal="true"
@@ -300,10 +312,11 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                     key={pun.id}
                     className="rounded-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden"
                   >
-                    <button
-                      onClick={() => handleToggleExpand(pun.id)}
-                      className="w-full text-left p-4 bg-gray-50 dark:bg-zinc-800/50 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
-                    >
+                    <div className="bg-gray-50 dark:bg-zinc-800/50">
+                      <button
+                        onClick={() => handleToggleExpand(pun.id)}
+                        className="w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
                       {/* Challenge badge row */}
                       {hasChallenge && (
                         <div className="flex items-center gap-2 mb-2">
@@ -341,16 +354,20 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                           }`}
                         />
                       </div>
+                      </button>
 
                       {/* Footer */}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 dark:text-zinc-500">
+                      <div className="flex items-center gap-3 px-4 pb-4 text-xs text-gray-400 dark:text-zinc-500">
                         <span>
                           {new Date(pun.createdAt).toLocaleDateString()}
                         </span>
                         {pun.groanCount > 0 && (
-                          <span className="flex items-center gap-1 text-orange-400 dark:text-violet-400 font-semibold">
-                            😩 {pun.groanCount}
-                          </span>
+                          <GroanBadge
+                            count={pun.groanCount}
+                            groaners={pun.groaners}
+                            triggerClassName="inline-flex items-center gap-1 rounded-md font-semibold text-orange-400 transition-colors hover:text-orange-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:text-violet-400 dark:hover:text-violet-300 dark:focus-visible:ring-violet-500"
+                            onClick={(event) => event.stopPropagation()}
+                          />
                         )}
                         {!hasChallenge &&
                           pun.aiScore !== null &&
@@ -368,7 +385,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                             </span>
                           )}
                       </div>
-                    </button>
+                    </div>
 
                     {/* Expanded panel */}
                     <AnimatePresence>

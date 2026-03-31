@@ -64,8 +64,8 @@ export function GameBoard({
     markPunViewed,
   } = usePuns(session.id, todayId, user?.uid);
   const historyState = useChallengeHistory(session.id, session.challengeId);
-  const { messages, sendMessage } = useMessages(session.id);
-  const { addComment, getCommentsForPun } = useComments(session.id);
+  const { messages, sendMessage, reactToMessage } = useMessages(session.id);
+  const { addComment, reactToComment, getCommentsForPun } = useComments(session.id);
   const { unlock: unlockAudio, playScore } = useScoreSound();
   const { typingPlayers, reportTyping, onTextChange } = useTypingStatus(session.id);
   const myPunCount = puns.filter((p) => p.authorId === user?.uid).length;
@@ -451,6 +451,7 @@ export function GameBoard({
                         onEdit={editPun}
                         onDelete={deletePun}
                         onComment={addComment}
+                        onCommentReact={reactToComment}
                       />
                     ))}
                     <AnimatePresence>
@@ -499,7 +500,7 @@ export function GameBoard({
         </div>
 
         <div className="hidden lg:block lg:col-span-1">
-          <ChatBox messages={messages} onSendMessage={sendMessage} />
+          <ChatBox messages={messages} onSendMessage={sendMessage} onReactToMessage={reactToMessage} />
         </div>
       </div>
 
@@ -541,6 +542,7 @@ export function GameBoard({
               <ChatBox
                 messages={messages}
                 onSendMessage={sendMessage}
+                onReactToMessage={reactToMessage}
                 onClose={() => setChatOpen(false)}
                 isMobileModal
               />

@@ -96,6 +96,11 @@ export const messagesApi = {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
+  react: (messageId: string, reaction: string | null) =>
+    request<{ reaction: string | null }>(`/api/messages/${messageId}/reaction`, {
+      method: "POST",
+      body: JSON.stringify({ reaction }),
+    }),
 };
 
 // Comments
@@ -105,6 +110,11 @@ export const commentsApi = {
     request<{ success: boolean }>(`/api/puns/${punId}/comments`, {
       method: "POST",
       body: JSON.stringify({ text, sessionId }),
+    }),
+  react: (commentId: string, reaction: string | null) =>
+    request<{ reaction: string | null }>(`/api/comments/${commentId}/reaction`, {
+      method: "POST",
+      body: JSON.stringify({ reaction }),
     }),
 };
 
@@ -131,6 +141,7 @@ export const leaderboardApi = {
   daily: (date?: string) =>
     request<DailyLeaderboard>(`/api/leaderboard/daily${date ? `?date=${date}` : ""}`),
   allTime: () => request<LeaderboardEntry[]>("/api/leaderboard/alltime"),
+  gauntlet: () => request<GauntletHistoryEntry[]>("/api/leaderboard/gauntlet"),
 };
 
 // Gauntlet
@@ -209,6 +220,18 @@ export interface GauntletComment {
   createdAt: string;
 }
 
+export interface GauntletMessage {
+  id: string;
+  gauntletId: string;
+  userId: number;
+  userName: string;
+  userPhoto: string;
+  text: string;
+  createdAt: string;
+  reactions?: Record<string, number>;
+  myReaction?: string | null;
+}
+
 export const gauntletApi = {
   generate: () =>
     request<GauntletStartResponse>("/api/gauntlet/generate", {
@@ -240,6 +263,18 @@ export const gauntletApi = {
       method: "POST",
       body: JSON.stringify({ runId, roundIndex, text }),
     }),
+  getMessages: (gauntletId: string) =>
+    request<GauntletMessage[]>(`/api/gauntlet/${gauntletId}/messages`),
+  sendMessage: (gauntletId: string, text: string) =>
+    request<GauntletMessage>(`/api/gauntlet/${gauntletId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  reactToMessage: (messageId: string, reaction: string | null) =>
+    request<{ reaction: string | null }>(`/api/gauntlet/messages/${messageId}/reaction`, {
+      method: "POST",
+      body: JSON.stringify({ reaction }),
+    }),
 };
 
 // Types used by the API client
@@ -267,6 +302,11 @@ export interface Player {
   photoURL: string;
 }
 
+export interface Groaner {
+  uid: number;
+  name: string;
+}
+
 export interface Pun {
   id: string;
   sessionId: string;
@@ -278,6 +318,7 @@ export interface Pun {
   aiScore: number | null;
   aiFeedback: string | null;
   groanCount: number;
+  groaners?: Groaner[];
   myReaction: "groan" | null;
   viewed?: boolean;
   challengeTopic?: string | null;
@@ -305,13 +346,13 @@ export interface LeaderboardEntry {
   authorPhoto: string;
   sessionName: string;
   groanCount: number;
+  groaners?: Groaner[];
   createdAt: string;
 }
 
 export interface DailyLeaderboard {
   date: string;
-  crown: LeaderboardEntry[];
-  shame: LeaderboardEntry[];
+  puns: LeaderboardEntry[];
 }
 
 export interface ChatMessage {
@@ -322,6 +363,8 @@ export interface ChatMessage {
   userPhoto: string;
   text: string;
   createdAt: string;
+  reactions?: Record<string, number>;
+  myReaction?: string | null;
 }
 
 export interface PunComment {
@@ -333,6 +376,8 @@ export interface PunComment {
   userPhoto: string;
   text: string;
   createdAt: string;
+  reactions?: Record<string, number>;
+  myReaction?: string | null;
 }
 
 export interface ChallengeHistoryEntry {

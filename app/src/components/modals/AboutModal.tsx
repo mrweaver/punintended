@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
@@ -20,7 +20,7 @@ const QUICK_START = [
   {
     n: "3",
     title: "Submit up to 3 puns",
-    body: 'Other players\' submissions stay hidden until you submit your first. No peeking — it\'s a level pun-ning field.',
+    body: "Other players' submissions stay hidden until you submit your first. No peeking — it's a level pun-ning field.",
   },
   {
     n: "4",
@@ -29,7 +29,7 @@ const QUICK_START = [
   },
   {
     n: "5",
-    title: "😩 Groan — it's a compliment",
+    title: "🙄 Groan — it's a compliment",
     body: "React to your group's puns with a Groan. Your best score of the day counts toward the weekly leaderboard.",
   },
 ];
@@ -64,8 +64,26 @@ const DETAILS = [
 export function AboutModal({ onClose }: AboutModalProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <motion.div
         role="dialog"
         aria-modal="true"

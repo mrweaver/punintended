@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  MessageCircle,
-  ChevronDown,
-  Pencil,
-  Trash2,
-  Send,
-} from "lucide-react";
+import { MessageCircle, ChevronDown, Pencil, Trash2, Send } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "./ui/Button";
+import { GroanBadge } from "./ui/GroanBadge";
 import { Logo } from "./ui/Logo";
+import { useLongPress } from "../hooks/useLongPress";
+import {
+  ReactionPicker,
+  ReactionSummary,
+  type MessageReaction,
+} from "./ReactionPicker";
 import type { Pun, PunComment, PunReaction } from "../api/client";
 
 interface PunCardProps {
@@ -22,6 +23,65 @@ interface PunCardProps {
   onEdit: (punId: string, text: string) => void;
   onDelete: (punId: string) => void;
   onComment: (punId: string, text: string) => void;
+  onCommentReact?: (commentId: string, reaction: string | null) => void;
+}
+
+function CommentBubble({
+  comment,
+  onReact,
+}: {
+  comment: PunComment;
+  onReact?: (commentId: string, reaction: string | null) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const longPressHandlers = useLongPress({
+    onLongPress: useCallback(() => setPickerOpen(true), []),
+  });
+
+  return (
+    <div className="flex gap-3">
+      <img
+        src={comment.userPhoto || ""}
+        alt={comment.userName}
+        className="w-6 h-6 rounded-full border border-gray-200 dark:border-zinc-700 shrink-0"
+      />
+      <div className="flex-1 min-w-0 relative">
+        <div
+          {...longPressHandlers}
+          className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-2 select-none"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-bold text-gray-900 dark:text-zinc-200">
+              {comment.userName}
+            </span>
+            <span className="text-[10px] text-gray-400 dark:text-zinc-500">
+              {new Date(comment.createdAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+          <p className="text-sm text-gray-700 dark:text-zinc-300">
+            {comment.text}
+          </p>
+        </div>
+        <ReactionSummary reactions={comment.reactions ?? {}} />
+        <AnimatePresence>
+          {pickerOpen && (
+            <ReactionPicker
+              currentReaction={comment.myReaction ?? null}
+              onSelect={(reaction: MessageReaction | null) => {
+                onReact?.(comment.id, reaction);
+                setPickerOpen(false);
+              }}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
 }
 
 export function PunCard({
@@ -34,6 +94,7 @@ export function PunCard({
   onEdit,
   onDelete,
   onComment,
+  onCommentReact,
 }: PunCardProps) {
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -53,6 +114,7 @@ export function PunCard({
 
   const handleGroan = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isAuthor) return; // Prevent authors from groaning at their own puns
     onReact(pun.id, pun.myReaction ? null : "groan");
     onViewed(pun.id);
   };
@@ -62,7 +124,12 @@ export function PunCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      onClick={() => onViewed(pun.id)}
+      onViewportEnter={() => {
+        if (!pun.viewed) {
+          onViewed(pun.id);
+        }
+      }}
+      viewport={{ once: true, amount: 0.3 }}
       className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 flex flex-col gap-3"
     >
       {/* Header */}
@@ -181,21 +248,64 @@ export function PunCard({
 
       {/* Card footer */}
       <div className="flex items-center gap-2">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={handleGroan}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${
-            pun.myReaction
-              ? "bg-orange-100 dark:bg-violet-900/40 text-orange-700 dark:text-violet-300"
-              : "bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 hover:bg-orange-50 dark:hover:bg-violet-900/20"
-          }`}
-        >
-          😩{" "}
-          <span>Groan</span>
+        <div className="flex items-center gap-1.5">
+          <motion.button
+            whileTap={isAuthor ? undefined : { scale: 0.9 }}
+            onClick={handleGroan}
+            disabled={isAuthor}
+            aria-label={
+              isAuthor
+                ? "You can't groan at your own pun"
+                : pun.myReaction
+                  ? "Remove groan reaction"
+                  : "Groan at this pun"
+            }
+            title={
+              isAuthor
+                ? "You can't groan at your own pun!"
+                : "The highest compliment for a good pun!"
+            }
+            className={`group flex items-center text-sm transition-all disabled:cursor-default ${
+              pun.myReaction
+                ? "text-orange-600 dark:text-violet-400 opacity-100"
+                : `disabled:opacity-50 ${
+                    pun.groanCount > 0
+                      ? "text-gray-600 dark:text-zinc-400 opacity-100"
+                      : "text-gray-400 dark:text-zinc-500 opacity-80"
+                  } ${!isAuthor && "hover:text-gray-800 dark:hover:text-zinc-200"}`
+            }`}
+          >
+            <span
+              className={`text-base transition-all duration-200 ${
+                pun.myReaction || pun.groanCount > 0
+                  ? ""
+                  : `grayscale ${!isAuthor ? "group-hover:grayscale-0" : ""}`
+              }`}
+            >
+              🙄
+            </span>
+          </motion.button>
+
           {pun.groanCount > 0 && (
-            <span className="font-mono text-xs">{pun.groanCount}</span>
+            <motion.div
+              key={pun.groanCount}
+              initial={{ scale: 0.5, opacity: 0.5 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 12 }}
+            >
+              <GroanBadge
+                count={pun.groanCount}
+                groaners={pun.groaners}
+                showIcon={false}
+                triggerClassName={`inline-flex items-center rounded-md text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:focus-visible:ring-violet-500 ${
+                  pun.myReaction
+                    ? "font-medium text-orange-600 dark:text-violet-400"
+                    : "font-medium text-gray-600 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                }`}
+              />
+            </motion.div>
           )}
-        </motion.button>
+        </div>
         <div className="flex-1" />
         <button
           onClick={(e) => {
@@ -209,7 +319,9 @@ export function PunCard({
               : "text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300"
           }`}
         >
-          <MessageCircle className={`w-4 h-4 ${isExpanded ? "fill-current" : ""}`} />
+          <MessageCircle
+            className={`w-4 h-4 ${isExpanded ? "fill-current" : ""}`}
+          />
           {comments.length > 0 && (
             <span className="font-medium text-xs">{comments.length}</span>
           )}
@@ -235,29 +347,11 @@ export function PunCard({
                 </p>
               ) : (
                 comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3">
-                    <img
-                      src={comment.userPhoto || ""}
-                      alt={comment.userName}
-                      className="w-6 h-6 rounded-full border border-gray-200 dark:border-zinc-700"
-                    />
-                    <div className="flex-1 bg-gray-50 dark:bg-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-2">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-gray-900 dark:text-zinc-200">
-                          {comment.userName}
-                        </span>
-                        <span className="text-[10px] text-gray-400 dark:text-zinc-500">
-                          {new Date(comment.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700 dark:text-zinc-300">
-                        {comment.text}
-                      </p>
-                    </div>
-                  </div>
+                  <CommentBubble
+                    key={comment.id}
+                    comment={comment}
+                    onReact={onCommentReact}
+                  />
                 ))
               )}
             </div>

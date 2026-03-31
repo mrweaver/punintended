@@ -1,18 +1,76 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
+import { useLongPress } from '../hooks/useLongPress';
+import { ReactionPicker, ReactionSummary, type MessageReaction } from './ReactionPicker';
 import type { ChatMessage } from '../api/client';
 
 interface ChatBoxProps {
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
+  onReactToMessage?: (messageId: string, reaction: string | null) => void;
   onClose?: () => void;
   isMobileModal?: boolean;
 }
 
-export function ChatBox({ messages, onSendMessage, onClose, isMobileModal }: ChatBoxProps) {
+function ChatBubble({
+  msg,
+  isMe,
+  onReact,
+}: {
+  msg: ChatMessage;
+  isMe: boolean;
+  onReact?: (messageId: string, reaction: string | null) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const longPressHandlers = useLongPress({
+    onLongPress: useCallback(() => setPickerOpen(true), []),
+  });
+
+  return (
+    <div className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+      <img
+        src={msg.userPhoto || ''}
+        alt={msg.userName}
+        className="w-8 h-8 rounded-full border border-gray-200 dark:border-zinc-700 shrink-0"
+      />
+      <div className={`max-w-[75%] relative ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+        <div
+          {...longPressHandlers}
+          className={`rounded-2xl px-4 py-2 select-none ${
+            isMe
+              ? 'bg-orange-500 dark:bg-violet-600 text-white rounded-tr-sm'
+              : 'bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 rounded-tl-sm'
+          }`}
+        >
+          {!isMe && (
+            <p className="text-[10px] font-bold opacity-50 mb-1">{msg.userName}</p>
+          )}
+          <p className="text-sm">{msg.text}</p>
+        </div>
+        <ReactionSummary reactions={msg.reactions ?? {}} />
+        <AnimatePresence>
+          {pickerOpen && (
+            <ReactionPicker
+              currentReaction={msg.myReaction ?? null}
+              onSelect={(reaction: MessageReaction | null) => {
+                onReact?.(msg.id, reaction);
+                setPickerOpen(false);
+              }}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+export function ChatBox({ messages, onSendMessage, onReactToMessage, onClose, isMobileModal }: ChatBoxProps) {
   const { user } = useAuth();
   const [chatText, setChatText] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -52,24 +110,12 @@ export function ChatBox({ messages, onSendMessage, onClose, isMobileModal }: Cha
             </div>
           ) : (
             messages.map((msg) => (
-              <div
+              <ChatBubble
                 key={msg.id}
-                className={`flex gap-3 ${msg.userId === user?.uid ? 'flex-row-reverse' : ''}`}
-              >
-                <img
-                  src={msg.userPhoto || ''}
-                  alt={msg.userName}
-                  className="w-8 h-8 rounded-full border border-gray-200 dark:border-zinc-700"
-                />
-                <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2 ${msg.userId === user?.uid ? 'bg-orange-500 dark:bg-violet-600 text-white rounded-tr-sm' : 'bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 rounded-tl-sm'}`}
-                >
-                  {msg.userId !== user?.uid && (
-                    <p className="text-[10px] font-bold opacity-50 mb-1">{msg.userName}</p>
-                  )}
-                  <p className="text-sm">{msg.text}</p>
-                </div>
-              </div>
+                msg={msg}
+                isMe={msg.userId === user?.uid}
+                onReact={onReactToMessage}
+              />
             ))
           )}
           <div ref={chatEndRef} />

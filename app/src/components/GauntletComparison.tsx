@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
-import { motion } from "motion/react";
-import { ArrowLeft, Send, MessageSquare } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { ArrowLeft, Send, MessageSquare, Trophy, MessageCircle } from "lucide-react";
 import {
   gauntletApi,
   type GauntletComparison,
   type GauntletComment,
+  type GauntletMessage,
 } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
+import { useLongPress } from "../hooks/useLongPress";
+import { ReactionPicker, ReactionSummary, type MessageReaction } from "./ReactionPicker";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 
@@ -141,6 +144,7 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
   const { user } = useAuth();
   const [data, setData] = useState<GauntletComparison | null>(null);
   const [comments, setComments] = useState<GauntletComment[]>([]);
+  const [messages, setMessages] = useState<GauntletMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,13 +152,21 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
     Promise.all([
       gauntletApi.comparison(gauntletId),
       gauntletApi.getComments(gauntletId),
+      gauntletApi.getMessages(gauntletId),
     ])
-      .then(([comp, cmts]) => {
+      .then(([comp, cmts, msgs]) => {
         setData(comp);
         setComments(cmts);
+        setMessages(msgs);
       })
       .catch((err) => setError(err.message ?? "Failed to load comparison"))
       .finally(() => setLoading(false));
+
+    const onFocus = () => {
+      gauntletApi.getMessages(gauntletId).then(setMessages).catch(() => {});
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [gauntletId]);
 
   if (loading) {
@@ -212,24 +224,39 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
 
       {/* Score summary */}
       <Card className="flex flex-wrap gap-4">
-        {data.runs.map((run, i) => (
-          <div key={run.id} className="flex items-center gap-2 min-w-0">
-            {i > 0 && (
-              <span className="text-zinc-300 dark:text-zinc-600 hidden sm:block">
-                vs
-              </span>
-            )}
-            <Avatar src={run.playerPhoto} name={run.playerName} size="md" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate dark:text-zinc-200">
-                {run.playerId === user?.uid ? "You" : run.playerName}
-              </p>
-              <p className="text-lg font-mono font-bold text-orange-600 dark:text-violet-400">
-                {(run.totalScore ?? 0).toLocaleString()}
-              </p>
+        {data.runs.map((run, i) => {
+          const isWinner = i === 0 && data.runs.length > 1;
+          return (
+            <div
+              key={run.id}
+              className={`flex items-center gap-2 min-w-0 rounded-xl px-3 py-2 transition-colors ${
+                isWinner
+                  ? "bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-300 dark:ring-amber-600"
+                  : ""
+              }`}
+            >
+              {i > 0 && (
+                <span className="text-zinc-300 dark:text-zinc-600 hidden sm:block">
+                  vs
+                </span>
+              )}
+              <Avatar src={run.playerPhoto} name={run.playerName} size="md" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium truncate dark:text-zinc-200">
+                    {run.playerId === user?.uid ? "You" : run.playerName}
+                  </p>
+                  {isWinner && (
+                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                  )}
+                </div>
+                <p className="text-lg font-mono font-bold text-orange-600 dark:text-violet-400">
+                  {(run.totalScore ?? 0).toLocaleString()}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </Card>
 
       {/* Round-by-round */}
@@ -259,15 +286,25 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
 
           {/* Participants for this round */}
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {data.runs.map((run) => {
+            {data.runs.map((run, runIdx) => {
               const round = run.rounds[roundIdx];
               const skipped = !round?.pun_text;
               const aiScore = round?.ai_score ?? 0;
               const roundScore = round?.round_score ?? 0;
               const isMe = run.playerId === user?.uid;
+              const isRoundWinner =
+                data.runs.length > 1 &&
+                runIdx === 0;
 
               return (
-                <div key={run.id} className="px-5 py-4 space-y-2">
+                <div
+                  key={run.id}
+                  className={`px-5 py-4 space-y-2 ${
+                    isRoundWinner
+                      ? "bg-amber-50/50 dark:bg-amber-900/10"
+                      : ""
+                  }`}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Avatar src={run.playerPhoto} name={run.playerName} />
@@ -311,6 +348,174 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
           </div>
         </motion.div>
       ))}
+
+      {/* Chat section */}
+      <GauntletChat
+        gauntletId={gauntletId}
+        messages={messages}
+        onMessageSent={(msg) => setMessages((prev) => [...prev, msg])}
+        onMessagesChanged={setMessages}
+      />
     </motion.div>
+  );
+}
+
+function GauntletChatBubble({
+  msg,
+  isMe,
+  onReact,
+}: {
+  msg: GauntletMessage;
+  isMe: boolean;
+  onReact: (messageId: string, reaction: string | null) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const longPressHandlers = useLongPress({
+    onLongPress: useCallback(() => setPickerOpen(true), []),
+  });
+
+  return (
+    <div className={`flex items-start gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
+      <Avatar src={msg.userPhoto} name={msg.userName} />
+      <div className={`max-w-[75%] relative ${isMe ? "items-end" : "items-start"} flex flex-col`}>
+        <div
+          {...longPressHandlers}
+          className={`rounded-2xl px-3 py-2 select-none ${
+            isMe
+              ? "bg-orange-100 dark:bg-violet-900/40 text-orange-900 dark:text-violet-100"
+              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+          }`}
+        >
+          {!isMe && (
+            <p className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 mb-0.5">
+              {msg.userName}
+            </p>
+          )}
+          <p className="text-sm break-words">{msg.text}</p>
+        </div>
+        <ReactionSummary reactions={msg.reactions ?? {}} />
+        <AnimatePresence>
+          {pickerOpen && (
+            <ReactionPicker
+              currentReaction={msg.myReaction ?? null}
+              onSelect={(reaction: MessageReaction | null) => {
+                onReact(msg.id, reaction);
+                setPickerOpen(false);
+              }}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function GauntletChat({
+  gauntletId,
+  messages,
+  onMessageSent,
+  onMessagesChanged,
+}: {
+  gauntletId: string;
+  messages: GauntletMessage[];
+  onMessageSent: (msg: GauntletMessage) => void;
+  onMessagesChanged: (updater: (prev: GauntletMessage[]) => GauntletMessage[]) => void;
+}) {
+  const { user } = useAuth();
+  const [draft, setDraft] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text || submitting) return;
+    setSubmitting(true);
+    try {
+      const msg = await gauntletApi.sendMessage(gauntletId, text);
+      onMessageSent(msg);
+      setDraft("");
+    } catch {
+      // silently ignore
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReact(messageId: string, reaction: string | null) {
+    onMessagesChanged((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== messageId) return msg;
+        const oldReaction = msg.myReaction;
+        const reactions = { ...(msg.reactions ?? {}) };
+        if (oldReaction) {
+          reactions[oldReaction] = Math.max(0, (reactions[oldReaction] ?? 0) - 1);
+          if (reactions[oldReaction] === 0) delete reactions[oldReaction];
+        }
+        if (reaction) {
+          reactions[reaction] = (reactions[reaction] ?? 0) + 1;
+        }
+        return { ...msg, reactions, myReaction: reaction };
+      }),
+    );
+    await gauntletApi.reactToMessage(messageId, reaction);
+  }
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl shadow-sm border border-zinc-100 dark:border-zinc-800 overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+        <MessageCircle className="w-4 h-4 text-orange-500 dark:text-violet-400" />
+        <p className="font-mono text-xs uppercase tracking-widest text-gray-400 dark:text-zinc-500">
+          Chat
+        </p>
+      </div>
+
+      <div className="max-h-64 overflow-y-auto px-5 py-3 space-y-3">
+        {messages.length === 0 ? (
+          <p className="text-sm text-gray-400 dark:text-zinc-600 italic text-center py-4">
+            No messages yet — start the conversation!
+          </p>
+        ) : (
+          messages.map((msg) => (
+            <GauntletChatBubble
+              key={msg.id}
+              msg={msg}
+              isMe={msg.userId === user?.uid}
+              onReact={handleReact}
+            />
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="Say something..."
+          maxLength={500}
+          className="flex-1 text-sm px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:focus:ring-violet-500"
+        />
+        <button
+          onClick={handleSend}
+          disabled={!draft.trim() || submitting}
+          className="p-2 rounded-xl text-orange-500 dark:text-violet-400 hover:bg-orange-50 dark:hover:bg-violet-900/30 disabled:opacity-40 transition-colors"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
   );
 }

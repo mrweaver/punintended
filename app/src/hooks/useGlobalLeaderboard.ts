@@ -3,22 +3,26 @@ import {
   leaderboardApi,
   type DailyLeaderboard,
   type LeaderboardEntry,
+  type GauntletHistoryEntry,
 } from "../api/client";
 
 export function useGlobalLeaderboard() {
   const [daily, setDaily] = useState<DailyLeaderboard | null>(null);
   const [allTime, setAllTime] = useState<LeaderboardEntry[]>([]);
+  const [gauntlet, setGauntlet] = useState<GauntletHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [dailyData, allTimeData] = await Promise.all([
+      const [dailyData, allTimeData, gauntletData] = await Promise.all([
         leaderboardApi.daily(),
         leaderboardApi.allTime(),
+        leaderboardApi.gauntlet(),
       ]);
       setDaily(dailyData);
       setAllTime(allTimeData);
+      setGauntlet(gauntletData);
     } finally {
       setLoading(false);
     }
@@ -31,5 +35,5 @@ export function useGlobalLeaderboard() {
     return () => window.removeEventListener("focus", onFocus);
   }, [fetchAll]);
 
-  return { daily, allTime, loading, refresh: fetchAll };
+  return { daily, allTime, gauntlet, loading, refresh: fetchAll };
 }

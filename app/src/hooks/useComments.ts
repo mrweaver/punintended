@@ -10,8 +10,6 @@ export function useComments(sessionId: string | null) {
       setComments([]);
       return;
     }
-    // Load all comments for the session at once
-    // The SSE will keep them up to date
   }, [sessionId]);
 
   // SSE for comment updates
@@ -36,6 +34,28 @@ export function useComments(sessionId: string | null) {
     [sessionId]
   );
 
+  const reactToComment = useCallback(
+    async (commentId: string, reaction: string | null) => {
+      setComments((prev) =>
+        prev.map((c) => {
+          if (c.id !== commentId) return c;
+          const oldReaction = c.myReaction;
+          const reactions = { ...(c.reactions ?? {}) };
+          if (oldReaction) {
+            reactions[oldReaction] = Math.max(0, (reactions[oldReaction] ?? 0) - 1);
+            if (reactions[oldReaction] === 0) delete reactions[oldReaction];
+          }
+          if (reaction) {
+            reactions[reaction] = (reactions[reaction] ?? 0) + 1;
+          }
+          return { ...c, reactions, myReaction: reaction };
+        }),
+      );
+      await commentsApi.react(commentId, reaction);
+    },
+    [],
+  );
+
   const getCommentsForPun = useCallback(
     (punId: string) => {
       return comments.filter((c) => c.punId === punId);
@@ -43,5 +63,5 @@ export function useComments(sessionId: string | null) {
     [comments]
   );
 
-  return { comments, addComment, getCommentsForPun };
+  return { comments, addComment, reactToComment, getCommentsForPun };
 }

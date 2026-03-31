@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { LogOut, Bell, Sun, Moon, Info, Trophy } from "lucide-react";
+import { LogOut, Bell, Sun, Moon, Info, Trophy, Swords } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { useNotifications } from "../hooks/useNotifications";
@@ -11,6 +11,7 @@ interface HeaderProps {
   onOpenProfile: () => void;
   onOpenAbout: () => void;
   onOpenLeaderboard: () => void;
+  onOpenGauntlet: () => void;
   onNotificationClick: (link: string | null) => void;
   onLogoClick?: () => void;
 }
@@ -19,6 +20,7 @@ export function Header({
   onOpenProfile,
   onOpenAbout,
   onOpenLeaderboard,
+  onOpenGauntlet,
   onNotificationClick,
   onLogoClick,
 }: HeaderProps) {
@@ -26,6 +28,38 @@ export function Header({
   const { isDarkMode, toggleTheme } = useTheme();
   const { notifications, unreadCount, markRead } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!notificationsRef.current?.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showNotifications]);
+
+  const closeNotifications = () => setShowNotifications(false);
+
+  const handleHeaderAction = (action?: () => void) => () => {
+    closeNotifications();
+    action?.();
+  };
 
   if (!user) return null;
 
@@ -46,21 +80,28 @@ export function Header({
       </button>
       <div className="flex items-center gap-2 sm:gap-4">
         <button
-          onClick={onOpenLeaderboard}
+          onClick={handleHeaderAction(onOpenLeaderboard)}
           className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
           aria-label="Leaderboards"
         >
           <Trophy className="w-5 h-5" />
         </button>
         <button
-          onClick={onOpenAbout}
+          onClick={handleHeaderAction(onOpenGauntlet)}
+          className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
+          aria-label="The Gauntlet"
+        >
+          <Swords className="w-5 h-5" />
+        </button>
+        <button
+          onClick={handleHeaderAction(onOpenAbout)}
           className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
           aria-label="About & How to Play"
         >
           <Info className="w-5 h-5" />
         </button>
         <button
-          onClick={toggleTheme}
+          onClick={handleHeaderAction(toggleTheme)}
           className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
           aria-label="Toggle Dark Mode"
         >
@@ -71,12 +112,13 @@ export function Header({
           )}
         </button>
 
-        {/* Notifications Dropdown */}
-        <div className="relative">
+        <div ref={notificationsRef} className="relative">
+          {/* Notifications Dropdown */}
           <Button
             variant="ghost"
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => setShowNotifications((open) => !open)}
             className="p-2 relative"
+            aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -112,7 +154,7 @@ export function Header({
                         onClick={() => {
                           markRead(notif.id);
                           onNotificationClick(notif.link);
-                          setShowNotifications(false);
+                          closeNotifications();
                         }}
                         className={`p-4 border-b border-gray-50 dark:border-zinc-800 hover:bg-orange-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? "bg-orange-50/50 dark:bg-violet-900/20" : ""}`}
                       >
@@ -122,7 +164,12 @@ export function Header({
                           {notif.message}
                         </p>
                         <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
-                          {new Date(notif.createdAt).toLocaleDateString()}
+                          {/* {new Date(notif.createdAt).toLocaleDateString()} */}
+                          {/* Date time version */}
+                          {new Date(notif.createdAt).toLocaleString(undefined, {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
                         </p>
                       </div>
                     ))
@@ -135,7 +182,7 @@ export function Header({
 
         <div
           className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-800 p-2 rounded-full transition-colors"
-          onClick={onOpenProfile}
+          onClick={handleHeaderAction(onOpenProfile)}
         >
           <img
             src={user.photoURL || ""}
@@ -146,7 +193,11 @@ export function Header({
             {user.displayName}
           </span>
         </div>
-        <Button variant="ghost" onClick={logout} className="hidden sm:flex p-2">
+        <Button
+          variant="ghost"
+          onClick={handleHeaderAction(logout)}
+          className="hidden sm:flex p-2"
+        >
           <LogOut className="w-5 h-5" />
         </Button>
       </div>

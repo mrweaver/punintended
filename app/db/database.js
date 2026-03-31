@@ -304,6 +304,28 @@ async function runMigrations() {
         CHECK (reaction IN ('groan'));
     END $$
   `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_messages (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      message_id UUID NOT NULL,
+      message_type VARCHAR(20) NOT NULL CHECK (message_type IN ('chat', 'pun_comment', 'gauntlet_message', 'gauntlet_comment')),
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reaction VARCHAR(20) NOT NULL CHECK (reaction IN ('laughing', 'skull', 'thumbs_up', 'groan', 'heart')),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(message_id, message_type, user_id)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`);
 }
 
 // --- Challenge history functions ---
@@ -391,10 +413,18 @@ async function getPunsBySessionAndChallenge(
        u.display_name AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
+       COALESCE(
+         json_agg(
+           json_build_object('uid', ru.id, 'name', ru.display_name)
+           ORDER BY ru.display_name, ru.id
+         ) FILTER (WHERE ru.id IS NOT NULL),
+         '[]'::json
+       ) AS groaners,
        COUNT(*) FILTER (WHERE pr.user_id = $3) > 0 AS my_groan
      FROM puns p
      JOIN users u ON p.author_id = u.id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
+     LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.session_id = $1 AND p.challenge_id = $2
      GROUP BY p.id, u.display_name, u.photo_url
      ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
@@ -468,12 +498,20 @@ async function getPunsByAuthor(authorId) {
        u.display_name AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
+       COALESCE(
+         json_agg(
+           json_build_object('uid', ru.id, 'name', ru.display_name)
+           ORDER BY ru.display_name, ru.id
+         ) FILTER (WHERE ru.id IS NOT NULL),
+         '[]'::json
+       ) AS groaners,
        FALSE AS my_groan,
        MAX(COALESCE(gdc.topic, sch.topic)) AS challenge_topic,
        MAX(COALESCE(gdc.focus, sch.focus)) AS challenge_focus
      FROM puns p
      JOIN users u ON p.author_id = u.id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
+     LEFT JOIN users ru ON pr.user_id = ru.id
      LEFT JOIN global_daily_challenges gdc ON p.challenge_id = gdc.challenge_id
      LEFT JOIN session_challenge_history sch ON p.session_id = sch.session_id AND p.challenge_id = sch.challenge_id
      WHERE p.author_id = $1
@@ -526,12 +564,25 @@ function formatPun(row) {
     aiScore: row.ai_score ? parseFloat(row.ai_score) : null,
     aiFeedback: row.ai_feedback,
     groanCount: Number(row.groan_count || 0),
+    groaners: formatGroaners(row.groaners),
     myReaction: row.my_groan ? "groan" : null,
     challengeTopic: row.challenge_topic || null,
     challengeFocus: row.challenge_focus || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function formatGroaners(groaners) {
+  if (!Array.isArray(groaners)) return [];
+
+  return groaners
+    .map((groaner) => ({
+      uid: Number(groaner?.uid),
+      name:
+        typeof groaner?.name === "string" ? groaner.name.trim() : "",
+    }))
+    .filter((groaner) => Number.isFinite(groaner.uid) && groaner.name);
 }
 
 // Returns each player's best AI score per day for a given week, plus weekly total (drop lowest).
@@ -579,57 +630,53 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
 }
 
 // Global leaderboard: perfect 10s for a given challenge date, ordered by groan count
-async function getGlobalDailyLeaderboard(challengeId) {
+async function getGlobalDailyRanking(challengeId) {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.created_at,
        u.display_name AS author_name, u.photo_url AS author_photo,
        gs.name AS session_name,
+       COALESCE(
+         json_agg(
+           json_build_object('uid', ru.id, 'name', ru.display_name)
+           ORDER BY ru.display_name, ru.id
+         ) FILTER (WHERE ru.id IS NOT NULL),
+         '[]'::json
+       ) AS groaners,
        COUNT(pr.pun_id) AS groan_count
      FROM puns p
      JOIN users u ON u.id = p.author_id
      JOIN game_sessions gs ON gs.id = p.session_id
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
-     WHERE p.challenge_id = $1 AND p.ai_score >= 9.5
+     LEFT JOIN users ru ON pr.user_id = ru.id
+     WHERE p.challenge_id = $1 AND p.ai_score IS NOT NULL
      GROUP BY p.id, u.display_name, u.photo_url, gs.name
-     ORDER BY groan_count DESC, p.created_at ASC
+     ORDER BY p.ai_score DESC, groan_count DESC, p.created_at ASC
      LIMIT 50`,
     [challengeId],
   );
   return result.rows.map(formatLeaderboardRow);
 }
 
-// Global leaderboard: shame list (low scores) for a given challenge date
-async function getGlobalShameLeaderboard(challengeId) {
-  const result = await query(
-    `SELECT p.id, p.text, p.ai_score, p.created_at,
-       u.display_name AS author_name, u.photo_url AS author_photo,
-       gs.name AS session_name,
-       COUNT(pr.pun_id) AS groan_count
-     FROM puns p
-     JOIN users u ON u.id = p.author_id
-     JOIN game_sessions gs ON gs.id = p.session_id
-     LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
-     WHERE p.challenge_id = $1 AND p.ai_score <= 2
-     GROUP BY p.id, u.display_name, u.photo_url, gs.name
-     ORDER BY groan_count DESC, p.created_at ASC
-     LIMIT 50`,
-    [challengeId],
-  );
-  return result.rows.map(formatLeaderboardRow);
-}
-
-// All-time: perfect 10s across all time, ordered by total groans
+// All-time: top puns (score >= 7) across all time, ordered by total groans
 async function getGlobalAllTimeGroaners() {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
        u.display_name AS author_name, u.photo_url AS author_photo,
        gs.name AS session_name,
+       COALESCE(
+         json_agg(
+           json_build_object('uid', ru.id, 'name', ru.display_name)
+           ORDER BY ru.display_name, ru.id
+         ) FILTER (WHERE ru.id IS NOT NULL),
+         '[]'::json
+       ) AS groaners,
        COUNT(pr.pun_id) AS groan_count
      FROM puns p
      JOIN users u ON u.id = p.author_id
      JOIN game_sessions gs ON gs.id = p.session_id
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
-     WHERE p.ai_score >= 9.5
+     LEFT JOIN users ru ON pr.user_id = ru.id
+     WHERE p.ai_score >= 7.0
      GROUP BY p.id, u.display_name, u.photo_url, gs.name
      ORDER BY groan_count DESC, p.created_at ASC
      LIMIT 50`,
@@ -647,6 +694,7 @@ function formatLeaderboardRow(row) {
     authorPhoto: row.author_photo,
     sessionName: row.session_name,
     groanCount: Number(row.groan_count || 0),
+    groaners: formatGroaners(row.groaners),
     createdAt: row.created_at,
   };
 }
@@ -931,6 +979,44 @@ async function getUserGauntletHistory(userId, limit = 20) {
   }));
 }
 
+async function getGauntletLeaderboard(userId, limit = 50) {
+  const result = await query(
+    `SELECT
+       g.id AS gauntlet_id,
+       my_run.id AS my_run_id,
+       my_run.total_score AS my_score,
+       my_run.created_at AS run_created_at,
+       json_agg(
+         json_build_object(
+           'playerId', gr.player_id,
+           'playerName', u.display_name,
+           'playerPhoto', u.photo_url,
+           'totalScore', gr.total_score
+         ) ORDER BY gr.total_score DESC NULLS LAST
+       ) AS participants
+     FROM gauntlets g
+     JOIN gauntlet_runs my_run
+       ON my_run.gauntlet_id = g.id
+      AND my_run.player_id = $1
+      AND my_run.status = 'complete'
+     JOIN gauntlet_runs gr
+       ON gr.gauntlet_id = g.id AND gr.status = 'complete'
+     JOIN users u ON u.id = gr.player_id
+     GROUP BY g.id, my_run.id, my_run.total_score, my_run.created_at
+     ORDER BY my_run.total_score DESC NULLS LAST
+     LIMIT $2`,
+    [userId, limit],
+  );
+
+  return result.rows.map((row) => ({
+    gauntletId: row.gauntlet_id,
+    myRunId: row.my_run_id,
+    myScore: row.my_score,
+    createdAt: row.run_created_at,
+    participants: row.participants,
+  }));
+}
+
 async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text) {
   const result = await query(
     `INSERT INTO gauntlet_comments (gauntlet_id, run_id, round_index, author_id, text)
@@ -975,6 +1061,88 @@ async function getGauntletComments(gauntletId) {
     text: row.text,
     createdAt: row.created_at,
   }));
+}
+
+async function getGauntletMessages(gauntletId) {
+  const result = await query(
+    `SELECT gm.id, gm.gauntlet_id, gm.user_id, gm.text, gm.created_at,
+            u.display_name, u.photo_url
+     FROM gauntlet_messages gm
+     JOIN users u ON u.id = gm.user_id
+     WHERE gm.gauntlet_id = $1
+     ORDER BY gm.created_at ASC`,
+    [gauntletId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    gauntletId: row.gauntlet_id,
+    userId: row.user_id,
+    userName: row.display_name,
+    userPhoto: row.photo_url,
+    text: row.text,
+    createdAt: row.created_at,
+  }));
+}
+
+async function createGauntletMessage(gauntletId, userId, text) {
+  const result = await query(
+    `INSERT INTO gauntlet_messages (gauntlet_id, user_id, text)
+     VALUES ($1, $2, $3)
+     RETURNING id, gauntlet_id, user_id, text, created_at`,
+    [gauntletId, userId, text],
+  );
+  const row = result.rows[0];
+  const userResult = await query(`SELECT display_name, photo_url FROM users WHERE id = $1`, [userId]);
+  const user = userResult.rows[0];
+  return {
+    id: row.id,
+    gauntletId: row.gauntlet_id,
+    userId: row.user_id,
+    userName: user?.display_name ?? "Unknown",
+    userPhoto: user?.photo_url ?? "",
+    text: row.text,
+    createdAt: row.created_at,
+  };
+}
+
+async function getMessageReactions(messageIds, messageType) {
+  if (!messageIds.length) return {};
+  const result = await query(
+    `SELECT message_id, reaction, COUNT(*)::int AS count,
+       array_agg(user_id) AS user_ids
+     FROM message_reactions
+     WHERE message_id = ANY($1) AND message_type = $2
+     GROUP BY message_id, reaction`,
+    [messageIds, messageType],
+  );
+  const map = {};
+  for (const row of result.rows) {
+    if (!map[row.message_id]) map[row.message_id] = { counts: {}, userReactions: {} };
+    map[row.message_id].counts[row.reaction] = row.count;
+    for (const uid of row.user_ids) {
+      map[row.message_id].userReactions[uid] = row.reaction;
+    }
+  }
+  return map;
+}
+
+async function setMessageReaction(messageId, messageType, userId, reaction) {
+  if (!reaction) {
+    await query(
+      `DELETE FROM message_reactions WHERE message_id = $1 AND message_type = $2 AND user_id = $3`,
+      [messageId, messageType, userId],
+    );
+    return null;
+  }
+  const result = await query(
+    `INSERT INTO message_reactions (message_id, message_type, user_id, reaction)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (message_id, message_type, user_id)
+     DO UPDATE SET reaction = EXCLUDED.reaction, created_at = NOW()
+     RETURNING reaction`,
+    [messageId, messageType, userId, reaction],
+  );
+  return result.rows[0].reaction;
 }
 
 function formatGauntlet(row) {
@@ -1033,8 +1201,7 @@ export {
   countPunsByAuthorInSession,
   getMinPunCountInSession,
   getWeeklyBestScores,
-  getGlobalDailyLeaderboard,
-  getGlobalShameLeaderboard,
+  getGlobalDailyRanking,
   getGlobalAllTimeGroaners,
   getMessagesBySession,
   createMessage,
@@ -1054,6 +1221,11 @@ export {
   setGauntletRunScoring,
   getGauntletComparison,
   getUserGauntletHistory,
+  getGauntletLeaderboard,
   addGauntletComment,
   getGauntletComments,
+  getGauntletMessages,
+  createGauntletMessage,
+  getMessageReactions,
+  setMessageReaction,
 };

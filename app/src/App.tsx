@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { LogIn } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useAuth } from "./contexts/AuthContext";
 import { useSession } from "./hooks/useSession";
@@ -16,6 +16,82 @@ import { DeleteConfirmModal } from "./components/modals/DeleteConfirmModal";
 import { ChangelogModal } from "./components/modals/ChangelogModal";
 import { Button } from "./components/ui/Button";
 import { Logo } from "./components/ui/Logo";
+
+type LoginNotice = {
+  tone: "success" | "error";
+  message: string;
+};
+
+function popLoginNoticeFromUrl(): LoginNotice | null {
+  const url = new URL(window.location.href);
+  const status = url.searchParams.get("login");
+
+  if (status !== "success" && status !== "failed") {
+    return null;
+  }
+
+  url.searchParams.delete("login");
+  window.history.replaceState(
+    {},
+    document.title,
+    `${url.pathname}${url.search}${url.hash}` || "/",
+  );
+
+  return status === "success"
+    ? {
+        tone: "success",
+        message: "Signed in successfully.",
+      }
+    : {
+        tone: "error",
+        message: "Google sign-in failed. Please try again.",
+      };
+}
+
+function LoginNoticeBanner({
+  notice,
+  onClose,
+}: {
+  notice: LoginNotice | null;
+  onClose: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {notice && (
+        <motion.div
+          initial={{ opacity: 0, y: -16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -12, scale: 0.98 }}
+          transition={{ duration: 0.2 }}
+          className="fixed left-1/2 top-4 z-[70] w-[calc(100%-2rem)] max-w-md -translate-x-1/2"
+        >
+          <div
+            className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur ${
+              notice.tone === "success"
+                ? "border-green-200 bg-green-50/95 text-green-700 dark:border-green-900/50 dark:bg-green-950/90 dark:text-green-300"
+                : "border-red-200 bg-red-50/95 text-red-700 dark:border-red-900/50 dark:bg-red-950/90 dark:text-red-300"
+            }`}
+          >
+            {notice.tone === "success" ? (
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+            ) : (
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            )}
+            <p className="flex-1 text-sm font-medium">{notice.message}</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1 opacity-70 transition-opacity hover:opacity-100"
+              aria-label="Dismiss login message"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export default function App() {
   const { user, isReady, login } = useAuth();
@@ -39,6 +115,18 @@ export default function App() {
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [loginNotice, setLoginNotice] = useState<LoginNotice | null>(null);
+
+  useEffect(() => {
+    if (!isReady) return;
+    setLoginNotice(popLoginNoticeFromUrl());
+  }, [isReady]);
+
+  useEffect(() => {
+    if (!loginNotice) return;
+    const timeoutId = window.setTimeout(() => setLoginNotice(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [loginNotice]);
 
   // Auto-enter gauntlet from a shared ?gauntlet= URL (mirrors ?session= handling)
   useEffect(() => {
@@ -52,6 +140,28 @@ export default function App() {
     }
   }, [user]);
 
+  const closeOverlayScreens = () => {
+    setGauntletMode(false);
+    setSharedGauntletId(null);
+    setShowLeaderboard(false);
+  };
+
+  const handleOpenLeaderboard = () => {
+    setGauntletMode(false);
+    setSharedGauntletId(null);
+    setShowLeaderboard(true);
+  };
+
+  const handleOpenGauntlet = () => {
+    setShowLeaderboard(false);
+    setGauntletMode(true);
+  };
+
+  const handleLogoClick = () => {
+    closeOverlayScreens();
+    leaveSession();
+  };
+
   if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -63,6 +173,10 @@ export default function App() {
   if (!user) {
     return (
       <div className="min-h-screen bg-[#F5F5F0] dark:bg-zinc-950 flex flex-col items-center justify-center p-6 transition-colors">
+        <LoginNoticeBanner
+          notice={loginNotice}
+          onClose={() => setLoginNotice(null)}
+        />
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -93,20 +207,16 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F5F5F0] dark:bg-zinc-950 text-[#1A1A1A] dark:text-zinc-100 font-sans transition-colors">
+        <LoginNoticeBanner
+          notice={loginNotice}
+          onClose={() => setLoginNotice(null)}
+        />
         <Header
           onOpenProfile={() => setShowProfile(true)}
           onOpenAbout={() => setShowAbout(true)}
-          onOpenLeaderboard={() => setShowLeaderboard(true)}
-          onLogoClick={
-            gauntletMode || showLeaderboard || !!currentSession
-              ? () => {
-                  setGauntletMode(false);
-                  setSharedGauntletId(null);
-                  setShowLeaderboard(false);
-                  leaveSession();
-                }
-              : undefined
-          }
+          onOpenLeaderboard={handleOpenLeaderboard}
+          onOpenGauntlet={handleOpenGauntlet}
+          onLogoClick={gauntletMode || showLeaderboard || !!currentSession ? handleLogoClick : undefined}
           onNotificationClick={(link) => {
             if (link) {
               const targetSession = sessions.find((s) => s.id === link);
@@ -139,7 +249,7 @@ export default function App() {
                 onJoinSession={joinExistingSession}
                 onJoinById={joinSessionById}
                 onDeleteSession={(id) => setSessionToDelete(id)}
-                onStartGauntlet={() => setGauntletMode(true)}
+                onStartGauntlet={handleOpenGauntlet}
               />
             ) : (
               <GameBoard

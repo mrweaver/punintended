@@ -31,7 +31,9 @@
       "Bash(grep -rn \"Object\\\\.keys\\\\|Object\\\\.values\\\\|Object\\\\.entries\\\\|user\\\\.reactions\" /opt/stacks/punintended/app/src --include=*.ts --include=*.tsx)",
       "Bash(grep -rn reactionTotal /opt/stacks/punintended/app --include=*.ts --include=*.tsx --include=*.js)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "Bash(grep -n \"getScoreRating\\\\|scoreColor\\\\|getTier\" /opt/stacks/punintended/app/src/components/*.tsx)",
+      "Bash(npx vite:*)"
     ]
   }
 }

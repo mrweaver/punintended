@@ -216,7 +216,11 @@ export default function App() {
           onOpenAbout={() => setShowAbout(true)}
           onOpenLeaderboard={handleOpenLeaderboard}
           onOpenGauntlet={handleOpenGauntlet}
-          onLogoClick={gauntletMode || showLeaderboard || !!currentSession ? handleLogoClick : undefined}
+          onLogoClick={
+            gauntletMode || showLeaderboard || !!currentSession
+              ? handleLogoClick
+              : undefined
+          }
           onNotificationClick={(link) => {
             if (link) {
               const targetSession = sessions.find((s) => s.id === link);

@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import packageInfo from '../../../package.json';
+import { useEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import packageInfo from "../../../package.json";
 
-const CHANGELOG_URL = '/changelog.md';
+const CHANGELOG_URL = "/changelog.md";
 
 interface ChangelogModalProps {
   onClose: () => void;
@@ -18,15 +18,15 @@ interface Release {
 }
 
 function normalizeVersion(version: string): string {
-  return String(version || '')
+  return String(version || "")
     .trim()
-    .replace(/^v/i, '')
-    .replace(/^\[(.*)\]$/, '$1');
+    .replace(/^v/i, "")
+    .replace(/^\[(.*)\]$/, "$1");
 }
 
 function compareSemver(a: string, b: string): number {
-  const pa = String(a).split('.').map(Number);
-  const pb = String(b).split('.').map(Number);
+  const pa = String(a).split(".").map(Number);
+  const pb = String(b).split(".").map(Number);
   for (let i = 0; i < 3; i += 1) {
     const diff = (pb[i] || 0) - (pa[i] || 0);
     if (diff !== 0) return diff;
@@ -45,20 +45,23 @@ function parseChangelog(raw: string): Release[] {
     if (!headingMatch) continue;
 
     if (currentRelease) {
-      currentRelease.content = lines.slice(sectionStart, index).join('\n').trim();
+      currentRelease.content = lines
+        .slice(sectionStart, index)
+        .join("\n")
+        .trim();
     }
 
     currentRelease = {
       version: headingMatch[1],
-      date: headingMatch[2] || 'Pending release',
-      content: '',
+      date: headingMatch[2] || "Pending release",
+      content: "",
     };
     releases.push(currentRelease);
     sectionStart = index + 1;
   }
 
   if (currentRelease) {
-    currentRelease.content = lines.slice(sectionStart).join('\n').trim();
+    currentRelease.content = lines.slice(sectionStart).join("\n").trim();
   }
 
   releases.sort((a, b) => compareSemver(a.version, b.version));
@@ -71,41 +74,63 @@ function MarkdownBlock({ content }: { content: string }) {
       remarkPlugins={[remarkGfm]}
       components={{
         h3: ({ children, ...props }) => (
-          <h4 className="mt-3 text-sm font-semibold text-gray-900 dark:text-zinc-100" {...props}>
+          <h4
+            className="mt-3 text-sm font-semibold text-gray-900 dark:text-zinc-100"
+            {...props}
+          >
             {children}
           </h4>
         ),
         p: ({ children, ...props }) => (
-          <p className="text-sm leading-6 text-gray-500 dark:text-zinc-400" {...props}>
+          <p
+            className="text-sm leading-6 text-gray-500 dark:text-zinc-400"
+            {...props}
+          >
             {children}
           </p>
         ),
         ul: ({ children, ...props }) => (
-          <ul className="ml-5 list-disc space-y-1 text-sm text-gray-500 dark:text-zinc-400" {...props}>
+          <ul
+            className="ml-5 list-disc space-y-1 text-sm text-gray-500 dark:text-zinc-400"
+            {...props}
+          >
             {children}
           </ul>
         ),
         ol: ({ children, ...props }) => (
-          <ol className="ml-5 list-decimal space-y-1 text-sm text-gray-500 dark:text-zinc-400" {...props}>
+          <ol
+            className="ml-5 list-decimal space-y-1 text-sm text-gray-500 dark:text-zinc-400"
+            {...props}
+          >
             {children}
           </ol>
         ),
         li: ({ children, ...props }) => (
-          <li className="pl-1" {...props}>{children}</li>
+          <li className="pl-1" {...props}>
+            {children}
+          </li>
         ),
         strong: ({ children, ...props }) => (
-          <strong className="font-semibold text-gray-900 dark:text-zinc-100" {...props}>
+          <strong
+            className="font-semibold text-gray-900 dark:text-zinc-100"
+            {...props}
+          >
             {children}
           </strong>
         ),
         a: ({ children, ...props }) => (
-          <a className="text-orange-600 dark:text-violet-400 underline underline-offset-4" target="_blank" rel="noreferrer" {...props}>
+          <a
+            className="text-orange-600 dark:text-violet-400 underline underline-offset-4"
+            target="_blank"
+            rel="noreferrer"
+            {...props}
+          >
             {children}
           </a>
         ),
       }}
     >
-      {content || 'No changelog notes yet.'}
+      {content || "No changelog notes yet."}
     </ReactMarkdown>
   );
 }
@@ -136,7 +161,9 @@ function ReleaseEntry({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-semibold text-orange-600 dark:text-violet-400">
-              {release.version === 'Unreleased' ? release.version : `v${release.version}`}
+              {release.version === "Unreleased"
+                ? release.version
+                : `v${release.version}`}
             </span>
             {isCurrent && (
               <span className="rounded-full bg-orange-100 dark:bg-violet-900/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-orange-600 dark:text-violet-400">
@@ -144,7 +171,9 @@ function ReleaseEntry({
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-gray-400 dark:text-zinc-500">{release.date}</p>
+          <p className="mt-0.5 text-xs text-gray-400 dark:text-zinc-500">
+            {release.date}
+          </p>
         </div>
       </button>
 
@@ -158,40 +187,45 @@ function ReleaseEntry({
 }
 
 export function ChangelogModal({ onClose }: ChangelogModalProps) {
-  const [rawChangelog, setRawChangelog] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [rawChangelog, setRawChangelog] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle",
+  );
+  const [errorMessage, setErrorMessage] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         onClose();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
   useEffect(() => {
     const abortController = new AbortController();
 
     async function loadChangelog() {
-      setStatus('loading');
-      setErrorMessage('');
+      setStatus("loading");
+      setErrorMessage("");
       try {
         const response = await fetch(
           `${CHANGELOG_URL}?v=${encodeURIComponent(packageInfo.version)}`,
-          { cache: 'no-store', signal: abortController.signal },
+          { cache: "no-store", signal: abortController.signal },
         );
-        if (!response.ok) throw new Error(`Unable to load changelog (${response.status})`);
+        if (!response.ok)
+          throw new Error(`Unable to load changelog (${response.status})`);
         setRawChangelog(await response.text());
-        setStatus('ready');
+        setStatus("ready");
       } catch (error: unknown) {
-        if (error instanceof Error && error.name === 'AbortError') return;
-        setStatus('error');
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to load changelog.');
+        if (error instanceof Error && error.name === "AbortError") return;
+        setStatus("error");
+        setErrorMessage(
+          error instanceof Error ? error.message : "Unable to load changelog.",
+        );
       }
     }
 
@@ -247,37 +281,42 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
           >
             ✕
           </button>
-          <h3 className="text-2xl font-serif italic dark:text-zinc-100">What's New</h3>
+          <h3 className="text-2xl font-serif italic dark:text-zinc-100">
+            What's New
+          </h3>
           <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
             PunIntended release history — current version highlighted.
           </p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-3">
-          {status === 'loading' && (
+          {status === "loading" && (
             <div className="rounded-xl border border-dashed border-gray-200 dark:border-zinc-700 px-4 py-6 text-sm text-gray-400 dark:text-zinc-500">
               Loading changelog...
             </div>
           )}
 
-          {status === 'error' && (
+          {status === "error" && (
             <div className="rounded-xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-900/10 px-4 py-4 text-sm text-red-600 dark:text-red-400">
               {errorMessage}
             </div>
           )}
 
-          {status === 'ready' && releases.length === 0 && (
+          {status === "ready" && releases.length === 0 && (
             <div className="rounded-xl border border-dashed border-gray-200 dark:border-zinc-700 px-4 py-6 text-sm text-gray-400 dark:text-zinc-500">
               No release entries were found in the changelog.
             </div>
           )}
 
-          {status === 'ready' &&
+          {status === "ready" &&
             releases.map((release) => (
               <ReleaseEntry
                 key={`${release.version}-${release.date}`}
                 release={release}
-                isCurrent={normalizeVersion(release.version) === normalizeVersion(packageInfo.version)}
+                isCurrent={
+                  normalizeVersion(release.version) ===
+                  normalizeVersion(packageInfo.version)
+                }
                 isExpanded={Boolean(expanded[release.version])}
                 onToggle={() => toggleRelease(release.version)}
               />

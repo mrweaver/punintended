@@ -174,7 +174,10 @@ async function updateSessionChallenge(sessionId, topic, focus, challengeId) {
 }
 
 async function renameSession(sessionId, name) {
-  await query("UPDATE game_sessions SET name = $1 WHERE id = $2", [name, sessionId]);
+  await query("UPDATE game_sessions SET name = $1 WHERE id = $2", [
+    name,
+    sessionId,
+  ]);
 }
 
 async function removePlayerFromSession(sessionId, userId) {
@@ -236,9 +239,15 @@ async function runMigrations() {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`,
+  );
   await query(`
     CREATE TABLE IF NOT EXISTS gauntlet_comments (
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -250,7 +259,9 @@ async function runMigrations() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`,
+  );
   // Fix notifications constraint — original DB was created without 'reaction' type
   await query(`
     ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check
@@ -269,7 +280,8 @@ async function runMigrations() {
   `);
   // Migrate bare TIMESTAMP columns to TIMESTAMP WITH TIME ZONE.
   // USING ... AT TIME ZONE 'UTC' preserves stored values (they were always UTC).
-  const alterToTz = (table, col) => query(`
+  const alterToTz = (table, col) =>
+    query(`
     DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM information_schema.columns
         WHERE table_name = '${table}' AND column_name = '${col}'
@@ -313,7 +325,9 @@ async function runMigrations() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`,
+  );
   await query(`
     CREATE TABLE IF NOT EXISTS message_reactions (
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -325,7 +339,9 @@ async function runMigrations() {
       UNIQUE(message_id, message_type, user_id)
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`,
+  );
 }
 
 // --- Challenge history functions ---
@@ -579,8 +595,7 @@ function formatGroaners(groaners) {
   return groaners
     .map((groaner) => ({
       uid: Number(groaner?.uid),
-      name:
-        typeof groaner?.name === "string" ? groaner.name.trim() : "",
+      name: typeof groaner?.name === "string" ? groaner.name.trim() : "",
     }))
     .filter((groaner) => Number.isFinite(groaner.uid) && groaner.name);
 }
@@ -840,12 +855,19 @@ async function createGauntletRun(gauntletId, playerId) {
 }
 
 async function getGauntletRunById(runId) {
-  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [runId]);
+  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [
+    runId,
+  ]);
   return result.rows[0] ? formatGauntletRun(result.rows[0]) : null;
 }
 
 // Atomic JSONB append — WHERE clause on array length guards against out-of-order submissions
-async function submitGauntletRound(runId, roundIndex, punText, secondsRemaining) {
+async function submitGauntletRound(
+  runId,
+  roundIndex,
+  punText,
+  secondsRemaining,
+) {
   const newEntry = {
     pun_text: punText,
     ai_score: null,
@@ -867,7 +889,12 @@ async function submitGauntletRound(runId, roundIndex, punText, secondsRemaining)
 // Transaction + FOR UPDATE serialises concurrent Gemini scoring callbacks.
 // Without the lock, two callbacks that SELECT before either UPDATEs would
 // silently overwrite each other's scores.
-async function updateGauntletRoundScore(runId, roundIndex, aiScore, aiFeedback) {
+async function updateGauntletRoundScore(
+  runId,
+  roundIndex,
+  aiScore,
+  aiFeedback,
+) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT rounds FROM gauntlet_runs WHERE id = $1 FOR UPDATE`,
@@ -913,7 +940,9 @@ async function setGauntletRunScoring(runId) {
 }
 
 async function getGauntletComparison(gauntletId) {
-  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [gauntletId]);
+  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [
+    gauntletId,
+  ]);
   if (!gauntletResult.rows[0]) return null;
   const gauntlet = formatGauntlet(gauntletResult.rows[0]);
 
@@ -1017,7 +1046,13 @@ async function getGauntletLeaderboard(userId, limit = 50) {
   }));
 }
 
-async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text) {
+async function addGauntletComment(
+  gauntletId,
+  runId,
+  roundIndex,
+  authorId,
+  text,
+) {
   const result = await query(
     `INSERT INTO gauntlet_comments (gauntlet_id, run_id, round_index, author_id, text)
      VALUES ($1, $2, $3, $4, $5)
@@ -1025,7 +1060,10 @@ async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text)
     [gauntletId, runId, roundIndex, authorId, text],
   );
   const row = result.rows[0];
-  const userResult = await query(`SELECT display_name, photo_url FROM users WHERE id = $1`, [authorId]);
+  const userResult = await query(
+    `SELECT display_name, photo_url FROM users WHERE id = $1`,
+    [authorId],
+  );
   const user = userResult.rows[0];
   return {
     id: row.id,
@@ -1033,8 +1071,8 @@ async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text)
     runId: row.run_id,
     roundIndex: row.round_index,
     authorId: row.author_id,
-    authorName: user?.display_name ?? 'Unknown',
-    authorPhoto: user?.photo_url ?? '',
+    authorName: user?.display_name ?? "Unknown",
+    authorPhoto: user?.photo_url ?? "",
     text: row.text,
     createdAt: row.created_at,
   };
@@ -1092,7 +1130,10 @@ async function createGauntletMessage(gauntletId, userId, text) {
     [gauntletId, userId, text],
   );
   const row = result.rows[0];
-  const userResult = await query(`SELECT display_name, photo_url FROM users WHERE id = $1`, [userId]);
+  const userResult = await query(
+    `SELECT display_name, photo_url FROM users WHERE id = $1`,
+    [userId],
+  );
   const user = userResult.rows[0];
   return {
     id: row.id,
@@ -1117,7 +1158,8 @@ async function getMessageReactions(messageIds, messageType) {
   );
   const map = {};
   for (const row of result.rows) {
-    if (!map[row.message_id]) map[row.message_id] = { counts: {}, userReactions: {} };
+    if (!map[row.message_id])
+      map[row.message_id] = { counts: {}, userReactions: {} };
     map[row.message_id].counts[row.reaction] = row.count;
     for (const uid of row.user_ids) {
       map[row.message_id].userReactions[uid] = row.reaction;

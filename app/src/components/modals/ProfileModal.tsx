@@ -317,43 +317,43 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                         onClick={() => handleToggleExpand(pun.id)}
                         className="w-full text-left p-4 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
                       >
-                      {/* Challenge badge row */}
-                      {hasChallenge && (
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs bg-orange-50 dark:bg-violet-900/30 text-orange-600 dark:text-violet-400 px-2 py-0.5 rounded-full font-medium truncate">
-                            {pun.challengeTopic}
-                            {pun.challengeFocus
-                              ? ` · ${pun.challengeFocus}`
-                              : ""}
-                          </span>
-                          {pun.aiScore !== null &&
-                            pun.aiScore !== undefined && (
-                              <span
-                                className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  pun.aiScore >= 7
-                                    ? "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                                    : pun.aiScore >= 4
-                                      ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
-                                      : "bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
-                                }`}
-                              >
-                                {pun.aiScore}/10
-                              </span>
-                            )}
-                        </div>
-                      )}
+                        {/* Challenge badge row */}
+                        {hasChallenge && (
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs bg-orange-50 dark:bg-violet-900/30 text-orange-600 dark:text-violet-400 px-2 py-0.5 rounded-full font-medium truncate">
+                              {pun.challengeTopic}
+                              {pun.challengeFocus
+                                ? ` · ${pun.challengeFocus}`
+                                : ""}
+                            </span>
+                            {pun.aiScore !== null &&
+                              pun.aiScore !== undefined && (
+                                <span
+                                  className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                    pun.aiScore >= 7
+                                      ? "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                                      : pun.aiScore >= 4
+                                        ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
+                                        : "bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
+                                  }`}
+                                >
+                                  {pun.aiScore}/10
+                                </span>
+                              )}
+                          </div>
+                        )}
 
-                      {/* Pun text + chevron */}
-                      <div className="flex items-start gap-2">
-                        <p className="flex-1 text-base font-serif italic text-gray-800 dark:text-zinc-200">
-                          "{pun.text}"
-                        </p>
-                        <ChevronDown
-                          className={`w-4 h-4 text-gray-400 dark:text-zinc-500 flex-shrink-0 mt-1 transition-transform duration-200 ${
-                            isExpanded ? "rotate-180" : ""
-                          }`}
-                        />
-                      </div>
+                        {/* Pun text + chevron */}
+                        <div className="flex items-start gap-2">
+                          <p className="flex-1 text-base font-serif italic text-gray-800 dark:text-zinc-200">
+                            "{pun.text}"
+                          </p>
+                          <ChevronDown
+                            className={`w-4 h-4 text-gray-400 dark:text-zinc-500 flex-shrink-0 mt-1 transition-transform duration-200 ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </div>
                       </button>
 
                       {/* Footer */}

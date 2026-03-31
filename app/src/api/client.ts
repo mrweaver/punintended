@@ -97,10 +97,13 @@ export const messagesApi = {
       body: JSON.stringify({ text }),
     }),
   react: (messageId: string, reaction: string | null) =>
-    request<{ reaction: string | null }>(`/api/messages/${messageId}/reaction`, {
-      method: "POST",
-      body: JSON.stringify({ reaction }),
-    }),
+    request<{ reaction: string | null }>(
+      `/api/messages/${messageId}/reaction`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reaction }),
+      },
+    ),
 };
 
 // Comments
@@ -112,10 +115,13 @@ export const commentsApi = {
       body: JSON.stringify({ text, sessionId }),
     }),
   react: (commentId: string, reaction: string | null) =>
-    request<{ reaction: string | null }>(`/api/comments/${commentId}/reaction`, {
-      method: "POST",
-      body: JSON.stringify({ reaction }),
-    }),
+    request<{ reaction: string | null }>(
+      `/api/comments/${commentId}/reaction`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reaction }),
+      },
+    ),
 };
 
 // Notifications
@@ -139,7 +145,9 @@ export const leaderboardApi = {
       `/api/sessions/${sessionId}/weekly-scores?weekStart=${weekStart}&weekEnd=${weekEnd}`,
     ),
   daily: (date?: string) =>
-    request<DailyLeaderboard>(`/api/leaderboard/daily${date ? `?date=${date}` : ""}`),
+    request<DailyLeaderboard>(
+      `/api/leaderboard/daily${date ? `?date=${date}` : ""}`,
+    ),
   allTime: () => request<LeaderboardEntry[]>("/api/leaderboard/alltime"),
   gauntlet: () => request<GauntletHistoryEntry[]>("/api/leaderboard/gauntlet"),
 };
@@ -252,13 +260,17 @@ export const gauntletApi = {
     }),
   getRun: (gauntletId: string, runId: string) =>
     request<GauntletRun>(`/api/gauntlet/${gauntletId}/run/${runId}`),
-  history: () =>
-    request<GauntletHistoryEntry[]>("/api/gauntlet/history"),
+  history: () => request<GauntletHistoryEntry[]>("/api/gauntlet/history"),
   comparison: (gauntletId: string) =>
     request<GauntletComparison>(`/api/gauntlet/${gauntletId}/comparison`),
   getComments: (gauntletId: string) =>
     request<GauntletComment[]>(`/api/gauntlet/${gauntletId}/comments`),
-  addComment: (gauntletId: string, runId: string, roundIndex: number, text: string) =>
+  addComment: (
+    gauntletId: string,
+    runId: string,
+    roundIndex: number,
+    text: string,
+  ) =>
     request<GauntletComment>(`/api/gauntlet/${gauntletId}/comments`, {
       method: "POST",
       body: JSON.stringify({ runId, roundIndex, text }),
@@ -271,10 +283,13 @@ export const gauntletApi = {
       body: JSON.stringify({ text }),
     }),
   reactToMessage: (messageId: string, reaction: string | null) =>
-    request<{ reaction: string | null }>(`/api/gauntlet/messages/${messageId}/reaction`, {
-      method: "POST",
-      body: JSON.stringify({ reaction }),
-    }),
+    request<{ reaction: string | null }>(
+      `/api/gauntlet/messages/${messageId}/reaction`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reaction }),
+      },
+    ),
 };
 
 // Types used by the API client

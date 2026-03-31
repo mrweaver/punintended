@@ -4,6 +4,39 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.10.0] - 2026-03-31
+
+### Added
+
+- **Pun History — Challenge Context:** Each pun in your profile history now shows the challenge topic and focus it was written for, pulled from the global daily challenge record.
+- **Pun History — Sort & Filter:** Sort your pun history by most recent, highest AI score, or most groans. Filter by pun text or challenge topic with a live search input.
+- **Pun History — Expand for Details:** Click any pun to expand it and see the AI verdict and all comments it received, loaded on demand.
+
+### Fixed
+
+- **Profile Modal — Close Button Overlap:** The ✕ button now has an opaque circular background and sits clearly above the Share Stats button at all viewport sizes.
+
+## [1.9.0] - 2026-03-31
+
+### Added
+
+- **Rename Group:** Group hosts can click the pencil icon next to the group name to rename it inline; the change broadcasts to all players via SSE.
+- **Kick Players:** Group hosts can hover a player avatar and click the ✕ button to remove them from the group; kicked players are automatically returned to the lobby.
+
+### Fixed
+
+- **Profile Modal Crash:** Opening the user account modal no longer throws "Cannot convert undefined or null to object" — reaction totals now correctly use `groanCount`.
+
+## [1.8.0] - 2026-03-31
+
+### Added
+
+- **Gauntlet Comparison View:** After completing a run, "View Comparison" opens a side-by-side breakdown of all participants' puns and scores, round by round.
+- **Per-Pun Comment Threads:** Each pun in the comparison view has a collapsible comment thread — click to expand, Enter to post.
+- **Gauntlet History:** Past completed gauntlets persist in the idle lobby as a scrollable history list with avatars, scores, and rankings; click any entry to open its comparison.
+- **Logo Navigation:** Clicking the PunIntended logo from gauntlet, leaderboard, or session views navigates back to the lobby.
+- **About Modal — Gauntlet Section:** Expanded to cover the comparison view, comment threads, history, speed-bonus mechanics, and the challenge-a-mate flow.
+
 ## [1.7.0] - 2026-03-30
 
 ### Added

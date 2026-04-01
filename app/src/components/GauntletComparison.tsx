@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Send, MessageSquare, Trophy, MessageCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Send,
+  MessageSquare,
+  Trophy,
+  MessageCircle,
+  Share2,
+} from "lucide-react";
 import {
   gauntletApi,
   type GauntletComparison,
@@ -9,7 +16,12 @@ import {
 } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import { useLongPress } from "../hooks/useLongPress";
-import { ReactionPicker, ReactionSummary, type MessageReaction } from "./ReactionPicker";
+import {
+  ReactionPicker,
+  ReactionSummary,
+  type MessageReaction,
+} from "./ReactionPicker";
+import { ShareModal } from "./modals/ShareModal";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 
@@ -140,11 +152,15 @@ function CommentThread({
   );
 }
 
-export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonProps) {
+export function GauntletComparison({
+  gauntletId,
+  onBack,
+}: GauntletComparisonProps) {
   const { user } = useAuth();
   const [data, setData] = useState<GauntletComparison | null>(null);
   const [comments, setComments] = useState<GauntletComment[]>([]);
   const [messages, setMessages] = useState<GauntletMessage[]>([]);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,7 +179,10 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
       .finally(() => setLoading(false));
 
     const onFocus = () => {
-      gauntletApi.getMessages(gauntletId).then(setMessages).catch(() => {});
+      gauntletApi
+        .getMessages(gauntletId)
+        .then(setMessages)
+        .catch(() => {});
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -192,7 +211,8 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
     return (
       <Card className="text-center py-16 space-y-4">
         <p className="text-gray-400 dark:text-zinc-500">
-          No completed runs yet — share the link so others can take the challenge!
+          No completed runs yet — share the link so others can take the
+          challenge!
         </p>
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft className="w-4 h-4" /> Back
@@ -208,18 +228,28 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
       className="max-w-3xl mx-auto space-y-4"
     >
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" onClick={onBack} className="shrink-0">
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-orange-500 dark:text-violet-400">
-            Comparison
-          </p>
-          <h2 className="text-2xl font-serif italic dark:text-zinc-100">
-            The Gauntlet
-          </h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={onBack} className="shrink-0">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest text-orange-500 dark:text-violet-400">
+              Comparison
+            </p>
+            <h2 className="text-2xl font-serif italic dark:text-zinc-100">
+              The Gauntlet
+            </h2>
+          </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowShareModal(true)}
+        >
+          <Share2 className="w-4 h-4" />
+          Share Challenge
+        </Button>
       </div>
 
       {/* Score summary */}
@@ -292,17 +322,13 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
               const aiScore = round?.ai_score ?? 0;
               const roundScore = round?.round_score ?? 0;
               const isMe = run.playerId === user?.uid;
-              const isRoundWinner =
-                data.runs.length > 1 &&
-                runIdx === 0;
+              const isRoundWinner = data.runs.length > 1 && runIdx === 0;
 
               return (
                 <div
                   key={run.id}
                   className={`px-5 py-4 space-y-2 ${
-                    isRoundWinner
-                      ? "bg-amber-50/50 dark:bg-amber-900/10"
-                      : ""
+                    isRoundWinner ? "bg-amber-50/50 dark:bg-amber-900/10" : ""
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -339,7 +365,9 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
                       gauntletId={gauntletId}
                       runId={run.id}
                       roundIndex={roundIdx}
-                      onCommentAdded={(c) => setComments((prev) => [...prev, c])}
+                      onCommentAdded={(c) =>
+                        setComments((prev) => [...prev, c])
+                      }
                     />
                   </div>
                 </div>
@@ -356,6 +384,16 @@ export function GauntletComparison({ gauntletId, onBack }: GauntletComparisonPro
         onMessageSent={(msg) => setMessages((prev) => [...prev, msg])}
         onMessagesChanged={setMessages}
       />
+
+      {showShareModal && (
+        <ShareModal
+          title="Share This Gauntlet"
+          description="Send this link so someone else can replay these exact prompts and join the comparison later."
+          shareUrl={`${window.location.origin}?gauntlet=${gauntletId}`}
+          shareMessage="Take on this PunIntended gauntlet and compare your score with mine."
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
     </motion.div>
   );
 }
@@ -378,7 +416,9 @@ function GauntletChatBubble({
   return (
     <div className={`flex items-start gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
       <Avatar src={msg.userPhoto} name={msg.userName} />
-      <div className={`max-w-[75%] relative ${isMe ? "items-end" : "items-start"} flex flex-col`}>
+      <div
+        className={`max-w-[75%] relative ${isMe ? "items-end" : "items-start"} flex flex-col`}
+      >
         <div
           {...longPressHandlers}
           className={`rounded-2xl px-3 py-2 select-none ${
@@ -421,7 +461,9 @@ function GauntletChat({
   gauntletId: string;
   messages: GauntletMessage[];
   onMessageSent: (msg: GauntletMessage) => void;
-  onMessagesChanged: (updater: (prev: GauntletMessage[]) => GauntletMessage[]) => void;
+  onMessagesChanged: (
+    updater: (prev: GauntletMessage[]) => GauntletMessage[],
+  ) => void;
 }) {
   const { user } = useAuth();
   const [draft, setDraft] = useState("");
@@ -454,7 +496,10 @@ function GauntletChat({
         const oldReaction = msg.myReaction;
         const reactions = { ...(msg.reactions ?? {}) };
         if (oldReaction) {
-          reactions[oldReaction] = Math.max(0, (reactions[oldReaction] ?? 0) - 1);
+          reactions[oldReaction] = Math.max(
+            0,
+            (reactions[oldReaction] ?? 0) - 1,
+          );
           if (reactions[oldReaction] === 0) delete reactions[oldReaction];
         }
         if (reaction) {

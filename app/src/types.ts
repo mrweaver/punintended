@@ -2,14 +2,11 @@
 export type {
   AuthUser,
   Session,
+  Group,
   Player,
   Pun,
   ChatMessage,
   PunComment,
   AppNotification,
+  DailyChallenge,
 } from './api/client';
-
-export interface DailyChallenge {
-  topic: string;
-  focus: string;
-}

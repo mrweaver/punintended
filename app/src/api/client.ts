@@ -27,49 +27,50 @@ export const authApi = {
     request<{ success: boolean }>("/auth/logout", { method: "POST" }),
 };
 
-// Sessions
-export const sessionsApi = {
-  list: () => request<Session[]>("/api/sessions"),
+// Groups (Tier 2: social layer)
+export const groupsApi = {
+  list: () => request<Group[]>("/api/groups"),
   create: (name: string) =>
-    request<Session>("/api/sessions", {
+    request<Group>("/api/groups", {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
   join: (id: string) =>
-    request<Session>(`/api/sessions/${id}/join`, { method: "POST" }),
+    request<Group>(`/api/groups/${id}/join`, { method: "POST" }),
   rename: (id: string, name: string) =>
-    request<Session>(`/api/sessions/${id}`, {
+    request<Group>(`/api/groups/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ name }),
     }),
   delete: (id: string) =>
-    request<{ success: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
+    request<{ success: boolean }>(`/api/groups/${id}`, { method: "DELETE" }),
   kickPlayer: (id: string, uid: number) =>
-    request<{ success: boolean }>(`/api/sessions/${id}/players/${uid}`, {
+    request<{ success: boolean }>(`/api/groups/${id}/players/${uid}`, {
       method: "DELETE",
     }),
-  refreshChallenge: (id: string, localDateId: string, force = false) =>
-    request<Session>(`/api/sessions/${id}/refresh-challenge`, {
-      method: "POST",
-      body: JSON.stringify({ localDateId, force }),
-    }),
-  history: (id: string) =>
-    request<ChallengeHistoryEntry[]>(`/api/sessions/${id}/history`),
   reportTyping: (id: string, status: "typing" | "idle" | "submitted") =>
-    request<{ success: boolean }>(`/api/sessions/${id}/typing`, {
+    request<{ success: boolean }>(`/api/groups/${id}/typing`, {
       method: "POST",
       body: JSON.stringify({ status }),
     }),
 };
 
-// Puns
-export const punsApi = {
-  list: (sessionId: string, challengeId: string) =>
-    request<Pun[]>(
-      `/api/sessions/${sessionId}/puns?challengeId=${challengeId}`,
+// Daily Challenge (Tier 1: global)
+export const dailyApi = {
+  getChallenge: (localDateId?: string) =>
+    request<DailyChallenge>(
+      `/api/daily/challenge${localDateId ? `?localDateId=${localDateId}` : ""}`,
     ),
-  submit: (sessionId: string, text: string, responseTimeMs: number | null) =>
-    request<{ id: string }>(`/api/sessions/${sessionId}/puns`, {
+};
+
+// Puns (Tier 1: global, optionally filtered by group)
+export const punsApi = {
+  list: (challengeId: string, groupId?: string) =>
+    request<Pun[]>(
+      `/api/daily/puns?challengeId=${challengeId}${groupId ? `&groupId=${groupId}` : ""}`,
+    ),
+  submit: (text: string, responseTimeMs: number | null) =>
+    request<{ id: string }>(`/api/daily/puns`, {
       method: "POST",
       body: JSON.stringify({ text, responseTimeMs }),
     }),
@@ -87,12 +88,12 @@ export const punsApi = {
     }),
 };
 
-// Messages
+// Messages (group-scoped)
 export const messagesApi = {
-  list: (sessionId: string) =>
-    request<ChatMessage[]>(`/api/sessions/${sessionId}/messages`),
-  send: (sessionId: string, text: string) =>
-    request<{ success: boolean }>(`/api/sessions/${sessionId}/messages`, {
+  list: (groupId: string) =>
+    request<ChatMessage[]>(`/api/groups/${groupId}/messages`),
+  send: (groupId: string, text: string) =>
+    request<{ success: boolean }>(`/api/groups/${groupId}/messages`, {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
@@ -106,13 +107,13 @@ export const messagesApi = {
     ),
 };
 
-// Comments
+// Comments (global, no group scope)
 export const commentsApi = {
   list: (punId: string) => request<PunComment[]>(`/api/puns/${punId}/comments`),
-  add: (punId: string, sessionId: string, text: string) =>
+  add: (punId: string, text: string) =>
     request<{ success: boolean }>(`/api/puns/${punId}/comments`, {
       method: "POST",
-      body: JSON.stringify({ text, sessionId }),
+      body: JSON.stringify({ text }),
     }),
   react: (commentId: string, reaction: string | null) =>
     request<{ reaction: string | null }>(
@@ -145,9 +146,9 @@ export const profileApi = {
 
 // Leaderboards
 export const leaderboardApi = {
-  weekly: (sessionId: string, weekStart: string, weekEnd: string) =>
+  weekly: (groupId: string, weekStart: string, weekEnd: string) =>
     request<WeeklyScore[]>(
-      `/api/sessions/${sessionId}/weekly-scores?weekStart=${weekStart}&weekEnd=${weekEnd}`,
+      `/api/groups/${groupId}/weekly-scores?weekStart=${weekStart}&weekEnd=${weekEnd}`,
     ),
   daily: (date?: string) =>
     request<DailyLeaderboard>(
@@ -307,16 +308,23 @@ export interface AuthUser {
   email: string;
 }
 
-export interface Session {
+export interface Group {
   id: string;
   name: string;
   ownerId: number;
   players: Player[];
-  challenge: { topic: string; focus: string } | null;
-  challengeId: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface DailyChallenge {
+  challengeId: string;
+  topic: string;
+  focus: string;
+}
+
+/** @deprecated Use Group instead */
+export type Session = Group;
 
 export interface Player {
   uid: number;
@@ -331,7 +339,6 @@ export interface Groaner {
 
 export interface Pun {
   id: string;
-  sessionId: string;
   challengeId: string;
   authorId: number;
   authorName: string;
@@ -366,7 +373,6 @@ export interface LeaderboardEntry {
   challengeId: string | null;
   authorName: string;
   authorPhoto: string;
-  sessionName: string;
   groanCount: number;
   groaners?: Groaner[];
   createdAt: string;
@@ -379,7 +385,7 @@ export interface DailyLeaderboard {
 
 export interface ChatMessage {
   id: string;
-  sessionId: string;
+  groupId: string;
   userId: number;
   userName: string;
   userPhoto: string;
@@ -392,7 +398,6 @@ export interface ChatMessage {
 export interface PunComment {
   id: string;
   punId: string;
-  sessionId: string;
   userId: number;
   userName: string;
   userPhoto: string;
@@ -402,13 +407,7 @@ export interface PunComment {
   myReaction?: string | null;
 }
 
-export interface ChallengeHistoryEntry {
-  challengeId: string;
-  topic: string;
-  focus: string;
-  punCount: number;
-  createdAt: string;
-}
+
 
 export interface TypingPlayer {
   uid: number;

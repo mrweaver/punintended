@@ -1,32 +1,32 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { sessionsApi, type TypingPlayer } from "../api/client";
+import { groupsApi, type TypingPlayer } from "../api/client";
 import { createSSE } from "../api/sse";
 
-export function useTypingStatus(sessionId: string | null) {
+export function useTypingStatus(groupId: string | null) {
   const [typingPlayers, setTypingPlayers] = useState<TypingPlayer[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!groupId) return;
     return createSSE({
-      url: `/api/sessions/${sessionId}/stream`,
+      url: `/api/groups/${groupId}/stream`,
       events: {
         "typing-update": (data: TypingPlayer[]) => setTypingPlayers(data),
       },
     });
-  }, [sessionId]);
+  }, [groupId]);
 
   const reportTyping = useCallback(
     (status: "typing" | "idle" | "submitted") => {
-      if (!sessionId) return;
-      sessionsApi.reportTyping(sessionId, status).catch(() => {});
+      if (!groupId) return;
+      groupsApi.reportTyping(groupId, status).catch(() => {});
     },
-    [sessionId],
+    [groupId],
   );
 
   const onTextChange = useCallback(
     (hasText: boolean) => {
-      if (!sessionId) return;
+      if (!groupId) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       if (hasText) {
         reportTyping("typing");
@@ -35,7 +35,7 @@ export function useTypingStatus(sessionId: string | null) {
         reportTyping("idle");
       }
     },
-    [sessionId, reportTyping],
+    [groupId, reportTyping],
   );
 
   return { typingPlayers, reportTyping, onTextChange };

@@ -20,7 +20,7 @@ export function DeleteConfirmModal({ onConfirm, onCancel, message, confirmLabel 
       >
         <h3 className="text-2xl font-serif italic mb-4 dark:text-zinc-100">Are you sure?</h3>
         <p className="text-gray-600 dark:text-zinc-400 mb-8">
-          {message ?? "Are you sure you want to delete this session? This action cannot be undone."}
+          {message ?? "Are you sure you want to delete this group? This action cannot be undone."}
         </p>
         <div className="flex gap-4">
           <Button variant="outline" onClick={onCancel} className="flex-1">

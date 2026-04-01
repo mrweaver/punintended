@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { leaderboardApi, type WeeklyScore, type Pun } from "../api/client";
 
 interface Props {
-  sessionId: string;
+  groupId: string;
   puns: Pun[];
 }
 
@@ -27,7 +27,7 @@ function getWeekBounds() {
   };
 }
 
-export function WeeklyLeaderboard({ sessionId, puns }: Props) {
+export function WeeklyLeaderboard({ groupId, puns }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [scores, setScores] = useState<WeeklyScore[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,12 +36,12 @@ export function WeeklyLeaderboard({ sessionId, puns }: Props) {
   const fetchScores = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await leaderboardApi.weekly(sessionId, weekStart, weekEnd);
+      const data = await leaderboardApi.weekly(groupId, weekStart, weekEnd);
       setScores(data);
     } finally {
       setLoading(false);
     }
-  }, [sessionId, weekStart, weekEnd]);
+  }, [groupId, weekStart, weekEnd]);
 
   useEffect(() => {
     if (isOpen) fetchScores().catch(console.error);

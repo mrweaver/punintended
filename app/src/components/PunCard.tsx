@@ -24,6 +24,7 @@ interface PunCardProps {
   onDelete: (punId: string) => void;
   onComment: (punId: string, text: string) => void;
   onCommentReact?: (commentId: string, reaction: string | null) => void;
+  onLoadComments?: (punId: string) => void;
 }
 
 function CommentBubble({
@@ -95,6 +96,7 @@ export function PunCard({
   onDelete,
   onComment,
   onCommentReact,
+  onLoadComments,
 }: PunCardProps) {
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -310,6 +312,7 @@ export function PunCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            if (!isExpanded) onLoadComments?.(pun.id);
             setIsExpanded(!isExpanded);
             onViewed(pun.id);
           }}

@@ -11,22 +11,21 @@ import { GoogleGenAI, Type } from "@google/genai";
 import {
   pool,
   getEffectiveDisplayName,
-  getAllSessions,
-  getSessionById,
-  getSessionIdsByUser,
-  createSession,
-  joinSession,
-  deleteSession,
-  updateSessionChallenge,
-  renameSession,
-  removePlayerFromSession,
-  saveChallengeToHistory,
-  getChallengeHistory,
+  getAllGroups,
+  getGroupById,
+  getGroupIdsByUser,
+  normalizeDisplayNameInput,
+  createGroup,
+  joinGroup,
+  deleteGroup,
+  renameGroup,
+  removePlayerFromGroup,
   getGlobalChallengeForDate,
   saveGlobalChallenge,
   getPastGlobalChallengeTopics,
   hasUserSubmittedForChallenge,
-  getPunsBySessionAndChallenge,
+  getPunsForChallenge,
+  getPunsForChallengeByGroup,
   createPun,
   updatePunText,
   updatePunScore,
@@ -34,15 +33,15 @@ import {
   getPunById,
   setPunReaction,
   getPunsByAuthor,
-  countPunsByAuthorInSession,
+  countPunsByAuthorForChallenge,
   getWeeklyBestScores,
   getGlobalDailyRanking,
   getGlobalAllTimeGroaners,
   getGauntletLeaderboard,
-  getMessagesBySession,
+  getMessagesByGroup,
   createMessage,
-  getCommentsBySession,
   getCommentsByPun,
+  getCommentsForPuns,
   createComment,
   getNotificationsByUser,
   createNotification,
@@ -144,7 +143,7 @@ async function scorePunText(topic, focus, punText) {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-lite-preview",
-systemInstruction: `You are a sharp, formal, and deadpan judge for a pun-making game.
+      systemInstruction: `You are a sharp, formal, and deadpan judge for a pun-making game.
       Your humour relies entirely on dry, understated sarcasm, highly formal vocabulary, and a slightly weary, pedantic intellect. 
       
       CRITICAL RULES:
@@ -240,24 +239,33 @@ async function generateGauntletPrompts() {
 }
 
 // --- SSE Infrastructure ---
-const sessionClients = new Map(); // sessionId -> Set<res>
+const groupClients = new Map(); // groupId -> Set<res>
+const dailyClients = new Set(); // global daily challenge subscribers
 const notificationClients = new Map(); // userId -> Set<res>
 const gauntletClients = new Map(); // runId -> Set<res>
 
-// Ephemeral typing presence store: sessionId -> Map<userId, {name, photoURL, status, updatedAt}>
+// Ephemeral typing presence store: groupId -> Map<userId, {name, photoURL, status, updatedAt}>
 const typingStatus = new Map();
 
-function addSessionClient(sessionId, res) {
-  if (!sessionClients.has(sessionId)) sessionClients.set(sessionId, new Set());
-  sessionClients.get(sessionId).add(res);
+function addGroupClient(groupId, res) {
+  if (!groupClients.has(groupId)) groupClients.set(groupId, new Set());
+  groupClients.get(groupId).add(res);
 }
 
-function removeSessionClient(sessionId, res) {
-  const clients = sessionClients.get(sessionId);
+function removeGroupClient(groupId, res) {
+  const clients = groupClients.get(groupId);
   if (clients) {
     clients.delete(res);
-    if (clients.size === 0) sessionClients.delete(sessionId);
+    if (clients.size === 0) groupClients.delete(groupId);
   }
+}
+
+function addDailyClient(res) {
+  dailyClients.add(res);
+}
+
+function removeDailyClient(res) {
+  dailyClients.delete(res);
 }
 
 function addNotificationClient(userId, res) {
@@ -274,11 +282,22 @@ function removeNotificationClient(userId, res) {
   }
 }
 
-function broadcastToSession(sessionId, event, data) {
-  const clients = sessionClients.get(sessionId);
+function broadcastToGroup(groupId, event, data) {
+  const clients = groupClients.get(groupId);
   if (!clients) return;
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of clients) {
+    try {
+      client.write(payload);
+    } catch {
+      // Client disconnected
+    }
+  }
+}
+
+function broadcastToDaily(event, data) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of dailyClients) {
     try {
       client.write(payload);
     } catch {
@@ -326,20 +345,26 @@ function broadcastToUser(userId, event, data) {
   }
 }
 
-// Broadcast full session data to all clients in that session
-async function broadcastSessionUpdate(sessionId) {
-  const session = await getSessionById(sessionId);
-  if (session) broadcastToSession(sessionId, "session-update", session);
+// Broadcast full group data to all clients in that group
+async function broadcastGroupUpdate(groupId) {
+  const group = await getGroupById(groupId);
+  if (group) broadcastToGroup(groupId, "group-update", group);
 }
 
-async function broadcastPunsUpdate(sessionId, challengeId) {
-  broadcastToSession(sessionId, "puns-update", {
+async function broadcastPunsUpdate(challengeId) {
+  broadcastToDaily("puns-update", {
     challengeId,
     updatedAt: new Date().toISOString(),
   });
 }
 
-const ALLOWED_MESSAGE_REACTIONS = ["laughing", "skull", "thumbs_up", "groan", "heart"];
+const ALLOWED_MESSAGE_REACTIONS = [
+  "laughing",
+  "skull",
+  "thumbs_up",
+  "groan",
+  "heart",
+];
 
 async function enrichWithReactions(items, messageType, viewerUserId) {
   if (!items.length) return items;
@@ -355,14 +380,16 @@ async function enrichWithReactions(items, messageType, viewerUserId) {
   });
 }
 
-async function broadcastMessagesUpdate(sessionId) {
-  const messages = await getMessagesBySession(sessionId);
-  broadcastToSession(sessionId, "messages-update", messages);
+async function broadcastMessagesUpdate(groupId) {
+  const messages = await getMessagesByGroup(groupId);
+  broadcastToGroup(groupId, "messages-update", messages);
 }
 
-async function broadcastCommentsUpdate(sessionId) {
-  const comments = await getCommentsBySession(sessionId);
-  broadcastToSession(sessionId, "comments-update", comments);
+async function broadcastCommentsUpdate(challengeId) {
+  const todayId = getAESTDateId();
+  if (challengeId === todayId) {
+    broadcastToDaily("comments-update", { challengeId, updatedAt: new Date().toISOString() });
+  }
 }
 
 async function broadcastNotificationUpdate(userId) {
@@ -370,37 +397,37 @@ async function broadcastNotificationUpdate(userId) {
   broadcastToUser(userId, "notifications-update", notifications);
 }
 
-function broadcastTypingUpdate(sessionId) {
-  const statusMap = typingStatus.get(sessionId);
+function broadcastTypingUpdate(groupId) {
+  const statusMap = typingStatus.get(groupId);
   const data = statusMap
     ? Array.from(statusMap.entries()).map(([uid, info]) => ({
         uid: Number(uid),
         ...info,
       }))
     : [];
-  broadcastToSession(sessionId, "typing-update", data);
+  broadcastToGroup(groupId, "typing-update", data);
 }
 
-function setTypingStatus(sessionId, userId, name, photoURL, status) {
-  if (!typingStatus.has(sessionId)) typingStatus.set(sessionId, new Map());
+function setTypingStatus(groupId, userId, name, photoURL, status) {
+  if (!typingStatus.has(groupId)) typingStatus.set(groupId, new Map());
   typingStatus
-    .get(sessionId)
+    .get(groupId)
     .set(String(userId), { name, photoURL, status, updatedAt: Date.now() });
 }
 
-function clearTypingStatus(sessionId, userId) {
-  typingStatus.get(sessionId)?.delete(String(userId));
+function clearTypingStatus(groupId, userId) {
+  typingStatus.get(groupId)?.delete(String(userId));
 }
 
 function refreshTypingDisplayName(userId, name) {
   const userKey = String(userId);
 
-  for (const [sessionId, statusMap] of typingStatus.entries()) {
+  for (const [groupId, statusMap] of typingStatus.entries()) {
     const existing = statusMap.get(userKey);
     if (!existing) continue;
 
     statusMap.set(userKey, { ...existing, name });
-    broadcastTypingUpdate(sessionId);
+    broadcastTypingUpdate(groupId);
   }
 }
 
@@ -419,13 +446,20 @@ function formatAuthUser(user) {
 
 // Heartbeat every 30s to prevent proxy timeouts
 setInterval(() => {
-  for (const [, clients] of sessionClients) {
+  for (const [, clients] of groupClients) {
     for (const client of clients) {
       try {
         client.write(":heartbeat\n\n");
       } catch {
         // Will be cleaned up on close
       }
+    }
+  }
+  for (const client of dailyClients) {
+    try {
+      client.write(":heartbeat\n\n");
+    } catch {
+      // Will be cleaned up on close
     }
   }
   for (const [, clients] of notificationClients) {
@@ -600,8 +634,8 @@ app.get("/auth/user", (req, res) => {
 });
 
 // --- SSE routes ---
-app.get("/api/sessions/:id/stream", ensureAuthenticated, (req, res) => {
-  const sessionId = req.params.id;
+app.get("/api/groups/:id/stream", ensureAuthenticated, (req, res) => {
+  const groupId = req.params.id;
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -612,10 +646,27 @@ app.get("/api/sessions/:id/stream", ensureAuthenticated, (req, res) => {
   res.flushHeaders?.();
   res.write("\n");
 
-  addSessionClient(sessionId, res);
+  addGroupClient(groupId, res);
 
   req.on("close", () => {
-    removeSessionClient(sessionId, res);
+    removeGroupClient(groupId, res);
+  });
+});
+
+app.get("/api/daily/stream", ensureAuthenticated, (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  res.write("\n");
+
+  addDailyClient(res);
+
+  req.on("close", () => {
+    removeDailyClient(res);
   });
 });
 
@@ -638,107 +689,96 @@ app.get("/api/notifications/stream", ensureAuthenticated, (req, res) => {
   });
 });
 
-// --- Session API ---
-app.get("/api/sessions", ensureAuthenticated, async (req, res) => {
+// --- Group API ---
+app.get("/api/groups", ensureAuthenticated, async (req, res) => {
   try {
-    const sessions = await getAllSessions();
-    res.json(sessions);
+    const groups = await getAllGroups();
+    res.json(groups);
   } catch (error) {
-    console.error("Failed to get sessions:", error);
-    res.status(500).json({ error: "Failed to get sessions" });
+    console.error("Failed to get groups:", error);
+    res.status(500).json({ error: "Failed to get groups" });
   }
 });
 
-app.post("/api/sessions", ensureAuthenticated, async (req, res) => {
+app.post("/api/groups", ensureAuthenticated, async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim())
-    return res.status(400).json({ error: "Session name required" });
+    return res.status(400).json({ error: "Group name required" });
 
   try {
-    const todayId = getAESTDateId();
-    const challenge = await getOrCreateGlobalChallenge(todayId);
-    const session = await createSession(name.trim(), req.user.id, {
-      ...challenge,
-      challengeId: todayId,
-    });
-    await saveChallengeToHistory(
-      session.id,
-      todayId,
-      challenge.topic,
-      challenge.focus,
-    );
-    const fullSession = await getSessionById(session.id);
-    res.json(fullSession);
+    const group = await createGroup(name.trim(), req.user.id);
+    const fullGroup = await getGroupById(group.id);
+    res.json(fullGroup);
   } catch (error) {
-    console.error("Failed to create session:", error);
-    res.status(500).json({ error: "Failed to create session" });
+    console.error("Failed to create group:", error);
+    res.status(500).json({ error: "Failed to create group" });
   }
 });
 
-app.post("/api/sessions/:id/join", ensureAuthenticated, async (req, res) => {
+app.post("/api/groups/:id/join", ensureAuthenticated, async (req, res) => {
   try {
-    await joinSession(req.params.id, req.user.id);
-    const session = await getSessionById(req.params.id);
-    broadcastSessionUpdate(req.params.id);
-    res.json(session);
+    await joinGroup(req.params.id, req.user.id);
+    const group = await getGroupById(req.params.id);
+    broadcastGroupUpdate(req.params.id);
+    res.json(group);
   } catch (error) {
-    console.error("Failed to join session:", error);
-    res.status(500).json({ error: "Failed to join session" });
+    console.error("Failed to join group:", error);
+    res.status(500).json({ error: "Failed to join group" });
   }
 });
 
-app.delete("/api/sessions/:id", ensureAuthenticated, async (req, res) => {
+app.delete("/api/groups/:id", ensureAuthenticated, async (req, res) => {
   try {
-    const session = await getSessionById(req.params.id);
-    if (!session) return res.status(404).json({ error: "Session not found" });
-    if (session.ownerId !== req.user.id)
+    const group = await getGroupById(req.params.id);
+    if (!group) return res.status(404).json({ error: "Group not found" });
+    if (group.ownerId !== req.user.id)
       return res.status(403).json({ error: "Only the owner can delete" });
 
-    await deleteSession(req.params.id);
-    broadcastToSession(req.params.id, "session-deleted", { id: req.params.id });
+    await deleteGroup(req.params.id);
+    broadcastToGroup(req.params.id, "group-deleted", { id: req.params.id });
     res.json({ success: true });
   } catch (error) {
-    console.error("Failed to delete session:", error);
-    res.status(500).json({ error: "Failed to delete session" });
+    console.error("Failed to delete group:", error);
+    res.status(500).json({ error: "Failed to delete group" });
   }
 });
 
-app.patch("/api/sessions/:id", ensureAuthenticated, async (req, res) => {
+app.patch("/api/groups/:id", ensureAuthenticated, async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim())
     return res.status(400).json({ error: "Name required" });
   try {
-    const session = await getSessionById(req.params.id);
-    if (!session) return res.status(404).json({ error: "Session not found" });
-    if (session.ownerId !== req.user.id)
+    const group = await getGroupById(req.params.id);
+    if (!group) return res.status(404).json({ error: "Group not found" });
+    if (group.ownerId !== req.user.id)
       return res.status(403).json({ error: "Only the owner can rename" });
-    await renameSession(req.params.id, name.trim());
-    broadcastSessionUpdate(req.params.id);
-    const updated = await getSessionById(req.params.id);
+    await renameGroup(req.params.id, name.trim());
+    broadcastGroupUpdate(req.params.id);
+    const updated = await getGroupById(req.params.id);
     res.json(updated);
   } catch (error) {
-    console.error("Failed to rename session:", error);
-    res.status(500).json({ error: "Failed to rename session" });
+    console.error("Failed to rename group:", error);
+    res.status(500).json({ error: "Failed to rename group" });
   }
 });
 
 app.delete(
-  "/api/sessions/:id/players/:uid",
+  "/api/groups/:id/players/:uid",
   ensureAuthenticated,
   async (req, res) => {
     try {
-      const session = await getSessionById(req.params.id);
-      if (!session) return res.status(404).json({ error: "Session not found" });
-      if (session.ownerId !== req.user.id)
+      const group = await getGroupById(req.params.id);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+      if (group.ownerId !== req.user.id)
         return res
           .status(403)
           .json({ error: "Only the owner can kick players" });
       const targetUid = parseInt(req.params.uid, 10);
       if (targetUid === req.user.id)
         return res.status(400).json({ error: "Cannot kick yourself" });
-      await removePlayerFromSession(req.params.id, targetUid);
-      broadcastToSession(req.params.id, "player-kicked", { uid: targetUid });
-      broadcastSessionUpdate(req.params.id);
+      await removePlayerFromGroup(req.params.id, targetUid);
+      broadcastToGroup(req.params.id, "player-kicked", { uid: targetUid });
+      broadcastGroupUpdate(req.params.id);
       res.json({ success: true });
     } catch (error) {
       console.error("Failed to kick player:", error);
@@ -747,70 +787,39 @@ app.delete(
   },
 );
 
-app.post(
-  "/api/sessions/:id/refresh-challenge",
-  ensureAuthenticated,
-  async (req, res) => {
-    try {
-      const session = await getSessionById(req.params.id);
-      if (!session) return res.status(404).json({ error: "Session not found" });
-
-      const { localDateId } = req.body;
-      const dateId =
-        localDateId && isPlausibleLocalDate(localDateId)
-          ? localDateId
-          : getAESTDateId();
-
-      const challenge = await getOrCreateGlobalChallenge(dateId);
-
-      await updateSessionChallenge(
-        req.params.id,
-        challenge.topic,
-        challenge.focus,
-        dateId,
-      );
-      await saveChallengeToHistory(
-        req.params.id,
-        dateId,
-        challenge.topic,
-        challenge.focus,
-      );
-
-      broadcastSessionUpdate(req.params.id);
-      const updated = await getSessionById(req.params.id);
-      res.json(updated);
-    } catch (error) {
-      console.error("Failed to refresh challenge:", error);
-      res.status(500).json({ error: "Failed to refresh challenge" });
-    }
-  },
-);
-
-app.get("/api/sessions/:id/history", ensureAuthenticated, async (req, res) => {
+// --- Daily Challenge API (global, Tier 1) ---
+app.get("/api/daily/challenge", ensureAuthenticated, async (req, res) => {
   try {
-    const history = await getChallengeHistory(req.params.id);
-    res.json(history);
+    const { localDateId } = req.query;
+    const dateId =
+      localDateId && isPlausibleLocalDate(localDateId)
+        ? localDateId
+        : getAESTDateId();
+    const challenge = await getOrCreateGlobalChallenge(dateId);
+    res.json({ challengeId: dateId, ...challenge });
   } catch (error) {
-    console.error("Failed to get challenge history:", error);
-    res.status(500).json({ error: "Failed to get challenge history" });
+    console.error("Failed to get daily challenge:", error);
+    res.status(500).json({ error: "Failed to get daily challenge" });
   }
 });
 
-// --- Pun API ---
-app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
+// --- Pun API (global, Tier 1) ---
+app.get("/api/daily/puns", ensureAuthenticated, async (req, res) => {
   try {
     const today = getAESTDateId();
     const challengeId = req.query.challengeId || today;
-    const puns = await getPunsBySessionAndChallenge(
-      req.params.id,
-      challengeId,
-      req.user.id,
-    );
+    const groupId = req.query.groupId || null;
+
+    let puns;
+    if (groupId) {
+      puns = await getPunsForChallengeByGroup(challengeId, groupId, req.user.id);
+    } else {
+      puns = await getPunsForChallenge(challengeId, req.user.id);
+    }
 
     // Blind gate: for today's challenge, hide other players' puns until user submits
     if (challengeId === today) {
       const submitted = await hasUserSubmittedForChallenge(
-        req.params.id,
         challengeId,
         req.user.id,
       );
@@ -826,7 +835,7 @@ app.get("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
+app.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
   const { text, responseTimeMs } = req.body;
   if (!text || !text.trim())
     return res.status(400).json({ error: "Pun text required" });
@@ -837,17 +846,12 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
       ? responseTimeMs
       : null;
 
-  const sessionId = req.params.id;
-
   try {
-    const session = await getSessionById(sessionId);
-    if (!session) return res.status(404).json({ error: "Session not found" });
+    const todayId = getAESTDateId();
+    const challenge = await getOrCreateGlobalChallenge(todayId);
 
-    const todayId = session.challengeId || getAESTDateId();
-
-    // Hard cap: 3 submissions per player per day per group
-    const myCount = await countPunsByAuthorInSession(
-      sessionId,
+    // Hard cap: 3 submissions per player per day (global)
+    const myCount = await countPunsByAuthorForChallenge(
       todayId,
       req.user.id,
     );
@@ -859,41 +863,29 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
     }
 
     const pun = await createPun(
-      sessionId,
       todayId,
       req.user.id,
       text.trim(),
       validatedResponseTimeMs,
     );
-    broadcastPunsUpdate(sessionId, todayId);
-    clearTypingStatus(sessionId, req.user.id);
-    broadcastTypingUpdate(sessionId);
+    broadcastPunsUpdate(todayId);
 
     // Score asynchronously
-    if (session.challenge) {
-      scorePunText(
-        session.challenge.topic,
-        session.challenge.focus,
-        text.trim(),
-      )
-        .then(async (result) => {
-          // OPTIONAL: Log the reasoning for your own server diagnostics
-          console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`);
-
-          await updatePunScore(pun.id, result.score, result.feedback);
-          broadcastPunsUpdate(sessionId, todayId);
-        })
-        .catch(async (err) => {
-          console.error("AI scoring failed:", err);
-          // OPTIONAL: Write a fallback state to the DB so the frontend doesn't hang
-          await updatePunScore(
-            pun.id,
-            0,
-            "The judge fell asleep at the bar. Please edit and resubmit!",
-          );
-          broadcastPunsUpdate(sessionId, todayId);
-        });
-    }
+    scorePunText(challenge.topic, challenge.focus, text.trim())
+      .then(async (result) => {
+        console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`);
+        await updatePunScore(pun.id, result.score, result.feedback);
+        broadcastPunsUpdate(todayId);
+      })
+      .catch(async (err) => {
+        console.error("AI scoring failed:", err);
+        await updatePunScore(
+          pun.id,
+          0,
+          "The judge fell asleep at the bar. Please edit and resubmit!",
+        );
+        broadcastPunsUpdate(todayId);
+      });
 
     res.json({ id: pun.id });
   } catch (error) {
@@ -902,27 +894,27 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.post("/api/sessions/:id/typing", ensureAuthenticated, (req, res) => {
+app.post("/api/groups/:id/typing", ensureAuthenticated, (req, res) => {
   const { status } = req.body;
-  const sessionId = req.params.id;
+  const groupId = req.params.id;
   const { id: userId, photo_url: photoURL } = req.user;
   const name = getEffectiveDisplayName(req.user);
 
   if (status === "idle") {
-    clearTypingStatus(sessionId, userId);
+    clearTypingStatus(groupId, userId);
   } else if (status === "typing" || status === "submitted") {
-    setTypingStatus(sessionId, userId, name, photoURL, status);
+    setTypingStatus(groupId, userId, name, photoURL, status);
     if (status === "typing") {
       const updatedAt = Date.now();
       setTimeout(() => {
-        const entry = typingStatus.get(sessionId)?.get(String(userId));
+        const entry = typingStatus.get(groupId)?.get(String(userId));
         if (
           entry &&
           entry.status === "typing" &&
           entry.updatedAt === updatedAt
         ) {
-          clearTypingStatus(sessionId, userId);
-          broadcastTypingUpdate(sessionId);
+          clearTypingStatus(groupId, userId);
+          broadcastTypingUpdate(groupId);
         }
       }, 10000);
     }
@@ -930,7 +922,7 @@ app.post("/api/sessions/:id/typing", ensureAuthenticated, (req, res) => {
     return res.status(400).json({ error: "Invalid status" });
   }
 
-  broadcastTypingUpdate(sessionId);
+  broadcastTypingUpdate(groupId);
   res.json({ success: true });
 });
 
@@ -946,19 +938,15 @@ app.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
       return res.status(403).json({ error: "Only the author can edit" });
 
     await updatePunText(req.params.id, text.trim());
-    broadcastPunsUpdate(pun.session_id, pun.challenge_id);
+    broadcastPunsUpdate(pun.challenge_id);
 
     // Re-score
-    const session = await getSessionById(pun.session_id);
-    if (session?.challenge) {
-      scorePunText(
-        session.challenge.topic,
-        session.challenge.focus,
-        text.trim(),
-      )
+    const challenge = await getGlobalChallengeForDate(pun.challenge_id);
+    if (challenge) {
+      scorePunText(challenge.topic, challenge.focus, text.trim())
         .then(async (result) => {
           await updatePunScore(req.params.id, result.score, result.feedback);
-          broadcastPunsUpdate(pun.session_id, pun.challenge_id);
+          broadcastPunsUpdate(pun.challenge_id);
         })
         .catch((err) => console.error("AI re-scoring failed:", err));
     }
@@ -977,9 +965,9 @@ app.delete("/api/puns/:id", ensureAuthenticated, async (req, res) => {
     if (pun.author_id !== req.user.id)
       return res.status(403).json({ error: "Only the author can delete" });
 
-    const { session_id, challenge_id } = pun;
+    const { challenge_id } = pun;
     await deletePun(req.params.id);
-    broadcastPunsUpdate(session_id, challenge_id);
+    broadcastPunsUpdate(challenge_id);
     res.json({ success: true });
   } catch (error) {
     console.error("Failed to delete pun:", error);
@@ -1013,12 +1001,12 @@ app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
         pun.author_id,
         "reaction",
         `${getEffectiveDisplayName(req.user)} groaned at your pun: "${punText}"`,
-        pun.session_id,
+        null,
       );
       broadcastNotificationUpdate(pun.author_id);
     }
 
-    broadcastPunsUpdate(pun.session_id, pun.challenge_id);
+    broadcastPunsUpdate(pun.challenge_id);
     res.json({ reaction: selectedReaction });
   } catch (error) {
     console.error("Failed to react:", error);
@@ -1027,9 +1015,9 @@ app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
 });
 
 // --- Message API ---
-app.get("/api/sessions/:id/messages", ensureAuthenticated, async (req, res) => {
+app.get("/api/groups/:id/messages", ensureAuthenticated, async (req, res) => {
   try {
-    const messages = await getMessagesBySession(req.params.id);
+    const messages = await getMessagesByGroup(req.params.id);
     const enriched = await enrichWithReactions(messages, "chat", req.user.id);
     res.json(enriched);
   } catch (error) {
@@ -1039,7 +1027,7 @@ app.get("/api/sessions/:id/messages", ensureAuthenticated, async (req, res) => {
 });
 
 app.post(
-  "/api/sessions/:id/messages",
+  "/api/groups/:id/messages",
   ensureAuthenticated,
   async (req, res) => {
     const { text } = req.body;
@@ -1063,7 +1051,11 @@ app.post(
 app.get("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
   try {
     const comments = await getCommentsByPun(req.params.id);
-    const enriched = await enrichWithReactions(comments, "pun_comment", req.user.id);
+    const enriched = await enrichWithReactions(
+      comments,
+      "pun_comment",
+      req.user.id,
+    );
     res.json(enriched);
   } catch (error) {
     console.error("Failed to get comments:", error);
@@ -1072,16 +1064,16 @@ app.get("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
 });
 
 app.post("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
-  const { text, sessionId } = req.body;
+  const { text } = req.body;
   if (!text || !text.trim())
     return res.status(400).json({ error: "Comment text required" });
   if (text.length > 500)
     return res.status(400).json({ error: "Comment too long" });
-  if (!sessionId) return res.status(400).json({ error: "Session ID required" });
 
   try {
-    await createComment(req.params.id, sessionId, req.user.id, text.trim());
-    broadcastCommentsUpdate(sessionId);
+    await createComment(req.params.id, req.user.id, text.trim());
+    const pun = await getPunById(req.params.id);
+    if (pun) broadcastCommentsUpdate(pun.challenge_id);
     res.json({ success: true });
   } catch (error) {
     console.error("Failed to add comment:", error);
@@ -1090,44 +1082,71 @@ app.post("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
 });
 
 // --- Message Reaction API ---
-app.post("/api/messages/:id/reaction", ensureAuthenticated, async (req, res) => {
-  const { reaction } = req.body;
-  if (reaction !== null && !ALLOWED_MESSAGE_REACTIONS.includes(reaction))
-    return res.status(400).json({ error: "Invalid reaction" });
-  try {
-    const result = await setMessageReaction(req.params.id, "chat", req.user.id, reaction);
-    res.json({ reaction: result });
-  } catch (error) {
-    console.error("Failed to set message reaction:", error);
-    res.status(500).json({ error: "Failed to set reaction" });
-  }
-});
+app.post(
+  "/api/messages/:id/reaction",
+  ensureAuthenticated,
+  async (req, res) => {
+    const { reaction } = req.body;
+    if (reaction !== null && !ALLOWED_MESSAGE_REACTIONS.includes(reaction))
+      return res.status(400).json({ error: "Invalid reaction" });
+    try {
+      const result = await setMessageReaction(
+        req.params.id,
+        "chat",
+        req.user.id,
+        reaction,
+      );
+      res.json({ reaction: result });
+    } catch (error) {
+      console.error("Failed to set message reaction:", error);
+      res.status(500).json({ error: "Failed to set reaction" });
+    }
+  },
+);
 
-app.post("/api/comments/:id/reaction", ensureAuthenticated, async (req, res) => {
-  const { reaction } = req.body;
-  if (reaction !== null && !ALLOWED_MESSAGE_REACTIONS.includes(reaction))
-    return res.status(400).json({ error: "Invalid reaction" });
-  try {
-    const result = await setMessageReaction(req.params.id, "pun_comment", req.user.id, reaction);
-    res.json({ reaction: result });
-  } catch (error) {
-    console.error("Failed to set comment reaction:", error);
-    res.status(500).json({ error: "Failed to set reaction" });
-  }
-});
+app.post(
+  "/api/comments/:id/reaction",
+  ensureAuthenticated,
+  async (req, res) => {
+    const { reaction } = req.body;
+    if (reaction !== null && !ALLOWED_MESSAGE_REACTIONS.includes(reaction))
+      return res.status(400).json({ error: "Invalid reaction" });
+    try {
+      const result = await setMessageReaction(
+        req.params.id,
+        "pun_comment",
+        req.user.id,
+        reaction,
+      );
+      res.json({ reaction: result });
+    } catch (error) {
+      console.error("Failed to set comment reaction:", error);
+      res.status(500).json({ error: "Failed to set reaction" });
+    }
+  },
+);
 
-app.post("/api/gauntlet/messages/:id/reaction", ensureAuthenticated, async (req, res) => {
-  const { reaction } = req.body;
-  if (reaction !== null && !ALLOWED_MESSAGE_REACTIONS.includes(reaction))
-    return res.status(400).json({ error: "Invalid reaction" });
-  try {
-    const result = await setMessageReaction(req.params.id, "gauntlet_message", req.user.id, reaction);
-    res.json({ reaction: result });
-  } catch (error) {
-    console.error("Failed to set gauntlet message reaction:", error);
-    res.status(500).json({ error: "Failed to set reaction" });
-  }
-});
+app.post(
+  "/api/gauntlet/messages/:id/reaction",
+  ensureAuthenticated,
+  async (req, res) => {
+    const { reaction } = req.body;
+    if (reaction !== null && !ALLOWED_MESSAGE_REACTIONS.includes(reaction))
+      return res.status(400).json({ error: "Invalid reaction" });
+    try {
+      const result = await setMessageReaction(
+        req.params.id,
+        "gauntlet_message",
+        req.user.id,
+        reaction,
+      );
+      res.json({ reaction: result });
+    } catch (error) {
+      console.error("Failed to set gauntlet message reaction:", error);
+      res.status(500).json({ error: "Failed to set reaction" });
+    }
+  },
+);
 
 // --- Notification API ---
 app.get("/api/notifications", ensureAuthenticated, async (req, res) => {
@@ -1157,7 +1176,7 @@ app.put(
 
 // --- Leaderboard API ---
 app.get(
-  "/api/sessions/:id/weekly-scores",
+  "/api/groups/:id/weekly-scores",
   ensureAuthenticated,
   async (req, res) => {
     try {
@@ -1223,12 +1242,11 @@ app.get("/api/profile/puns", ensureAuthenticated, async (req, res) => {
 });
 
 app.put("/api/profile/display-name", ensureAuthenticated, async (req, res) => {
-  const rawDisplayName = typeof req.body?.displayName === "string"
-    ? req.body.displayName
-    : "";
-  const normalizedDisplayName = rawDisplayName.replace(/\s+/g, " ").trim();
+  const rawDisplayName =
+    typeof req.body?.displayName === "string" ? req.body.displayName : "";
+  const normalizedDisplayName = normalizeDisplayNameInput(rawDisplayName);
 
-  if (normalizedDisplayName.length > MAX_DISPLAY_NAME_LENGTH) {
+  if ((normalizedDisplayName?.length ?? 0) > MAX_DISPLAY_NAME_LENGTH) {
     return res.status(400).json({
       error: `Display name too long (max ${MAX_DISPLAY_NAME_LENGTH} chars)`,
     });
@@ -1246,19 +1264,18 @@ app.put("/api/profile/display-name", ensureAuthenticated, async (req, res) => {
 
     refreshTypingDisplayName(req.user.id, getEffectiveDisplayName(updatedUser));
 
-    const sessionIds = await getSessionIdsByUser(req.user.id);
-    for (const sessionId of sessionIds) {
-      const session = await getSessionById(sessionId);
-      if (!session) continue;
+    const groupIds = await getGroupIdsByUser(req.user.id);
+    for (const groupId of groupIds) {
+      const group = await getGroupById(groupId);
+      if (!group) continue;
 
-      await broadcastSessionUpdate(sessionId);
-      await broadcastMessagesUpdate(sessionId);
-      await broadcastCommentsUpdate(sessionId);
-
-      if (session.challengeId) {
-        await broadcastPunsUpdate(sessionId, session.challengeId);
-      }
+      await broadcastGroupUpdate(groupId);
+      await broadcastMessagesUpdate(groupId);
     }
+
+    // Broadcast puns update for today's challenge globally
+    const todayId = getAESTDateId();
+    await broadcastPunsUpdate(todayId);
 
     res.json({ user: formatAuthUser(updatedUser) });
   } catch (error) {
@@ -1471,7 +1488,11 @@ app.get(
 app.get("/api/gauntlet/:id/messages", ensureAuthenticated, async (req, res) => {
   try {
     const messages = await getGauntletMessages(req.params.id);
-    const enriched = await enrichWithReactions(messages, "gauntlet_message", req.user.id);
+    const enriched = await enrichWithReactions(
+      messages,
+      "gauntlet_message",
+      req.user.id,
+    );
     res.json(enriched);
   } catch (err) {
     console.error("Failed to get gauntlet messages:", err);
@@ -1479,18 +1500,29 @@ app.get("/api/gauntlet/:id/messages", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.post("/api/gauntlet/:id/messages", ensureAuthenticated, async (req, res) => {
-  const cleanText = typeof req.body.text === "string" ? req.body.text.trim() : "";
-  if (!cleanText || cleanText.length > 500)
-    return res.status(400).json({ error: "Message must be 1–500 characters" });
-  try {
-    const message = await createGauntletMessage(req.params.id, req.user.id, cleanText);
-    res.json(message);
-  } catch (err) {
-    console.error("Failed to create gauntlet message:", err);
-    res.status(500).json({ error: "Failed to send message" });
-  }
-});
+app.post(
+  "/api/gauntlet/:id/messages",
+  ensureAuthenticated,
+  async (req, res) => {
+    const cleanText =
+      typeof req.body.text === "string" ? req.body.text.trim() : "";
+    if (!cleanText || cleanText.length > 500)
+      return res
+        .status(400)
+        .json({ error: "Message must be 1–500 characters" });
+    try {
+      const message = await createGauntletMessage(
+        req.params.id,
+        req.user.id,
+        cleanText,
+      );
+      res.json(message);
+    } catch (err) {
+      console.error("Failed to create gauntlet message:", err);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  },
+);
 
 app.get("/api/gauntlet/:id/comments", ensureAuthenticated, async (req, res) => {
   try {

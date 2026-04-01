@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { AlertCircle, CheckCircle2, LogIn, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useAuth } from "./contexts/AuthContext";
-import { useSession } from "./hooks/useSession";
+import { useGroup } from "./hooks/useGroup";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Header } from "./components/Header";
 import { SessionLobby } from "./components/SessionLobby";
@@ -96,22 +96,22 @@ function LoginNoticeBanner({
 export default function App() {
   const { user, isReady, login } = useAuth();
   const {
-    sessions,
-    currentSession,
+    groups,
+    currentGroup,
     loading,
-    createNewSession,
-    joinExistingSession,
-    joinSessionById,
-    leaveSession,
-    deleteExistingSession,
-    renameCurrentSession,
+    createNewGroup,
+    joinExistingGroup,
+    joinGroupById,
+    leaveGroup,
+    deleteExistingGroup,
+    renameCurrentGroup,
     kickPlayer,
-  } = useSession();
+  } = useGroup();
 
   const [showProfile, setShowProfile] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -159,7 +159,7 @@ export default function App() {
 
   const handleLogoClick = () => {
     closeOverlayScreens();
-    leaveSession();
+    leaveGroup();
   };
 
   if (!isReady) {
@@ -214,17 +214,18 @@ export default function App() {
         <Header
           onOpenProfile={() => setShowProfile(true)}
           onOpenAbout={() => setShowAbout(true)}
+          onOpenChangelog={() => setShowChangelog(true)}
           onOpenLeaderboard={handleOpenLeaderboard}
           onOpenGauntlet={handleOpenGauntlet}
           onLogoClick={
-            gauntletMode || showLeaderboard || !!currentSession
+            gauntletMode || showLeaderboard || !!currentGroup
               ? handleLogoClick
               : undefined
           }
           onNotificationClick={(link) => {
             if (link) {
-              const targetSession = sessions.find((s) => s.id === link);
-              if (targetSession) joinExistingSession(targetSession);
+              const targetGroup = groups.find((g) => g.id === link);
+              if (targetGroup) joinExistingGroup(targetGroup);
             }
           }}
         />
@@ -245,24 +246,25 @@ export default function App() {
                 key="leaderboard"
                 onClose={() => setShowLeaderboard(false)}
               />
-            ) : !currentSession ? (
+            ) : !currentGroup ? (
               <SessionLobby
-                sessions={sessions}
+                sessions={groups}
                 loading={loading}
-                onCreateSession={createNewSession}
-                onJoinSession={joinExistingSession}
-                onJoinById={joinSessionById}
-                onDeleteSession={(id) => setSessionToDelete(id)}
+                onCreateSession={createNewGroup}
+                onJoinSession={joinExistingGroup}
+                onJoinById={joinGroupById}
+                onDeleteSession={(id) => setGroupToDelete(id)}
                 onStartGauntlet={handleOpenGauntlet}
+                onOpenLeaderboard={handleOpenLeaderboard}
               />
             ) : (
               <GameBoard
-                session={currentSession}
+                session={currentGroup}
                 loading={loading}
-                onLeave={leaveSession}
-                onDelete={deleteExistingSession}
-                onRename={renameCurrentSession}
-                onKick={(uid) => kickPlayer(currentSession.id, uid)}
+                onLeave={leaveGroup}
+                onDelete={deleteExistingGroup}
+                onRename={renameCurrentGroup}
+                onKick={(uid) => kickPlayer(currentGroup.id, uid)}
               />
             )}
           </AnimatePresence>
@@ -286,13 +288,13 @@ export default function App() {
         {showChangelog && (
           <ChangelogModal onClose={() => setShowChangelog(false)} />
         )}
-        {sessionToDelete && (
+        {groupToDelete && (
           <DeleteConfirmModal
             onConfirm={async () => {
-              await deleteExistingSession(sessionToDelete);
-              setSessionToDelete(null);
+              await deleteExistingGroup(groupToDelete);
+              setGroupToDelete(null);
             }}
-            onCancel={() => setSessionToDelete(null)}
+            onCancel={() => setGroupToDelete(null)}
           />
         )}
       </div>

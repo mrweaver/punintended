@@ -9,17 +9,17 @@ export function getPunScore(pun: Pun) {
 }
 
 export function usePuns(
-  sessionId: string | null,
   challengeId: string,
   viewerId?: number,
+  groupId?: string | null,
 ) {
   const [puns, setPuns] = useState<Pun[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [sortMode, setSortMode] = useState<PunSortMode>("unviewed");
   const viewedStorageKey = useMemo(() => {
-    if (!sessionId || !challengeId || !viewerId) return null;
-    return `pun-viewed:${sessionId}:${challengeId}:${viewerId}`;
-  }, [sessionId, challengeId, viewerId]);
+    if (!challengeId || !viewerId) return null;
+    return `pun-viewed:${challengeId}:${viewerId}`;
+  }, [challengeId, viewerId]);
 
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
 
@@ -47,40 +47,43 @@ export function usePuns(
   );
 
   const fetchPuns = useCallback(async () => {
-    if (!sessionId) {
+    if (!challengeId) {
       setPuns([]);
       return;
     }
 
-    const result = await punsApi.list(sessionId, challengeId);
+    const result = await punsApi.list(challengeId, groupId || undefined);
     setPuns(
       result.map((pun) => ({
         ...pun,
         viewed: viewedIds.has(pun.id),
       })),
     );
-  }, [sessionId, challengeId, viewedIds]);
+  }, [challengeId, groupId, viewedIds]);
 
   // Fetch initial puns
   useEffect(() => {
     fetchPuns().catch(console.error);
   }, [fetchPuns]);
 
-  // SSE for pun updates
+  // SSE for pun updates (global daily stream)
   useEffect(() => {
-    if (!sessionId) return;
+    if (!challengeId) return;
 
     const cleanup = createSSE({
-      url: `/api/sessions/${sessionId}/stream`,
+      url: `/api/daily/stream`,
       events: {
         "puns-update": () => {
           fetchPuns().catch(console.error);
+        },
+        "comments-update": () => {
+          // Comments updated; pun hooks don't need to react but other hooks might
         },
       },
     });
 
     return cleanup;
-  }, [sessionId, fetchPuns]);
+  }, [challengeId, fetchPuns]);
 
   // Count unviewed puns for badge display
   const unviewedCount = useMemo(
@@ -112,15 +115,15 @@ export function usePuns(
 
   const submitPun = useCallback(
     async (text: string) => {
-      if (!sessionId) return;
+      if (!challengeId) return;
       setSubmitting(true);
       try {
-        await punsApi.submit(sessionId, text, null);
+        await punsApi.submit(text, null);
       } finally {
         setSubmitting(false);
       }
     },
-    [sessionId],
+    [challengeId],
   );
 
   const editPun = useCallback(async (punId: string, text: string) => {

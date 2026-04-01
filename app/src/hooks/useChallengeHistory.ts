@@ -1,25 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
-import { sessionsApi, punsApi, type ChallengeHistoryEntry, type Pun } from '../api/client';
+import { useState, useCallback } from 'react';
+import { punsApi, type Pun } from '../api/client';
 
-export function useChallengeHistory(sessionId: string | null, challengeId?: string | null) {
-  const [history, setHistory] = useState<ChallengeHistoryEntry[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+/**
+ * Simplified challenge history - loads puns for past dates.
+ * Challenge history is no longer stored per-group; past challenges
+ * can be browsed by date using the global daily puns API.
+ */
+export function useChallengeHistory(groupId?: string | null) {
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [punsByDate, setPunsByDate] = useState<Record<string, Pun[]>>({});
   const [loadingDate, setLoadingDate] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!sessionId) {
-      setHistory([]);
-      return;
-    }
-    setLoadingHistory(true);
-    sessionsApi
-      .history(sessionId)
-      .then(setHistory)
-      .catch(console.error)
-      .finally(() => setLoadingHistory(false));
-  }, [sessionId, challengeId]);
 
   const toggleDate = useCallback(
     async (challengeId: string) => {
@@ -33,10 +23,10 @@ export function useChallengeHistory(sessionId: string | null, challengeId?: stri
       setExpandedDates(next);
 
       // Load puns for this date if not already loaded
-      if (!punsByDate[challengeId] && sessionId) {
+      if (!punsByDate[challengeId]) {
         setLoadingDate(challengeId);
         try {
-          const result = await punsApi.list(sessionId, challengeId);
+          const result = await punsApi.list(challengeId, groupId || undefined);
           setPunsByDate((prev) => ({ ...prev, [challengeId]: result }));
         } catch (err) {
           console.error('Failed to load history puns:', err);
@@ -45,7 +35,7 @@ export function useChallengeHistory(sessionId: string | null, challengeId?: stri
         }
       }
     },
-    [expandedDates, punsByDate, sessionId]
+    [expandedDates, punsByDate, groupId]
   );
 
   const reactPun = useCallback(async (punId: string, reaction: Parameters<typeof punsApi.react>[1]) => {
@@ -53,8 +43,6 @@ export function useChallengeHistory(sessionId: string | null, challengeId?: stri
   }, []);
 
   return {
-    history,
-    loadingHistory,
     expandedDates,
     punsByDate,
     loadingDate,

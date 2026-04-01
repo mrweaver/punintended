@@ -28,15 +28,16 @@ import { PlayerLeaderboard } from "./PlayerLeaderboard";
 import { WeeklyLeaderboard } from "./WeeklyLeaderboard";
 import { ShareModal } from "./modals/ShareModal";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
-import type { Session } from "../api/client";
+import type { Group, DailyChallenge } from "../api/client";
+import { dailyApi } from "../api/client";
 
 interface GameBoardProps {
-  session: Session;
+  session: Group;
   loading: boolean;
 
   onLeave: () => void;
-  onDelete: (sessionId: string) => Promise<void>;
-  onRename: (sessionId: string, name: string) => Promise<void>;
+  onDelete: (groupId: string) => Promise<void>;
+  onRename: (groupId: string, name: string) => Promise<void>;
   onKick: (uid: number) => Promise<void>;
 }
 
@@ -51,6 +52,13 @@ export function GameBoard({
 }: GameBoardProps) {
   const { user } = useAuth();
   const todayId = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
+  const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
+
+  // Fetch global daily challenge
+  useEffect(() => {
+    dailyApi.getChallenge(todayId).then(setChallenge).catch(console.error);
+  }, [todayId]);
+
   const {
     puns,
     unviewedCount,
@@ -62,12 +70,14 @@ export function GameBoard({
     deletePun,
     reactPun,
     markPunViewed,
-  } = usePuns(session.id, todayId, user?.uid);
-  const historyState = useChallengeHistory(session.id, session.challengeId);
+  } = usePuns(todayId, user?.uid, session.id);
+  const historyState = useChallengeHistory(session.id);
   const { messages, sendMessage, reactToMessage } = useMessages(session.id);
-  const { addComment, reactToComment, getCommentsForPun } = useComments(session.id);
+  const { addComment, reactToComment, getCommentsForPun, loadCommentsForPun } = useComments();
   const { unlock: unlockAudio, playScore } = useScoreSound();
-  const { typingPlayers, reportTyping, onTextChange } = useTypingStatus(session.id);
+  const { typingPlayers, reportTyping, onTextChange } = useTypingStatus(
+    session.id,
+  );
   const myPunCount = puns.filter((p) => p.authorId === user?.uid).length;
   const attemptsLeft = Math.max(0, 3 - myPunCount);
   const hasSubmittedToday = myPunCount > 0;
@@ -95,7 +105,9 @@ export function GameBoard({
     if (chatOpen) lastReadCountRef.current = messages.length;
   }, [chatOpen, messages.length]);
 
-  const unreadChatCount = chatOpen ? 0 : Math.max(0, messages.length - lastReadCountRef.current);
+  const unreadChatCount = chatOpen
+    ? 0
+    : Math.max(0, messages.length - lastReadCountRef.current);
 
   // Play a sound when the current user's pun gets AI-scored
   useEffect(() => {
@@ -164,14 +176,26 @@ export function GameBoard({
                   onChange={(e) => setNameInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleRename();
-                    if (e.key === "Escape") { setNameInput(session.name); setEditingName(false); }
+                    if (e.key === "Escape") {
+                      setNameInput(session.name);
+                      setEditingName(false);
+                    }
                   }}
                   className="text-2xl sm:text-4xl font-serif italic font-bold dark:text-zinc-100 bg-transparent border-b-2 border-orange-500 dark:border-violet-500 outline-none w-48 sm:w-72"
                 />
-                <button onClick={handleRename} className="text-green-500 hover:text-green-600">
+                <button
+                  onClick={handleRename}
+                  className="text-green-500 hover:text-green-600"
+                >
                   <Check className="w-5 h-5" />
                 </button>
-                <button onClick={() => { setNameInput(session.name); setEditingName(false); }} className="text-gray-400 hover:text-gray-600">
+                <button
+                  onClick={() => {
+                    setNameInput(session.name);
+                    setEditingName(false);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </>
@@ -182,7 +206,10 @@ export function GameBoard({
                 </h1>
                 {isOwner && (
                   <button
-                    onClick={() => { setNameInput(session.name); setEditingName(true); }}
+                    onClick={() => {
+                      setNameInput(session.name);
+                      setEditingName(true);
+                    }}
                     className="text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300"
                     title="Rename group"
                   >
@@ -241,11 +268,16 @@ export function GameBoard({
           <h2 className="text-2xl font-serif italic text-gray-500 dark:text-zinc-400">
             Today's Challenge
           </h2>
-          {session.challengeId && (
+          {challenge?.challengeId && (
             <p className="text-xs font-mono text-gray-400 dark:text-zinc-500 mt-0.5">
-              {new Date(session.challengeId + "T00:00:00").toLocaleDateString(
+              {new Date(challenge.challengeId + "T00:00:00").toLocaleDateString(
                 undefined,
-                { weekday: "long", year: "numeric", month: "long", day: "numeric" },
+                {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                },
               )}
             </p>
           )}
@@ -253,7 +285,7 @@ export function GameBoard({
       </div>
       <div className="grid grid-cols-2 gap-4 sm:gap-6">
         <motion.div
-          key={`topic-${session.challengeId}`}
+          key={`topic-${challenge?.challengeId}`}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
@@ -264,12 +296,11 @@ export function GameBoard({
             Topic
           </p>
           <h2 className="text-2xl sm:text-4xl font-serif italic">
-            {session.challenge?.topic ||
-              (isOwner ? "Generating..." : "Waiting for Host...")}
+            {challenge?.topic || "Generating..."}
           </h2>
         </motion.div>
         <motion.div
-          key={`focus-${session.challengeId}`}
+          key={`focus-${challenge?.challengeId}`}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.05 }}
@@ -280,8 +311,7 @@ export function GameBoard({
             Focus
           </p>
           <h2 className="text-2xl sm:text-4xl font-serif italic">
-            {session.challenge?.focus ||
-              (isOwner ? "Generating..." : "Waiting for Host...")}
+            {challenge?.focus || "Generating..."}
           </h2>
         </motion.div>
       </div>
@@ -290,7 +320,11 @@ export function GameBoard({
       <Card className="border-2 border-orange-100 dark:border-violet-900/50">
         <div className="flex flex-col gap-4">
           <textarea
-            placeholder={attemptsLeft === 0 ? "No submissions remaining today." : "Type your pun here..."}
+            placeholder={
+              attemptsLeft === 0
+                ? "No submissions remaining today."
+                : "Type your pun here..."
+            }
             value={punText}
             disabled={attemptsLeft === 0}
             onChange={(e) => {
@@ -309,10 +343,12 @@ export function GameBoard({
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-col gap-1">
               <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-                Tip: Combine {session.challenge?.topic} and{" "}
-                {session.challenge?.focus} for maximum points!
+                Tip: Combine {challenge?.topic} and{" "}
+                {challenge?.focus} for maximum points!
               </p>
-              <p className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}>
+              <p
+                className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}
+              >
                 {attemptsLeft === 0
                   ? "No submissions remaining today — come back tomorrow!"
                   : `${attemptsLeft} submission${attemptsLeft !== 1 ? "s" : ""} remaining today`}
@@ -336,7 +372,7 @@ export function GameBoard({
       {hasSubmittedToday && puns.length > 0 && (
         <div className="flex flex-col gap-3">
           <PlayerLeaderboard puns={puns} players={session.players} />
-          <WeeklyLeaderboard sessionId={session.id} puns={puns} />
+          <WeeklyLeaderboard groupId={session.id} puns={puns} />
         </div>
       )}
 
@@ -385,11 +421,7 @@ export function GameBoard({
                   <>
                     <Calendar className="w-3.5 h-3.5" />
                     History
-                    {historyState.history.length > 0 && (
-                      <span className="ml-1 text-xs text-gray-400 dark:text-zinc-500">
-                        ({historyState.history.length})
-                      </span>
-                    )}
+
                   </>
                 )}
               </Button>
@@ -451,7 +483,8 @@ export function GameBoard({
                         onEdit={editPun}
                         onDelete={deletePun}
                         onComment={addComment}
-                        onCommentReact={reactToComment}
+                        onCommentReact={(commentId, reaction) => reactToComment(commentId, pun.id, reaction)}
+                        onLoadComments={loadCommentsForPun}
                       />
                     ))}
                     <AnimatePresence>
@@ -500,7 +533,11 @@ export function GameBoard({
         </div>
 
         <div className="hidden lg:block lg:col-span-1">
-          <ChatBox messages={messages} onSendMessage={sendMessage} onReactToMessage={reactToMessage} />
+          <ChatBox
+            messages={messages}
+            onSendMessage={sendMessage}
+            onReactToMessage={reactToMessage}
+          />
         </div>
       </div>
 
@@ -554,7 +591,15 @@ export function GameBoard({
       {/* Modals */}
       {showShareModal && (
         <ShareModal
-          session={session}
+          title="Invite Friends"
+          description={
+            <>
+              Scan the QR code or share the link below to invite players to{" "}
+              <strong className="dark:text-zinc-200">{session.name}</strong>.
+            </>
+          }
+          shareUrl={`${window.location.origin}?group=${session.id}`}
+          shareMessage={`Join my PunIntended group, ${session.name}.`}
           onClose={() => setShowShareModal(false)}
         />
       )}

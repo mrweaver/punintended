@@ -2,29 +2,29 @@ import { useState, useEffect, useCallback } from 'react';
 import { messagesApi, type ChatMessage } from '../api/client';
 import { createSSE } from '../api/sse';
 
-export function useMessages(sessionId: string | null) {
+export function useMessages(groupId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const fetchMessages = useCallback(async () => {
-    if (!sessionId) return;
-    const data = await messagesApi.list(sessionId);
+    if (!groupId) return;
+    const data = await messagesApi.list(groupId);
     setMessages(data);
-  }, [sessionId]);
+  }, [groupId]);
 
   useEffect(() => {
-    if (!sessionId) {
+    if (!groupId) {
       setMessages([]);
       return;
     }
     fetchMessages().catch(console.error);
-  }, [sessionId, fetchMessages]);
+  }, [groupId, fetchMessages]);
 
   // SSE for message updates — re-fetch to include reactions
   useEffect(() => {
-    if (!sessionId) return;
+    if (!groupId) return;
 
     const cleanup = createSSE({
-      url: `/api/sessions/${sessionId}/stream`,
+      url: `/api/groups/${groupId}/stream`,
       events: {
         'messages-update': () => {
           fetchMessages().catch(console.error);
@@ -33,14 +33,14 @@ export function useMessages(sessionId: string | null) {
     });
 
     return cleanup;
-  }, [sessionId, fetchMessages]);
+  }, [groupId, fetchMessages]);
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!sessionId) return;
-      await messagesApi.send(sessionId, text);
+      if (!groupId) return;
+      await messagesApi.send(groupId, text);
     },
-    [sessionId]
+    [groupId]
   );
 
   const reactToMessage = useCallback(

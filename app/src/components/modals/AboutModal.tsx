@@ -57,7 +57,7 @@ const DETAILS = [
   },
   {
     heading: "Groups",
-    body: "Sessions are shared spaces. Join via invite code or QR, or browse open groups in the lobby. One daily challenge per group, shared by all members.",
+    body: "Groups are shared spaces. Join via invite code or QR, or browse open groups in the lobby. One daily challenge for everyone, with group leaderboards for comparing scores.",
   },
 ];
 

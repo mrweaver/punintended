@@ -59,11 +59,6 @@ function LeaderboardRow({
           <span className="text-xs text-gray-500 dark:text-zinc-400">
             {entry.authorName}
           </span>
-          {entry.sessionName && (
-            <span className="text-[10px] text-gray-400 dark:text-zinc-600 font-mono">
-              · {entry.sessionName}
-            </span>
-          )}
         </div>
       </div>
       <span

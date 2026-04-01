@@ -69,11 +69,27 @@ async function withTransaction(fn) {
   }
 }
 
+function normalizeDisplayNameToken(token) {
+  if (!token) return token;
+  if (/[A-Z]/.test(token) && /[a-z]/.test(token)) return token;
+  return token
+    .split(/([-'`])/)
+    .map((part) => {
+      if (!part || /^[\-'`]$/.test(part)) return part;
+      const lettersOnly = part.replace(/[^A-Za-z]/g, "");
+      if (!lettersOnly) return part;
+      if (/[A-Z]/.test(part) && /[a-z]/.test(part)) return part;
+      const lowerCased = part.toLowerCase();
+      return lowerCased.charAt(0).toUpperCase() + lowerCased.slice(1);
+    })
+    .join("");
+}
+
 function normalizeDisplayNameInput(name) {
   if (typeof name !== "string") return null;
-
   const normalized = name.replace(/\s+/g, " ").trim();
-  return normalized || null;
+  if (!normalized) return null;
+  return normalized.split(" ").map(normalizeDisplayNameToken).join(" ");
 }
 
 function displayNameSql(alias) {
@@ -95,13 +111,9 @@ async function findOrCreateUser(googleProfile) {
   const email = emails && emails[0] ? emails[0].value : null;
   const photoUrl = photos && photos[0] ? photos[0].value : null;
   const googleDisplayName = normalizeDisplayNameInput(displayName);
-
   if (!email) throw new Error("Email not provided by Google");
 
-  let result = await query("SELECT * FROM users WHERE google_id = $1", [
-    googleId,
-  ]);
-
+  let result = await query("SELECT * FROM users WHERE google_id = $1", [googleId]);
   if (result.rows.length > 0) {
     result = await query(
       `UPDATE users SET display_name = $1, photo_url = $2, email = $3, updated_at = NOW()
@@ -127,311 +139,99 @@ async function getUserById(userId) {
 async function updateCustomDisplayName(userId, customDisplayName) {
   const normalizedDisplayName = normalizeDisplayNameInput(customDisplayName);
   const result = await query(
-    `UPDATE users
-     SET custom_display_name = $1, updated_at = NOW()
-     WHERE id = $2
-     RETURNING *`,
+    `UPDATE users SET custom_display_name = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
     [normalizedDisplayName, userId],
   );
   return result.rows[0] ?? null;
 }
 
-async function getSessionIdsByUser(userId) {
+async function getGroupIdsByUser(userId) {
   const result = await query(
-    `SELECT session_id FROM session_players WHERE user_id = $1`,
+    `SELECT group_id FROM group_members WHERE user_id = $1`,
     [userId],
   );
-  return result.rows.map((row) => row.session_id);
+  return result.rows.map((row) => row.group_id);
 }
 
-// --- Session functions ---
+// --- Group functions (Tier 2: social layer) ---
 
-async function createSession(name, ownerId, challenge) {
+async function createGroup(name, ownerId) {
   const result = await query(
-    `INSERT INTO game_sessions (name, owner_id, challenge_topic, challenge_focus, challenge_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [name, ownerId, challenge.topic, challenge.focus, challenge.challengeId],
+    `INSERT INTO groups (name, owner_id) VALUES ($1, $2) RETURNING *`,
+    [name, ownerId],
   );
-  const session = result.rows[0];
+  const group = result.rows[0];
   await query(
-    `INSERT INTO session_players (session_id, user_id) VALUES ($1, $2)`,
-    [session.id, ownerId],
+    `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`,
+    [group.id, ownerId],
   );
-  return session;
+  return group;
 }
 
-async function getAllSessions() {
+async function getAllGroups() {
   const result = await query(
-    `SELECT gs.*,
+    `SELECT g.*,
        COALESCE(json_agg(
          json_build_object('uid', u.id, 'name', ${displayNameSql("u")}, 'photoURL', u.photo_url)
-         ORDER BY sp.joined_at
+         ORDER BY gm.joined_at
        ) FILTER (WHERE u.id IS NOT NULL), '[]') AS players
-     FROM game_sessions gs
-     LEFT JOIN session_players sp ON gs.id = sp.session_id
-     LEFT JOIN users u ON sp.user_id = u.id
-     GROUP BY gs.id
-     ORDER BY gs.created_at DESC`,
+     FROM groups g
+     LEFT JOIN group_members gm ON g.id = gm.group_id
+     LEFT JOIN users u ON gm.user_id = u.id
+     GROUP BY g.id
+     ORDER BY g.created_at DESC`,
   );
-  return result.rows.map(formatSession);
+  return result.rows.map(formatGroup);
 }
 
-async function getSessionById(sessionId) {
+async function getGroupById(groupId) {
   const result = await query(
-    `SELECT gs.*,
+    `SELECT g.*,
        COALESCE(json_agg(
          json_build_object('uid', u.id, 'name', ${displayNameSql("u")}, 'photoURL', u.photo_url)
-         ORDER BY sp.joined_at
+         ORDER BY gm.joined_at
        ) FILTER (WHERE u.id IS NOT NULL), '[]') AS players
-     FROM game_sessions gs
-     LEFT JOIN session_players sp ON gs.id = sp.session_id
-     LEFT JOIN users u ON sp.user_id = u.id
-     WHERE gs.id = $1
-     GROUP BY gs.id`,
-    [sessionId],
+     FROM groups g
+     LEFT JOIN group_members gm ON g.id = gm.group_id
+     LEFT JOIN users u ON gm.user_id = u.id
+     WHERE g.id = $1
+     GROUP BY g.id`,
+    [groupId],
   );
-  return result.rows[0] ? formatSession(result.rows[0]) : null;
+  return result.rows[0] ? formatGroup(result.rows[0]) : null;
 }
 
-async function joinSession(sessionId, userId) {
+async function joinGroup(groupId, userId) {
   await query(
-    `INSERT INTO session_players (session_id, user_id)
-     VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [sessionId, userId],
+    `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [groupId, userId],
   );
 }
 
-async function deleteSession(sessionId) {
-  await query("DELETE FROM game_sessions WHERE id = $1", [sessionId]);
+async function deleteGroup(groupId) {
+  await query("DELETE FROM groups WHERE id = $1", [groupId]);
 }
 
-async function updateSessionChallenge(sessionId, topic, focus, challengeId) {
+async function renameGroup(groupId, name) {
+  await query("UPDATE groups SET name = $1 WHERE id = $2", [name, groupId]);
+}
+
+async function removePlayerFromGroup(groupId, userId) {
   await query(
-    `UPDATE game_sessions SET challenge_topic = $1, challenge_focus = $2, challenge_id = $3
-     WHERE id = $4`,
-    [topic, focus, challengeId, sessionId],
+    "DELETE FROM group_members WHERE group_id = $1 AND user_id = $2",
+    [groupId, userId],
   );
 }
 
-async function renameSession(sessionId, name) {
-  await query("UPDATE game_sessions SET name = $1 WHERE id = $2", [
-    name,
-    sessionId,
-  ]);
-}
-
-async function removePlayerFromSession(sessionId, userId) {
-  await query(
-    "DELETE FROM session_players WHERE session_id = $1 AND user_id = $2",
-    [sessionId, userId],
-  );
-}
-
-function formatSession(row) {
+function formatGroup(row) {
   return {
     id: row.id,
     name: row.name,
     ownerId: row.owner_id,
     players: row.players || [],
-    challenge: row.challenge_topic
-      ? { topic: row.challenge_topic, focus: row.challenge_focus }
-      : null,
-    challengeId: row.challenge_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-// --- Migrations ---
-
-async function runMigrations() {
-  await query(
-    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`,
-  );
-  await query(
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_display_name VARCHAR(255)`,
-  );
-  await query(`
-    CREATE TABLE IF NOT EXISTS session_challenge_history (
-      session_id UUID NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
-      challenge_id VARCHAR(10) NOT NULL,
-      topic VARCHAR(500) NOT NULL,
-      focus VARCHAR(500) NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      PRIMARY KEY (session_id, challenge_id)
-    )
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS gauntlets (
-      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      rounds JSONB NOT NULL DEFAULT '[]',
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS gauntlet_runs (
-      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
-      player_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      rounds JSONB NOT NULL DEFAULT '[]',
-      status VARCHAR(20) NOT NULL DEFAULT 'in_progress'
-        CHECK (status IN ('in_progress', 'scoring', 'complete')),
-      total_score INTEGER,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-  await query(
-    `CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`,
-  );
-  await query(
-    `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`,
-  );
-  await query(
-    `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`,
-  );
-  await query(`
-    CREATE TABLE IF NOT EXISTS gauntlet_comments (
-      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
-      run_id UUID NOT NULL REFERENCES gauntlet_runs(id) ON DELETE CASCADE,
-      round_index INTEGER NOT NULL CHECK (round_index >= 0 AND round_index <= 4),
-      author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      text VARCHAR(280) NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-  await query(
-    `CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`,
-  );
-  // Fix notifications constraint — original DB was created without 'reaction' type
-  await query(`
-    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check
-  `);
-  await query(`
-    ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
-      CHECK (type IN ('reaction', 'vote', 'system'))
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS global_daily_challenges (
-      challenge_id VARCHAR(10) PRIMARY KEY,
-      topic VARCHAR(500) NOT NULL,
-      focus VARCHAR(500) NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-  // Migrate bare TIMESTAMP columns to TIMESTAMP WITH TIME ZONE.
-  // USING ... AT TIME ZONE 'UTC' preserves stored values (they were always UTC).
-  const alterToTz = (table, col) =>
-    query(`
-    DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM information_schema.columns
-        WHERE table_name = '${table}' AND column_name = '${col}'
-          AND data_type = 'timestamp without time zone')
-      THEN ALTER TABLE ${table} ALTER COLUMN ${col} TYPE TIMESTAMP WITH TIME ZONE
-        USING ${col} AT TIME ZONE 'UTC'; END IF;
-    END $$
-  `);
-  await alterToTz("users", "created_at");
-  await alterToTz("users", "updated_at");
-  await alterToTz("game_sessions", "created_at");
-  await alterToTz("game_sessions", "updated_at");
-  await alterToTz("session_players", "joined_at");
-  await alterToTz("puns", "created_at");
-  await alterToTz("puns", "updated_at");
-  await alterToTz("pun_reactions", "created_at");
-  await alterToTz("pun_reactions", "updated_at");
-  await alterToTz("messages", "created_at");
-  await alterToTz("pun_comments", "created_at");
-  await alterToTz("notifications", "created_at");
-  await alterToTz("gauntlets", "created_at");
-  await alterToTz("gauntlet_runs", "created_at");
-  await alterToTz("gauntlet_runs", "updated_at");
-
-  // Migrate pun_reactions constraint from 5 reactions to groan-only.
-  // Existing non-groan reactions are deleted first to satisfy the new constraint.
-  await query(`DELETE FROM pun_reactions WHERE reaction != 'groan'`);
-  await query(`
-    DO $$ BEGIN
-      ALTER TABLE pun_reactions DROP CONSTRAINT IF EXISTS pun_reactions_reaction_check;
-      ALTER TABLE pun_reactions ADD CONSTRAINT pun_reactions_reaction_check
-        CHECK (reaction IN ('groan'));
-    END $$
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS gauntlet_messages (
-      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      text VARCHAR(500) NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-  await query(
-    `CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`,
-  );
-  await query(`
-    CREATE TABLE IF NOT EXISTS message_reactions (
-      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-      message_id UUID NOT NULL,
-      message_type VARCHAR(20) NOT NULL CHECK (message_type IN ('chat', 'pun_comment', 'gauntlet_message', 'gauntlet_comment')),
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      reaction VARCHAR(20) NOT NULL CHECK (reaction IN ('laughing', 'skull', 'thumbs_up', 'groan', 'heart')),
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      UNIQUE(message_id, message_type, user_id)
-    )
-  `);
-  await query(
-    `CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`,
-  );
-}
-
-// --- Challenge history functions ---
-
-async function saveChallengeToHistory(sessionId, challengeId, topic, focus) {
-  await query(
-    `INSERT INTO session_challenge_history (session_id, challenge_id, topic, focus)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (session_id, challenge_id) DO UPDATE SET topic = EXCLUDED.topic, focus = EXCLUDED.focus`,
-    [sessionId, challengeId, topic, focus],
-  );
-}
-
-async function getChallengeHistory(sessionId) {
-  const result = await query(
-    `SELECT sch.session_id, sch.challenge_id, sch.topic, sch.focus, sch.created_at,
-       COUNT(p.id)::int AS pun_count
-     FROM session_challenge_history sch
-     LEFT JOIN puns p ON p.session_id = sch.session_id AND p.challenge_id = sch.challenge_id
-     WHERE sch.session_id = $1
-     GROUP BY sch.session_id, sch.challenge_id, sch.topic, sch.focus, sch.created_at
-     ORDER BY sch.challenge_id DESC`,
-    [sessionId],
-  );
-  return result.rows.map((row) => ({
-    challengeId: row.challenge_id,
-    topic: row.topic,
-    focus: row.focus,
-    punCount: row.pun_count,
-    createdAt: row.created_at,
-  }));
-}
-
-async function getPastChallengeTopics(sessionId) {
-  const result = await query(
-    `SELECT topic, focus FROM session_challenge_history WHERE session_id = $1 ORDER BY challenge_id DESC`,
-    [sessionId],
-  );
-  return result.rows.map((row) => ({ topic: row.topic, focus: row.focus }));
-}
-
-async function getChallengeForDate(sessionId, challengeId) {
-  const result = await query(
-    `SELECT topic, focus FROM session_challenge_history WHERE session_id = $1 AND challenge_id = $2`,
-    [sessionId, challengeId],
-  );
-  return result.rows[0] || null;
 }
 
 // --- Global daily challenge functions ---
@@ -460,13 +260,35 @@ async function getPastGlobalChallengeTopics() {
   return result.rows;
 }
 
-// --- Pun functions ---
+// --- Pun functions (Tier 1: global, user-scoped) ---
 
-async function getPunsBySessionAndChallenge(
-  sessionId,
-  challengeId,
-  viewerId = null,
-) {
+async function getPunsForChallenge(challengeId, viewerId = null) {
+  const result = await query(
+    `SELECT p.*,
+       ${displayNameSql("u")} AS author_name,
+       u.photo_url AS author_photo,
+       COUNT(pr.pun_id) AS groan_count,
+       COALESCE(
+         json_agg(
+           json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
+           ORDER BY LOWER(${displayNameSql("ru")}), ru.id
+         ) FILTER (WHERE ru.id IS NOT NULL),
+         '[]'::json
+       ) AS groaners,
+       COUNT(*) FILTER (WHERE pr.user_id = $2) > 0 AS my_groan
+     FROM puns p
+     JOIN users u ON p.author_id = u.id
+     LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
+     LEFT JOIN users ru ON pr.user_id = ru.id
+     WHERE p.challenge_id = $1
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
+     ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
+    [challengeId, viewerId],
+  );
+  return result.rows.map(formatPun);
+}
+
+async function getPunsForChallengeByGroup(challengeId, groupId, viewerId = null) {
   const result = await query(
     `SELECT p.*,
        ${displayNameSql("u")} AS author_name,
@@ -482,27 +304,22 @@ async function getPunsBySessionAndChallenge(
        COUNT(*) FILTER (WHERE pr.user_id = $3) > 0 AS my_groan
      FROM puns p
      JOIN users u ON p.author_id = u.id
+     JOIN group_members gm ON gm.user_id = p.author_id AND gm.group_id = $2
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      LEFT JOIN users ru ON pr.user_id = ru.id
-     WHERE p.session_id = $1 AND p.challenge_id = $2
+     WHERE p.challenge_id = $1
      GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
      ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
-    [sessionId, challengeId, viewerId],
+    [challengeId, groupId, viewerId],
   );
   return result.rows.map(formatPun);
 }
 
-async function createPun(
-  sessionId,
-  challengeId,
-  authorId,
-  text,
-  responseTimeMs,
-) {
+async function createPun(challengeId, authorId, text, responseTimeMs) {
   const result = await query(
-    `INSERT INTO puns (session_id, challenge_id, author_id, text, response_time_ms)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [sessionId, challengeId, authorId, text, responseTimeMs ?? null],
+    `INSERT INTO puns (challenge_id, author_id, text, response_time_ms)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [challengeId, authorId, text, responseTimeMs ?? null],
   );
   return result.rows[0];
 }
@@ -516,9 +333,7 @@ async function updatePunText(punId, text) {
 
 async function updatePunScore(punId, score, feedback) {
   await query(`UPDATE puns SET ai_score = $1, ai_feedback = $2 WHERE id = $3`, [
-    score,
-    feedback,
-    punId,
+    score, feedback, punId,
   ]);
 }
 
@@ -533,13 +348,9 @@ async function getPunById(punId) {
 
 async function setPunReaction(punId, userId, reaction) {
   if (!reaction) {
-    await query(
-      "DELETE FROM pun_reactions WHERE pun_id = $1 AND user_id = $2",
-      [punId, userId],
-    );
+    await query("DELETE FROM pun_reactions WHERE pun_id = $1 AND user_id = $2", [punId, userId]);
     return null;
   }
-
   const result = await query(
     `INSERT INTO pun_reactions (pun_id, user_id, reaction)
      VALUES ($1, $2, $3)
@@ -565,56 +376,40 @@ async function getPunsByAuthor(authorId) {
          '[]'::json
        ) AS groaners,
        FALSE AS my_groan,
-       MAX(COALESCE(gdc.topic, sch.topic)) AS challenge_topic,
-       MAX(COALESCE(gdc.focus, sch.focus)) AS challenge_focus
+       gdc.topic AS challenge_topic,
+       gdc.focus AS challenge_focus
      FROM puns p
      JOIN users u ON p.author_id = u.id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      LEFT JOIN users ru ON pr.user_id = ru.id
      LEFT JOIN global_daily_challenges gdc ON p.challenge_id = gdc.challenge_id
-     LEFT JOIN session_challenge_history sch ON p.session_id = sch.session_id AND p.challenge_id = sch.challenge_id
      WHERE p.author_id = $1
-     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, gdc.topic, gdc.focus
      ORDER BY p.created_at DESC`,
     [authorId],
   );
   return result.rows.map(formatPun);
 }
 
-async function hasUserSubmittedForChallenge(sessionId, challengeId, userId) {
+async function hasUserSubmittedForChallenge(challengeId, userId) {
   const result = await query(
-    `SELECT 1 FROM puns WHERE session_id = $1 AND challenge_id = $2 AND author_id = $3 LIMIT 1`,
-    [sessionId, challengeId, userId],
+    `SELECT 1 FROM puns WHERE challenge_id = $1 AND author_id = $2 LIMIT 1`,
+    [challengeId, userId],
   );
   return result.rows.length > 0;
 }
 
-async function countPunsByAuthorInSession(sessionId, challengeId, authorId) {
+async function countPunsByAuthorForChallenge(challengeId, authorId) {
   const result = await query(
-    "SELECT COUNT(*) FROM puns WHERE session_id = $1 AND challenge_id = $2 AND author_id = $3",
-    [sessionId, challengeId, authorId],
+    "SELECT COUNT(*) FROM puns WHERE challenge_id = $1 AND author_id = $2",
+    [challengeId, authorId],
   );
   return parseInt(result.rows[0].count, 10);
-}
-
-async function getMinPunCountInSession(sessionId, challengeId) {
-  const result = await query(
-    `SELECT COALESCE(MIN(cnt), 0) AS min_count FROM (
-       SELECT COUNT(p.id) AS cnt
-       FROM session_players sp
-       LEFT JOIN puns p ON p.author_id = sp.user_id AND p.session_id = sp.session_id AND p.challenge_id = $2
-       WHERE sp.session_id = $1
-       GROUP BY sp.user_id
-     ) sub`,
-    [sessionId, challengeId],
-  );
-  return parseInt(result.rows[0].min_count, 10);
 }
 
 function formatPun(row) {
   return {
     id: row.id,
-    sessionId: row.session_id,
     challengeId: row.challenge_id,
     authorId: row.author_id,
     authorName: row.author_name,
@@ -634,7 +429,6 @@ function formatPun(row) {
 
 function formatGroaners(groaners) {
   if (!Array.isArray(groaners)) return [];
-
   return groaners
     .map((groaner) => ({
       uid: Number(groaner?.uid),
@@ -643,8 +437,8 @@ function formatGroaners(groaners) {
     .filter((groaner) => Number.isFinite(groaner.uid) && groaner.name);
 }
 
-// Returns each player's best AI score per day for a given week, plus weekly total (drop lowest).
-async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
+// Weekly best scores filtered by group membership
+async function getWeeklyBestScores(groupId, weekStart, weekEnd) {
   const result = await query(
     `SELECT
        u.id AS author_id,
@@ -654,16 +448,15 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
        MAX(p.ai_score) AS daily_best
      FROM puns p
      JOIN users u ON u.id = p.author_id
-     WHERE p.session_id = $1
-       AND p.challenge_id >= $2
+     JOIN group_members gm ON gm.user_id = p.author_id AND gm.group_id = $1
+     WHERE p.challenge_id >= $2
        AND p.challenge_id <= $3
        AND p.ai_score IS NOT NULL
      GROUP BY u.id, ${displayNameSql("u")}, u.photo_url, p.challenge_id
      ORDER BY u.id, p.challenge_id`,
-    [sessionId, weekStart, weekEnd],
+    [groupId, weekStart, weekEnd],
   );
 
-  // Group rows by player
   const playerMap = new Map();
   for (const row of result.rows) {
     const key = row.author_id;
@@ -678,7 +471,6 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
     playerMap.get(key).dailyScores[row.date] = parseFloat(row.daily_best);
   }
 
-  // Compute weekly total: sum of daily bests minus the single lowest
   return Array.from(playerMap.values()).map((player) => {
     const scores = Object.values(player.dailyScores);
     const sum = scores.reduce((a, b) => a + b, 0);
@@ -687,12 +479,11 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
   });
 }
 
-// Global leaderboard: perfect 10s for a given challenge date, ordered by groan count
+// Global daily ranking
 async function getGlobalDailyRanking(challengeId) {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.created_at,
        ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
-       gs.name AS session_name,
        COALESCE(
          json_agg(
            json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
@@ -703,11 +494,10 @@ async function getGlobalDailyRanking(challengeId) {
        COUNT(pr.pun_id) AS groan_count
      FROM puns p
      JOIN users u ON u.id = p.author_id
-     JOIN game_sessions gs ON gs.id = p.session_id
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.challenge_id = $1 AND p.ai_score IS NOT NULL
-    GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, gs.name
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
      ORDER BY p.ai_score DESC, groan_count DESC, p.created_at ASC
      LIMIT 50`,
     [challengeId],
@@ -715,12 +505,11 @@ async function getGlobalDailyRanking(challengeId) {
   return result.rows.map(formatLeaderboardRow);
 }
 
-// All-time: top puns (score >= 7) across all time, ordered by total groans
+// All-time top groaners
 async function getGlobalAllTimeGroaners() {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
        ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
-       gs.name AS session_name,
        COALESCE(
          json_agg(
            json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
@@ -731,11 +520,10 @@ async function getGlobalAllTimeGroaners() {
        COUNT(pr.pun_id) AS groan_count
      FROM puns p
      JOIN users u ON u.id = p.author_id
-     JOIN game_sessions gs ON gs.id = p.session_id
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.ai_score >= 7.0
-      GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, gs.name
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
      ORDER BY groan_count DESC, p.created_at ASC
      LIMIT 50`,
   );
@@ -750,31 +538,30 @@ function formatLeaderboardRow(row) {
     challengeId: row.challenge_id || null,
     authorName: row.author_name,
     authorPhoto: row.author_photo,
-    sessionName: row.session_name,
     groanCount: Number(row.groan_count || 0),
     groaners: formatGroaners(row.groaners),
     createdAt: row.created_at,
   };
 }
 
-// --- Message functions ---
+// --- Message functions (group-scoped) ---
 
-async function getMessagesBySession(sessionId) {
+async function getMessagesByGroup(groupId) {
   const result = await query(
     `SELECT m.*, ${displayNameSql("u")} AS user_name, u.photo_url AS user_photo
      FROM messages m
      JOIN users u ON m.user_id = u.id
-     WHERE m.session_id = $1
+     WHERE m.group_id = $1
      ORDER BY m.created_at ASC`,
-    [sessionId],
+    [groupId],
   );
   return result.rows.map(formatMessage);
 }
 
-async function createMessage(sessionId, userId, text) {
+async function createMessage(groupId, userId, text) {
   const result = await query(
-    `INSERT INTO messages (session_id, user_id, text) VALUES ($1, $2, $3) RETURNING *`,
-    [sessionId, userId, text],
+    `INSERT INTO messages (group_id, user_id, text) VALUES ($1, $2, $3) RETURNING *`,
+    [groupId, userId, text],
   );
   return result.rows[0];
 }
@@ -782,7 +569,7 @@ async function createMessage(sessionId, userId, text) {
 function formatMessage(row) {
   return {
     id: row.id,
-    sessionId: row.session_id,
+    groupId: row.group_id,
     userId: row.user_id,
     userName: row.user_name,
     userPhoto: row.user_photo,
@@ -791,19 +578,7 @@ function formatMessage(row) {
   };
 }
 
-// --- Comment functions ---
-
-async function getCommentsBySession(sessionId) {
-  const result = await query(
-    `SELECT pc.*, ${displayNameSql("u")} AS user_name, u.photo_url AS user_photo
-     FROM pun_comments pc
-     JOIN users u ON pc.user_id = u.id
-     WHERE pc.session_id = $1
-     ORDER BY pc.created_at ASC`,
-    [sessionId],
-  );
-  return result.rows.map(formatComment);
-}
+// --- Comment functions (no group scope) ---
 
 async function getCommentsByPun(punId) {
   const result = await query(
@@ -817,10 +592,23 @@ async function getCommentsByPun(punId) {
   return result.rows.map(formatComment);
 }
 
-async function createComment(punId, sessionId, userId, text) {
+async function getCommentsForPuns(punIds) {
+  if (!punIds.length) return [];
   const result = await query(
-    `INSERT INTO pun_comments (pun_id, session_id, user_id, text) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [punId, sessionId, userId, text],
+    `SELECT pc.*, ${displayNameSql("u")} AS user_name, u.photo_url AS user_photo
+     FROM pun_comments pc
+     JOIN users u ON pc.user_id = u.id
+     WHERE pc.pun_id = ANY($1)
+     ORDER BY pc.created_at ASC`,
+    [punIds],
+  );
+  return result.rows.map(formatComment);
+}
+
+async function createComment(punId, userId, text) {
+  const result = await query(
+    `INSERT INTO pun_comments (pun_id, user_id, text) VALUES ($1, $2, $3) RETURNING *`,
+    [punId, userId, text],
   );
   return result.rows[0];
 }
@@ -829,7 +617,6 @@ function formatComment(row) {
   return {
     id: row.id,
     punId: row.pun_id,
-    sessionId: row.session_id,
     userId: row.user_id,
     userName: row.user_name,
     userPhoto: row.user_photo,
@@ -857,9 +644,7 @@ async function createNotification(userId, type, message, link) {
 }
 
 async function markNotificationRead(notificationId) {
-  await query("UPDATE notifications SET read = TRUE WHERE id = $1", [
-    notificationId,
-  ]);
+  await query("UPDATE notifications SET read = TRUE WHERE id = $1", [notificationId]);
 }
 
 function formatNotification(row) {
@@ -874,7 +659,7 @@ function formatNotification(row) {
   };
 }
 
-// --- Gauntlet functions ---
+// --- Gauntlet functions (Tier 3) ---
 
 async function createGauntlet(userId, rounds) {
   const result = await query(
@@ -898,19 +683,11 @@ async function createGauntletRun(gauntletId, playerId) {
 }
 
 async function getGauntletRunById(runId) {
-  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [
-    runId,
-  ]);
+  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [runId]);
   return result.rows[0] ? formatGauntletRun(result.rows[0]) : null;
 }
 
-// Atomic JSONB append — WHERE clause on array length guards against out-of-order submissions
-async function submitGauntletRound(
-  runId,
-  roundIndex,
-  punText,
-  secondsRemaining,
-) {
+async function submitGauntletRound(runId, roundIndex, punText, secondsRemaining) {
   const newEntry = {
     pun_text: punText,
     ai_score: null,
@@ -929,15 +706,7 @@ async function submitGauntletRound(
   return formatGauntletRun(result.rows[0]);
 }
 
-// Transaction + FOR UPDATE serialises concurrent Gemini scoring callbacks.
-// Without the lock, two callbacks that SELECT before either UPDATEs would
-// silently overwrite each other's scores.
-async function updateGauntletRoundScore(
-  runId,
-  roundIndex,
-  aiScore,
-  aiFeedback,
-) {
+async function updateGauntletRoundScore(runId, roundIndex, aiScore, aiFeedback) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT rounds FROM gauntlet_runs WHERE id = $1 FOR UPDATE`,
@@ -962,7 +731,6 @@ async function updateGauntletRoundScore(
   });
 }
 
-// SQL-level status guard prevents double-finalization from concurrent callbacks
 async function finalizeGauntletRun(runId, totalScore) {
   const result = await query(
     `UPDATE gauntlet_runs
@@ -983,12 +751,9 @@ async function setGauntletRunScoring(runId) {
 }
 
 async function getGauntletComparison(gauntletId) {
-  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [
-    gauntletId,
-  ]);
+  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [gauntletId]);
   if (!gauntletResult.rows[0]) return null;
   const gauntlet = formatGauntlet(gauntletResult.rows[0]);
-
   const runsResult = await query(
     `SELECT gr.id, gr.player_id, gr.rounds, gr.total_score, gr.created_at,
             ${displayNameSql("u")} AS player_name, u.photo_url
@@ -998,7 +763,6 @@ async function getGauntletComparison(gauntletId) {
      ORDER BY gr.total_score DESC NULLS LAST`,
     [gauntletId],
   );
-
   return {
     ...gauntlet,
     runs: runsResult.rows.map((row) => ({
@@ -1029,19 +793,14 @@ async function getUserGauntletHistory(userId, limit = 20) {
          ) ORDER BY gr.total_score DESC NULLS LAST
        ) AS participants
      FROM gauntlets g
-     JOIN gauntlet_runs my_run
-       ON my_run.gauntlet_id = g.id
-      AND my_run.player_id = $1
-      AND my_run.status = 'complete'
-     JOIN gauntlet_runs gr
-       ON gr.gauntlet_id = g.id AND gr.status = 'complete'
+     JOIN gauntlet_runs my_run ON my_run.gauntlet_id = g.id AND my_run.player_id = $1 AND my_run.status = 'complete'
+     JOIN gauntlet_runs gr ON gr.gauntlet_id = g.id AND gr.status = 'complete'
      JOIN users u ON u.id = gr.player_id
      GROUP BY g.id, my_run.id, my_run.total_score, my_run.created_at
      ORDER BY my_run.created_at DESC
      LIMIT $2`,
     [userId, limit],
   );
-
   return result.rows.map((row) => ({
     gauntletId: row.gauntlet_id,
     myRunId: row.my_run_id,
@@ -1067,19 +826,14 @@ async function getGauntletLeaderboard(userId, limit = 50) {
          ) ORDER BY gr.total_score DESC NULLS LAST
        ) AS participants
      FROM gauntlets g
-     JOIN gauntlet_runs my_run
-       ON my_run.gauntlet_id = g.id
-      AND my_run.player_id = $1
-      AND my_run.status = 'complete'
-     JOIN gauntlet_runs gr
-       ON gr.gauntlet_id = g.id AND gr.status = 'complete'
+     JOIN gauntlet_runs my_run ON my_run.gauntlet_id = g.id AND my_run.player_id = $1 AND my_run.status = 'complete'
+     JOIN gauntlet_runs gr ON gr.gauntlet_id = g.id AND gr.status = 'complete'
      JOIN users u ON u.id = gr.player_id
      GROUP BY g.id, my_run.id, my_run.total_score, my_run.created_at
      ORDER BY my_run.total_score DESC NULLS LAST
      LIMIT $2`,
     [userId, limit],
   );
-
   return result.rows.map((row) => ({
     gauntletId: row.gauntlet_id,
     myRunId: row.my_run_id,
@@ -1089,13 +843,7 @@ async function getGauntletLeaderboard(userId, limit = 50) {
   }));
 }
 
-async function addGauntletComment(
-  gauntletId,
-  runId,
-  roundIndex,
-  authorId,
-  text,
-) {
+async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text) {
   const result = await query(
     `INSERT INTO gauntlet_comments (gauntlet_id, run_id, round_index, author_id, text)
      VALUES ($1, $2, $3, $4, $5)
@@ -1201,8 +949,7 @@ async function getMessageReactions(messageIds, messageType) {
   );
   const map = {};
   for (const row of result.rows) {
-    if (!map[row.message_id])
-      map[row.message_id] = { counts: {}, userReactions: {} };
+    if (!map[row.message_id]) map[row.message_id] = { counts: {}, userReactions: {} };
     map[row.message_id].counts[row.reaction] = row.count;
     for (const uid of row.user_ids) {
       map[row.message_id].userReactions[uid] = row.reaction;
@@ -1231,89 +978,253 @@ async function setMessageReaction(messageId, messageType, userId, reaction) {
 }
 
 function formatGauntlet(row) {
-  return {
-    id: row.id,
-    createdBy: row.created_by,
-    rounds: row.rounds,
-    createdAt: row.created_at,
-  };
+  return { id: row.id, createdBy: row.created_by, rounds: row.rounds, createdAt: row.created_at };
 }
 
 function formatGauntletRun(row) {
   return {
-    id: row.id,
-    gauntletId: row.gauntlet_id,
-    playerId: row.player_id,
-    rounds: row.rounds,
-    status: row.status,
-    totalScore: row.total_score,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    id: row.id, gauntletId: row.gauntlet_id, playerId: row.player_id,
+    rounds: row.rounds, status: row.status, totalScore: row.total_score,
+    createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
 
+// --- Migrations ---
+
+async function runMigrations() {
+  // --- Structural migration: game_sessions -> groups ---
+  const oldTableExists = await query(`
+    SELECT 1 FROM pg_class WHERE relname = 'game_sessions' AND relkind = 'r'
+  `);
+
+  if (oldTableExists.rows.length > 0) {
+    console.log("[Migration] Migrating game_sessions -> groups architecture...");
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS groups (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+
+    const groupCount = await query(`SELECT COUNT(*) FROM groups`);
+    if (parseInt(groupCount.rows[0].count, 10) === 0) {
+      await query(`
+        INSERT INTO groups (id, name, owner_id, created_at, updated_at)
+        SELECT id, name, owner_id, created_at, updated_at FROM game_sessions
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS group_members (
+        group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (group_id, user_id)
+      )
+    `);
+
+    const memberCount = await query(`SELECT COUNT(*) FROM group_members`);
+    if (parseInt(memberCount.rows[0].count, 10) === 0) {
+      await query(`
+        INSERT INTO group_members (group_id, user_id, joined_at)
+        SELECT sp.session_id, sp.user_id, sp.joined_at
+        FROM session_players sp
+        WHERE EXISTS (SELECT 1 FROM groups g WHERE g.id = sp.session_id)
+        ON CONFLICT (group_id, user_id) DO NOTHING
+      `);
+    }
+
+    // Decouple puns from sessions
+    const hasPunsSessionId = await query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name = 'puns' AND column_name = 'session_id'
+    `);
+    if (hasPunsSessionId.rows.length > 0) {
+      await query(`ALTER TABLE puns DROP COLUMN IF EXISTS session_id`);
+    }
+
+    // Drop session_id from pun_comments
+    const hasCommentsSessionId = await query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name = 'pun_comments' AND column_name = 'session_id'
+    `);
+    if (hasCommentsSessionId.rows.length > 0) {
+      await query(`ALTER TABLE pun_comments DROP COLUMN IF EXISTS session_id`);
+    }
+
+    // Migrate messages.session_id -> messages.group_id
+    const hasMsgSessionId = await query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'session_id'
+    `);
+    const hasMsgGroupId = await query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'group_id'
+    `);
+    if (hasMsgSessionId.rows.length > 0 && hasMsgGroupId.rows.length === 0) {
+      await query(`ALTER TABLE messages RENAME COLUMN session_id TO group_id`);
+      await query(`ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_session_id_fkey`);
+      await query(`
+        ALTER TABLE messages ADD CONSTRAINT messages_group_id_fkey
+        FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+      `);
+    }
+
+    console.log("[Migration] Structural migration complete.");
+  }
+
+  // --- Standard idempotent migrations ---
+  await query(`ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_display_name VARCHAR(255)`);
+
+  const usersToNormalize = await query(`SELECT id, display_name, custom_display_name FROM users`);
+  for (const user of usersToNormalize.rows) {
+    const nd = normalizeDisplayNameInput(user.display_name);
+    const nc = normalizeDisplayNameInput(user.custom_display_name);
+    if (nd === user.display_name && nc === user.custom_display_name) continue;
+    await query(
+      `UPDATE users SET display_name = $1, custom_display_name = $2, updated_at = NOW() WHERE id = $3`,
+      [nd, nc, user.id],
+    );
+  }
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlets (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      rounds JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_runs (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
+      player_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      rounds JSONB NOT NULL DEFAULT '[]',
+      status VARCHAR(20) NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'scoring', 'complete')),
+      total_score INTEGER,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_comments (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
+      run_id UUID NOT NULL REFERENCES gauntlet_runs(id) ON DELETE CASCADE,
+      round_index INTEGER NOT NULL CHECK (round_index >= 0 AND round_index <= 4),
+      author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text VARCHAR(280) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`);
+  await query(`ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check`);
+  await query(`ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN ('reaction', 'vote', 'system'))`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS global_daily_challenges (
+      challenge_id VARCHAR(10) PRIMARY KEY,
+      topic VARCHAR(500) NOT NULL,
+      focus VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  const alterToTz = (table, col) =>
+    query(`
+    DO $fn$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_name = '${table}' AND column_name = '${col}'
+          AND data_type = 'timestamp without time zone')
+      THEN ALTER TABLE ${table} ALTER COLUMN ${col} TYPE TIMESTAMP WITH TIME ZONE
+        USING ${col} AT TIME ZONE 'UTC'; END IF;
+    END $fn$
+  `);
+  await alterToTz("users", "created_at");
+  await alterToTz("users", "updated_at");
+  await alterToTz("groups", "created_at");
+  await alterToTz("groups", "updated_at");
+  await alterToTz("group_members", "joined_at");
+  await alterToTz("puns", "created_at");
+  await alterToTz("puns", "updated_at");
+  await alterToTz("pun_reactions", "created_at");
+  await alterToTz("pun_reactions", "updated_at");
+  await alterToTz("messages", "created_at");
+  await alterToTz("pun_comments", "created_at");
+  await alterToTz("notifications", "created_at");
+  await alterToTz("gauntlets", "created_at");
+  await alterToTz("gauntlet_runs", "created_at");
+  await alterToTz("gauntlet_runs", "updated_at");
+
+  await query(`DELETE FROM pun_reactions WHERE reaction != 'groan'`);
+  await query(`
+    DO $fn$ BEGIN
+      ALTER TABLE pun_reactions DROP CONSTRAINT IF EXISTS pun_reactions_reaction_check;
+      ALTER TABLE pun_reactions ADD CONSTRAINT pun_reactions_reaction_check CHECK (reaction IN ('groan'));
+    END $fn$
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_messages (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      message_id UUID NOT NULL,
+      message_type VARCHAR(20) NOT NULL CHECK (message_type IN ('chat', 'pun_comment', 'gauntlet_message', 'gauntlet_comment')),
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reaction VARCHAR(20) NOT NULL CHECK (reaction IN ('laughing', 'skull', 'thumbs_up', 'groan', 'heart')),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(message_id, message_type, user_id)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`);
+
+  // Indexes for three-tier architecture
+  await query(`CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_puns_challenge ON puns(challenge_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_puns_author_challenge ON puns(author_id, challenge_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id)`);
+
+  await query(`
+    DO $fn$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'groups' AND relkind = 'r') THEN
+        DROP TRIGGER IF EXISTS update_groups_updated_at ON groups;
+        CREATE TRIGGER update_groups_updated_at BEFORE UPDATE ON groups
+          FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      END IF;
+    END $fn$
+  `);
+}
+
 export {
-  pool,
-  query,
-  withTransaction,
-  getEffectiveDisplayName,
-  runMigrations,
-  findOrCreateUser,
-  getUserById,
-  updateCustomDisplayName,
-  getSessionIdsByUser,
-  createSession,
-  getAllSessions,
-  getSessionById,
-  joinSession,
-  deleteSession,
-  updateSessionChallenge,
-  renameSession,
-  removePlayerFromSession,
-  saveChallengeToHistory,
-  getChallengeHistory,
-  getPastChallengeTopics,
-  getChallengeForDate,
-  getGlobalChallengeForDate,
-  saveGlobalChallenge,
-  getPastGlobalChallengeTopics,
-  hasUserSubmittedForChallenge,
-  getPunsBySessionAndChallenge,
-  createPun,
-  updatePunText,
-  updatePunScore,
-  deletePun,
-  getPunById,
-  setPunReaction,
-  getPunsByAuthor,
-  countPunsByAuthorInSession,
-  getMinPunCountInSession,
-  getWeeklyBestScores,
-  getGlobalDailyRanking,
-  getGlobalAllTimeGroaners,
-  getMessagesBySession,
-  createMessage,
-  getCommentsBySession,
-  getCommentsByPun,
-  createComment,
-  getNotificationsByUser,
-  createNotification,
-  markNotificationRead,
-  createGauntlet,
-  getGauntletById,
-  createGauntletRun,
-  getGauntletRunById,
-  submitGauntletRound,
-  updateGauntletRoundScore,
-  finalizeGauntletRun,
-  setGauntletRunScoring,
-  getGauntletComparison,
-  getUserGauntletHistory,
-  getGauntletLeaderboard,
-  addGauntletComment,
-  getGauntletComments,
-  getGauntletMessages,
-  createGauntletMessage,
-  getMessageReactions,
-  setMessageReaction,
+  pool, query, withTransaction,
+  getEffectiveDisplayName, normalizeDisplayNameInput, runMigrations,
+  findOrCreateUser, getUserById, updateCustomDisplayName, getGroupIdsByUser,
+  createGroup, getAllGroups, getGroupById, joinGroup, deleteGroup, renameGroup, removePlayerFromGroup,
+  getGlobalChallengeForDate, saveGlobalChallenge, getPastGlobalChallengeTopics,
+  hasUserSubmittedForChallenge, getPunsForChallenge, getPunsForChallengeByGroup,
+  createPun, updatePunText, updatePunScore, deletePun, getPunById,
+  setPunReaction, getPunsByAuthor, countPunsByAuthorForChallenge,
+  getWeeklyBestScores, getGlobalDailyRanking, getGlobalAllTimeGroaners,
+  getMessagesByGroup, createMessage,
+  getCommentsByPun, getCommentsForPuns, createComment,
+  getNotificationsByUser, createNotification, markNotificationRead,
+  createGauntlet, getGauntletById, createGauntletRun, getGauntletRunById,
+  submitGauntletRound, updateGauntletRoundScore, finalizeGauntletRun, setGauntletRunScoring,
+  getGauntletComparison, getUserGauntletHistory, getGauntletLeaderboard,
+  addGauntletComment, getGauntletComments, getGauntletMessages, createGauntletMessage,
+  getMessageReactions, setMessageReaction,
 };

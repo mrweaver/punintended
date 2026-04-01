@@ -4,6 +4,12 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.12.0] - 2026-04-01
+
+### Added
+
+- **Custom Profile Display Names:** Users can now set a display name from their profile, and that custom name is shown across sessions, chat, comments, leaderboards, gauntlet views, and groan summaries.
+
 ## [1.11.0] - 2026-03-31
 
 ### Added

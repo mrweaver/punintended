@@ -4,6 +4,21 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.13.0] - 2026-04-02
+
+### Added
+
+- **Three-Tier Architecture:** Decoupled daily challenges from groups into a global system. Puns are now submitted globally per-challenge; groups provide social filtered views and leaderboards.
+- **Redesigned Lobby:** Community pulse tiles showing daily leader, hall of fame, and gauntlet pace. Dashboard stats with live group/player counts.
+- **Gauntlet Sharing:** Gauntlet comparison and receipt pages now include a share flow via upgraded ShareModal with copy-to-clipboard and native share API.
+- **Header Redesign:** Dropdown menu with profile, changelog, about links, and gauntlet shortcut.
+
+### Changed
+
+- **API Routes:** Sessions endpoints replaced with `/api/groups` and `/api/daily`. Pun submission no longer requires a group ID.
+- **Database Schema:** `game_sessions` → `groups`, `session_players` → `group_members`, new `global_daily_challenges` table. Automatic migration on startup.
+- **Challenge History:** Now browses past 14 days client-side instead of per-group history.
+
 ## [1.12.0] - 2026-04-01
 
 ### Added

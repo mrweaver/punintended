@@ -8,11 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- Expanded reactions, groaner details, gauntlet chat, and leaderboard views across the app.
+- **Chat and Comment Reactions:** Long-press reactions now work in group chat, pun comment threads, and gauntlet chat.
+- **Groaner Popovers:** Groan counts now reveal who reacted across pun cards, profile history, and leaderboard entries.
+- **Gauntlet Chat:** Gauntlet comparison pages now include a dedicated chat thread with reactions.
+- **Gauntlet Leaderboard:** Global leaderboards now include a gauntlet tab showing your runs ranked by score.
+
+### Changed
+
+- **Daily Leaderboard Format:** The daily leaderboard now ranks all scored puns by AI score instead of splitting results into crown and shame lists.
+- **Header Navigation:** The header now includes a direct Gauntlet shortcut and closes open notification menus when switching views.
+- **Login Feedback:** Google sign-in redirects now show a temporary success or failure banner.
 
 ### Fixed
 
-- Changelog modal now closes on Escape and backdrop clicks.
+- **Modal Dismissal:** Changelog, About, and Profile modals now close on Escape and backdrop clicks.
 
 ## [1.10.0] - 2026-03-31
 

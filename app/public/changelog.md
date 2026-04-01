@@ -4,6 +4,31 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.12.0] - 2026-04-01
+
+### Added
+
+- **Custom Profile Display Names:** Users can now set a display name from their profile, and that custom name is shown across sessions, chat, comments, leaderboards, gauntlet views, and groan summaries.
+
+## [1.11.0] - 2026-03-31
+
+### Added
+
+- **Chat and Comment Reactions:** Long-press reactions now work in group chat, pun comment threads, and gauntlet chat.
+- **Groaner Popovers:** Groan counts now reveal who reacted across pun cards, profile history, and leaderboard entries.
+- **Gauntlet Chat:** Gauntlet comparison pages now include a dedicated chat thread with reactions.
+- **Gauntlet Leaderboard:** Global leaderboards now include a gauntlet tab showing your runs ranked by score.
+
+### Changed
+
+- **Daily Leaderboard Format:** The daily leaderboard now ranks all scored puns by AI score instead of splitting results into crown and shame lists.
+- **Header Navigation:** The header now includes a direct Gauntlet shortcut and closes open notification menus when switching views.
+- **Login Feedback:** Google sign-in redirects now show a temporary success or failure banner.
+
+### Fixed
+
+- **Modal Dismissal:** Changelog, About, and Profile modals now close on Escape and backdrop clicks.
+
 ## [1.10.0] - 2026-03-31
 
 ### Added

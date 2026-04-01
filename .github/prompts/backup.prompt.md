@@ -27,16 +27,19 @@ Phase 2: Atomic Commits
 Phase 3: Smart Versioning and Changelog
 
 12. Determine the highest required release bump from the commits created in Phase 2:
-   - any `feat:` commit means a minor bump
-   - otherwise any `fix:` commit means a patch bump
-   - otherwise skip versioning
-   - if the user supplied an override argument, use that instead
+
+- any `feat:` commit means a minor bump
+- otherwise any `fix:` commit means a patch bump
+- otherwise skip versioning
+- if the user supplied an override argument, use that instead
+
 13. For a patch or minor bump:
-   - update only `app/package.json`
-   - add a new top-level dated entry to `CHANGELOG.md` in descending version order
-   - summarize each feature commit as a bullet in the changelog
-   - commit the version files as `chore(release): vX.Y.Z`
-   - create the matching git tag `vX.Y.Z`
+
+- update only `app/package.json`
+- add a new top-level dated entry to `CHANGELOG.md` in descending version order
+- summarize each feature commit as a bullet in the changelog
+- commit the version files as `chore(release): vX.Y.Z`
+- create the matching git tag `vX.Y.Z`
 
 Phase 4: Push
 

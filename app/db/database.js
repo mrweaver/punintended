@@ -69,12 +69,32 @@ async function withTransaction(fn) {
   }
 }
 
+function normalizeDisplayNameInput(name) {
+  if (typeof name !== "string") return null;
+
+  const normalized = name.replace(/\s+/g, " ").trim();
+  return normalized || null;
+}
+
+function displayNameSql(alias) {
+  return `COALESCE(${alias}.custom_display_name, ${alias}.display_name)`;
+}
+
+function getEffectiveDisplayName(user) {
+  return (
+    normalizeDisplayNameInput(user?.custom_display_name) ??
+    normalizeDisplayNameInput(user?.display_name) ??
+    "Unknown"
+  );
+}
+
 // --- User functions ---
 
 async function findOrCreateUser(googleProfile) {
   const { id: googleId, emails, displayName, photos } = googleProfile;
   const email = emails && emails[0] ? emails[0].value : null;
   const photoUrl = photos && photos[0] ? photos[0].value : null;
+  const googleDisplayName = normalizeDisplayNameInput(displayName);
 
   if (!email) throw new Error("Email not provided by Google");
 
@@ -86,7 +106,7 @@ async function findOrCreateUser(googleProfile) {
     result = await query(
       `UPDATE users SET display_name = $1, photo_url = $2, email = $3, updated_at = NOW()
        WHERE google_id = $4 RETURNING *`,
-      [displayName, photoUrl, email, googleId],
+      [googleDisplayName, photoUrl, email, googleId],
     );
     return result.rows[0];
   }
@@ -94,7 +114,7 @@ async function findOrCreateUser(googleProfile) {
   result = await query(
     `INSERT INTO users (google_id, email, display_name, photo_url)
      VALUES ($1, $2, $3, $4) RETURNING *`,
-    [googleId, email, displayName, photoUrl],
+    [googleId, email, googleDisplayName, photoUrl],
   );
   return result.rows[0];
 }
@@ -102,6 +122,26 @@ async function findOrCreateUser(googleProfile) {
 async function getUserById(userId) {
   const result = await query("SELECT * FROM users WHERE id = $1", [userId]);
   return result.rows[0];
+}
+
+async function updateCustomDisplayName(userId, customDisplayName) {
+  const normalizedDisplayName = normalizeDisplayNameInput(customDisplayName);
+  const result = await query(
+    `UPDATE users
+     SET custom_display_name = $1, updated_at = NOW()
+     WHERE id = $2
+     RETURNING *`,
+    [normalizedDisplayName, userId],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function getSessionIdsByUser(userId) {
+  const result = await query(
+    `SELECT session_id FROM session_players WHERE user_id = $1`,
+    [userId],
+  );
+  return result.rows.map((row) => row.session_id);
 }
 
 // --- Session functions ---
@@ -124,7 +164,7 @@ async function getAllSessions() {
   const result = await query(
     `SELECT gs.*,
        COALESCE(json_agg(
-         json_build_object('uid', u.id, 'name', u.display_name, 'photoURL', u.photo_url)
+         json_build_object('uid', u.id, 'name', ${displayNameSql("u")}, 'photoURL', u.photo_url)
          ORDER BY sp.joined_at
        ) FILTER (WHERE u.id IS NOT NULL), '[]') AS players
      FROM game_sessions gs
@@ -140,7 +180,7 @@ async function getSessionById(sessionId) {
   const result = await query(
     `SELECT gs.*,
        COALESCE(json_agg(
-         json_build_object('uid', u.id, 'name', u.display_name, 'photoURL', u.photo_url)
+         json_build_object('uid', u.id, 'name', ${displayNameSql("u")}, 'photoURL', u.photo_url)
          ORDER BY sp.joined_at
        ) FILTER (WHERE u.id IS NOT NULL), '[]') AS players
      FROM game_sessions gs
@@ -207,6 +247,9 @@ function formatSession(row) {
 async function runMigrations() {
   await query(
     `ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`,
+  );
+  await query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_display_name VARCHAR(255)`,
   );
   await query(`
     CREATE TABLE IF NOT EXISTS session_challenge_history (
@@ -426,13 +469,13 @@ async function getPunsBySessionAndChallenge(
 ) {
   const result = await query(
     `SELECT p.*,
-       u.display_name AS author_name,
+       ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
        COALESCE(
          json_agg(
-           json_build_object('uid', ru.id, 'name', ru.display_name)
-           ORDER BY ru.display_name, ru.id
+           json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
+           ORDER BY LOWER(${displayNameSql("ru")}), ru.id
          ) FILTER (WHERE ru.id IS NOT NULL),
          '[]'::json
        ) AS groaners,
@@ -442,7 +485,7 @@ async function getPunsBySessionAndChallenge(
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.session_id = $1 AND p.challenge_id = $2
-     GROUP BY p.id, u.display_name, u.photo_url
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
      ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
     [sessionId, challengeId, viewerId],
   );
@@ -511,13 +554,13 @@ async function setPunReaction(punId, userId, reaction) {
 async function getPunsByAuthor(authorId) {
   const result = await query(
     `SELECT p.*,
-       u.display_name AS author_name,
+       ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
        COALESCE(
          json_agg(
-           json_build_object('uid', ru.id, 'name', ru.display_name)
-           ORDER BY ru.display_name, ru.id
+           json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
+           ORDER BY LOWER(${displayNameSql("ru")}), ru.id
          ) FILTER (WHERE ru.id IS NOT NULL),
          '[]'::json
        ) AS groaners,
@@ -531,7 +574,7 @@ async function getPunsByAuthor(authorId) {
      LEFT JOIN global_daily_challenges gdc ON p.challenge_id = gdc.challenge_id
      LEFT JOIN session_challenge_history sch ON p.session_id = sch.session_id AND p.challenge_id = sch.challenge_id
      WHERE p.author_id = $1
-     GROUP BY p.id, u.display_name, u.photo_url
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
      ORDER BY p.created_at DESC`,
     [authorId],
   );
@@ -605,7 +648,7 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
   const result = await query(
     `SELECT
        u.id AS author_id,
-       u.display_name AS author_name,
+       ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        p.challenge_id AS date,
        MAX(p.ai_score) AS daily_best
@@ -615,7 +658,7 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
        AND p.challenge_id >= $2
        AND p.challenge_id <= $3
        AND p.ai_score IS NOT NULL
-     GROUP BY u.id, u.display_name, u.photo_url, p.challenge_id
+     GROUP BY u.id, ${displayNameSql("u")}, u.photo_url, p.challenge_id
      ORDER BY u.id, p.challenge_id`,
     [sessionId, weekStart, weekEnd],
   );
@@ -648,12 +691,12 @@ async function getWeeklyBestScores(sessionId, weekStart, weekEnd) {
 async function getGlobalDailyRanking(challengeId) {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.created_at,
-       u.display_name AS author_name, u.photo_url AS author_photo,
+       ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
        gs.name AS session_name,
        COALESCE(
          json_agg(
-           json_build_object('uid', ru.id, 'name', ru.display_name)
-           ORDER BY ru.display_name, ru.id
+           json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
+           ORDER BY LOWER(${displayNameSql("ru")}), ru.id
          ) FILTER (WHERE ru.id IS NOT NULL),
          '[]'::json
        ) AS groaners,
@@ -664,7 +707,7 @@ async function getGlobalDailyRanking(challengeId) {
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.challenge_id = $1 AND p.ai_score IS NOT NULL
-     GROUP BY p.id, u.display_name, u.photo_url, gs.name
+    GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, gs.name
      ORDER BY p.ai_score DESC, groan_count DESC, p.created_at ASC
      LIMIT 50`,
     [challengeId],
@@ -676,12 +719,12 @@ async function getGlobalDailyRanking(challengeId) {
 async function getGlobalAllTimeGroaners() {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
-       u.display_name AS author_name, u.photo_url AS author_photo,
+       ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
        gs.name AS session_name,
        COALESCE(
          json_agg(
-           json_build_object('uid', ru.id, 'name', ru.display_name)
-           ORDER BY ru.display_name, ru.id
+           json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
+           ORDER BY LOWER(${displayNameSql("ru")}), ru.id
          ) FILTER (WHERE ru.id IS NOT NULL),
          '[]'::json
        ) AS groaners,
@@ -692,7 +735,7 @@ async function getGlobalAllTimeGroaners() {
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.ai_score >= 7.0
-     GROUP BY p.id, u.display_name, u.photo_url, gs.name
+      GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, gs.name
      ORDER BY groan_count DESC, p.created_at ASC
      LIMIT 50`,
   );
@@ -718,7 +761,7 @@ function formatLeaderboardRow(row) {
 
 async function getMessagesBySession(sessionId) {
   const result = await query(
-    `SELECT m.*, u.display_name AS user_name, u.photo_url AS user_photo
+    `SELECT m.*, ${displayNameSql("u")} AS user_name, u.photo_url AS user_photo
      FROM messages m
      JOIN users u ON m.user_id = u.id
      WHERE m.session_id = $1
@@ -752,7 +795,7 @@ function formatMessage(row) {
 
 async function getCommentsBySession(sessionId) {
   const result = await query(
-    `SELECT pc.*, u.display_name AS user_name, u.photo_url AS user_photo
+    `SELECT pc.*, ${displayNameSql("u")} AS user_name, u.photo_url AS user_photo
      FROM pun_comments pc
      JOIN users u ON pc.user_id = u.id
      WHERE pc.session_id = $1
@@ -764,7 +807,7 @@ async function getCommentsBySession(sessionId) {
 
 async function getCommentsByPun(punId) {
   const result = await query(
-    `SELECT pc.*, u.display_name AS user_name, u.photo_url AS user_photo
+    `SELECT pc.*, ${displayNameSql("u")} AS user_name, u.photo_url AS user_photo
      FROM pun_comments pc
      JOIN users u ON pc.user_id = u.id
      WHERE pc.pun_id = $1
@@ -948,7 +991,7 @@ async function getGauntletComparison(gauntletId) {
 
   const runsResult = await query(
     `SELECT gr.id, gr.player_id, gr.rounds, gr.total_score, gr.created_at,
-            u.display_name, u.photo_url
+            ${displayNameSql("u")} AS player_name, u.photo_url
      FROM gauntlet_runs gr
      JOIN users u ON u.id = gr.player_id
      WHERE gr.gauntlet_id = $1 AND gr.status = 'complete'
@@ -961,7 +1004,7 @@ async function getGauntletComparison(gauntletId) {
     runs: runsResult.rows.map((row) => ({
       id: row.id,
       playerId: row.player_id,
-      playerName: row.display_name,
+      playerName: row.player_name,
       playerPhoto: row.photo_url,
       rounds: row.rounds,
       totalScore: row.total_score,
@@ -980,7 +1023,7 @@ async function getUserGauntletHistory(userId, limit = 20) {
        json_agg(
          json_build_object(
            'playerId', gr.player_id,
-           'playerName', u.display_name,
+           'playerName', ${displayNameSql("u")},
            'playerPhoto', u.photo_url,
            'totalScore', gr.total_score
          ) ORDER BY gr.total_score DESC NULLS LAST
@@ -1018,7 +1061,7 @@ async function getGauntletLeaderboard(userId, limit = 50) {
        json_agg(
          json_build_object(
            'playerId', gr.player_id,
-           'playerName', u.display_name,
+           'playerName', ${displayNameSql("u")},
            'playerPhoto', u.photo_url,
            'totalScore', gr.total_score
          ) ORDER BY gr.total_score DESC NULLS LAST
@@ -1061,7 +1104,7 @@ async function addGauntletComment(
   );
   const row = result.rows[0];
   const userResult = await query(
-    `SELECT display_name, photo_url FROM users WHERE id = $1`,
+    `SELECT display_name, custom_display_name, photo_url FROM users WHERE id = $1`,
     [authorId],
   );
   const user = userResult.rows[0];
@@ -1071,7 +1114,7 @@ async function addGauntletComment(
     runId: row.run_id,
     roundIndex: row.round_index,
     authorId: row.author_id,
-    authorName: user?.display_name ?? "Unknown",
+    authorName: getEffectiveDisplayName(user),
     authorPhoto: user?.photo_url ?? "",
     text: row.text,
     createdAt: row.created_at,
@@ -1081,7 +1124,7 @@ async function addGauntletComment(
 async function getGauntletComments(gauntletId) {
   const result = await query(
     `SELECT gc.id, gc.gauntlet_id, gc.run_id, gc.round_index, gc.author_id,
-            gc.text, gc.created_at, u.display_name, u.photo_url
+            gc.text, gc.created_at, ${displayNameSql("u")} AS author_name, u.photo_url
      FROM gauntlet_comments gc
      JOIN users u ON u.id = gc.author_id
      WHERE gc.gauntlet_id = $1
@@ -1094,7 +1137,7 @@ async function getGauntletComments(gauntletId) {
     runId: row.run_id,
     roundIndex: row.round_index,
     authorId: row.author_id,
-    authorName: row.display_name,
+    authorName: row.author_name,
     authorPhoto: row.photo_url,
     text: row.text,
     createdAt: row.created_at,
@@ -1104,7 +1147,7 @@ async function getGauntletComments(gauntletId) {
 async function getGauntletMessages(gauntletId) {
   const result = await query(
     `SELECT gm.id, gm.gauntlet_id, gm.user_id, gm.text, gm.created_at,
-            u.display_name, u.photo_url
+            ${displayNameSql("u")} AS user_name, u.photo_url
      FROM gauntlet_messages gm
      JOIN users u ON u.id = gm.user_id
      WHERE gm.gauntlet_id = $1
@@ -1115,7 +1158,7 @@ async function getGauntletMessages(gauntletId) {
     id: row.id,
     gauntletId: row.gauntlet_id,
     userId: row.user_id,
-    userName: row.display_name,
+    userName: row.user_name,
     userPhoto: row.photo_url,
     text: row.text,
     createdAt: row.created_at,
@@ -1131,7 +1174,7 @@ async function createGauntletMessage(gauntletId, userId, text) {
   );
   const row = result.rows[0];
   const userResult = await query(
-    `SELECT display_name, photo_url FROM users WHERE id = $1`,
+    `SELECT display_name, custom_display_name, photo_url FROM users WHERE id = $1`,
     [userId],
   );
   const user = userResult.rows[0];
@@ -1139,7 +1182,7 @@ async function createGauntletMessage(gauntletId, userId, text) {
     id: row.id,
     gauntletId: row.gauntlet_id,
     userId: row.user_id,
-    userName: user?.display_name ?? "Unknown",
+    userName: getEffectiveDisplayName(user),
     userPhoto: user?.photo_url ?? "",
     text: row.text,
     createdAt: row.created_at,
@@ -1213,9 +1256,12 @@ export {
   pool,
   query,
   withTransaction,
+  getEffectiveDisplayName,
   runMigrations,
   findOrCreateUser,
   getUserById,
+  updateCustomDisplayName,
+  getSessionIdsByUser,
   createSession,
   getAllSessions,
   getSessionById,

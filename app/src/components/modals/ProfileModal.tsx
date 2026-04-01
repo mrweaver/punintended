@@ -64,11 +64,14 @@ const SORT_OPTIONS: { label: string; value: SortField }[] = [
 ];
 
 export function ProfileModal({ onClose }: ProfileModalProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateDisplayName } = useAuth();
   const [userPuns, setUserPuns] = useState<Pun[]>([]);
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<SortField>("date");
+  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
   const [expandedPunId, setExpandedPunId] = useState<string | null>(null);
   const [punComments, setPunComments] = useState<Record<string, PunComment[]>>(
     {},
@@ -89,6 +92,13 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    setDisplayNameInput(user.customDisplayName ?? "");
+    setDisplayNameError(null);
+  }, [user]);
 
   const streak = useMemo(() => calculateStreak(userPuns), [userPuns]);
 
@@ -158,6 +168,32 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
 
   if (!user) return null;
 
+  const normalizedDisplayNameInput = displayNameInput.replace(/\s+/g, " ").trim();
+  const savedCustomDisplayName = user.customDisplayName ?? "";
+  const hasDisplayNameChanges = normalizedDisplayNameInput !== savedCustomDisplayName;
+
+  const handleDisplayNameSave = async () => {
+    if (!hasDisplayNameChanges || isSavingDisplayName) return;
+
+    setIsSavingDisplayName(true);
+    setDisplayNameError(null);
+
+    try {
+      await updateDisplayName(displayNameInput);
+    } catch (error) {
+      setDisplayNameError(
+        error instanceof Error ? error.message : "Failed to update display name",
+      );
+    } finally {
+      setIsSavingDisplayName(false);
+    }
+  };
+
+  const resetDisplayNameInput = () => {
+    setDisplayNameInput(user.customDisplayName ?? "");
+    setDisplayNameError(null);
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4"
@@ -192,9 +228,73 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
           />
           <div className="flex-1 w-full text-center sm:text-left">
             <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
-              <h3 className="text-3xl font-serif italic font-bold dark:text-zinc-100">
-                {user.displayName}
-              </h3>
+              <div className="w-full sm:w-auto">
+                <h3 className="text-3xl font-serif italic font-bold dark:text-zinc-100">
+                  {user.displayName}
+                </h3>
+                <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/60">
+                  <label
+                    htmlFor="profile-display-name"
+                    className="block text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-zinc-400"
+                  >
+                    Display Name
+                  </label>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      id="profile-display-name"
+                      type="text"
+                      value={displayNameInput}
+                      maxLength={255}
+                      onChange={(event) => {
+                        setDisplayNameInput(event.target.value);
+                        if (displayNameError) setDisplayNameError(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleDisplayNameSave();
+                        }
+
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          resetDisplayNameInput();
+                        }
+                      }}
+                      placeholder={user.googleDisplayName ?? "Use your Google name"}
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-orange-300 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-violet-500"
+                    />
+                    <div className="flex gap-2 sm:flex-shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={handleDisplayNameSave}
+                        disabled={!hasDisplayNameChanges}
+                        loading={isSavingDisplayName}
+                        className="flex-1 sm:flex-none"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={resetDisplayNameInput}
+                        disabled={!hasDisplayNameChanges || isSavingDisplayName}
+                        className="flex-1 sm:flex-none"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-zinc-400">
+                    Leave this blank to use your Google name
+                    {user.googleDisplayName ? ` (${user.googleDisplayName})` : ""}.
+                  </p>
+                  {displayNameError && (
+                    <p className="mt-2 text-xs font-medium text-red-500 dark:text-red-400">
+                      {displayNameError}
+                    </p>
+                  )}
+                </div>
+              </div>
               {/* sm:pr-10 keeps buttons clear of the close button on desktop */}
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:pr-10">
                 <Button

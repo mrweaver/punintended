@@ -10,8 +10,10 @@ import passport from "./auth/passport.js";
 import { GoogleGenAI, Type } from "@google/genai";
 import {
   pool,
+  getEffectiveDisplayName,
   getAllSessions,
   getSessionById,
+  getSessionIdsByUser,
   createSession,
   joinSession,
   deleteSession,
@@ -62,6 +64,7 @@ import {
   getMessageReactions,
   setMessageReaction,
   runMigrations,
+  updateCustomDisplayName,
 } from "./db/database.js";
 
 const pgSession = connectPgSimple(session);
@@ -71,6 +74,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const UMAMI_BASE_URL = process.env.UMAMI_BASE_URL || "http://umami:3000";
+
+const MAX_DISPLAY_NAME_LENGTH = 255;
 
 // --- Gemini AI ---
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -387,6 +392,31 @@ function clearTypingStatus(sessionId, userId) {
   typingStatus.get(sessionId)?.delete(String(userId));
 }
 
+function refreshTypingDisplayName(userId, name) {
+  const userKey = String(userId);
+
+  for (const [sessionId, statusMap] of typingStatus.entries()) {
+    const existing = statusMap.get(userKey);
+    if (!existing) continue;
+
+    statusMap.set(userKey, { ...existing, name });
+    broadcastTypingUpdate(sessionId);
+  }
+}
+
+function formatAuthUser(user) {
+  if (!user) return null;
+
+  return {
+    uid: user.id,
+    displayName: getEffectiveDisplayName(user),
+    customDisplayName: user.custom_display_name ?? null,
+    googleDisplayName: user.display_name ?? null,
+    photoURL: user.photo_url,
+    email: user.email,
+  };
+}
+
 // Heartbeat every 30s to prevent proxy timeouts
 setInterval(() => {
   for (const [, clients] of sessionClients) {
@@ -565,12 +595,7 @@ app.post("/auth/logout", (req, res) => {
 app.get("/auth/user", (req, res) => {
   if (!req.user) return res.json({ user: null });
   res.json({
-    user: {
-      uid: req.user.id,
-      displayName: req.user.display_name,
-      photoURL: req.user.photo_url,
-      email: req.user.email,
-    },
+    user: formatAuthUser(req.user),
   });
 });
 
@@ -880,7 +905,8 @@ app.post("/api/sessions/:id/puns", ensureAuthenticated, async (req, res) => {
 app.post("/api/sessions/:id/typing", ensureAuthenticated, (req, res) => {
   const { status } = req.body;
   const sessionId = req.params.id;
-  const { id: userId, display_name: name, photo_url: photoURL } = req.user;
+  const { id: userId, photo_url: photoURL } = req.user;
+  const name = getEffectiveDisplayName(req.user);
 
   if (status === "idle") {
     clearTypingStatus(sessionId, userId);
@@ -986,7 +1012,7 @@ app.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
       await createNotification(
         pun.author_id,
         "reaction",
-        `${req.user.display_name || "Someone"} groaned at your pun: "${punText}"`,
+        `${getEffectiveDisplayName(req.user)} groaned at your pun: "${punText}"`,
         pun.session_id,
       );
       broadcastNotificationUpdate(pun.author_id);
@@ -1193,6 +1219,51 @@ app.get("/api/profile/puns", ensureAuthenticated, async (req, res) => {
   } catch (error) {
     console.error("Failed to get profile puns:", error);
     res.status(500).json({ error: "Failed to get profile puns" });
+  }
+});
+
+app.put("/api/profile/display-name", ensureAuthenticated, async (req, res) => {
+  const rawDisplayName = typeof req.body?.displayName === "string"
+    ? req.body.displayName
+    : "";
+  const normalizedDisplayName = rawDisplayName.replace(/\s+/g, " ").trim();
+
+  if (normalizedDisplayName.length > MAX_DISPLAY_NAME_LENGTH) {
+    return res.status(400).json({
+      error: `Display name too long (max ${MAX_DISPLAY_NAME_LENGTH} chars)`,
+    });
+  }
+
+  try {
+    const updatedUser = await updateCustomDisplayName(
+      req.user.id,
+      normalizedDisplayName,
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    refreshTypingDisplayName(req.user.id, getEffectiveDisplayName(updatedUser));
+
+    const sessionIds = await getSessionIdsByUser(req.user.id);
+    for (const sessionId of sessionIds) {
+      const session = await getSessionById(sessionId);
+      if (!session) continue;
+
+      await broadcastSessionUpdate(sessionId);
+      await broadcastMessagesUpdate(sessionId);
+      await broadcastCommentsUpdate(sessionId);
+
+      if (session.challengeId) {
+        await broadcastPunsUpdate(sessionId, session.challengeId);
+      }
+    }
+
+    res.json({ user: formatAuthUser(updatedUser) });
+  } catch (error) {
+    console.error("Failed to update display name:", error);
+    res.status(500).json({ error: "Failed to update display name" });
   }
 });
 

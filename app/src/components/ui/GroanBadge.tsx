@@ -224,15 +224,8 @@ function buildGroanSummary(
 function formatNameList(names: string[]) {
   if (!names || names.length === 0) return "";
 
-  // Helper to convert strings to Proper Noun Case (e.g., "john doe" -> "John Doe")
-  const toProperCase = (str: string) =>
-    str.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
 
-  const properNames = names.map(toProperCase);
-
-  if (properNames.length === 1) return properNames[0];
-  if (properNames.length === 2)
-    return `${properNames[0]} and ${properNames[1]}`;
-
-  return `${properNames.slice(0, -1).join(", ")}, and ${properNames[properNames.length - 1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }

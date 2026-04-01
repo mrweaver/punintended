@@ -136,6 +136,11 @@ export const notificationsApi = {
 // Profile
 export const profileApi = {
   getPuns: () => request<Pun[]>("/api/profile/puns"),
+  updateDisplayName: (displayName: string) =>
+    request<{ user: AuthUser }>("/api/profile/display-name", {
+      method: "PUT",
+      body: JSON.stringify({ displayName }),
+    }),
 };
 
 // Leaderboards
@@ -296,6 +301,8 @@ export const gauntletApi = {
 export interface AuthUser {
   uid: number;
   displayName: string;
+  customDisplayName: string | null;
+  googleDisplayName: string | null;
   photoURL: string;
   email: string;
 }

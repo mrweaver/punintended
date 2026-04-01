@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authApi, type AuthUser } from '../api/client';
+import { authApi, profileApi, type AuthUser } from '../api/client';
 
 interface AuthContextValue {
   user: AuthUser | null;
   isReady: boolean;
   login: () => void;
   logout: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -13,6 +14,9 @@ const AuthContext = createContext<AuthContextValue>({
   isReady: false,
   login: () => {},
   logout: async () => {},
+  updateDisplayName: async () => {
+    throw new Error('AuthContext not initialized');
+  },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -41,8 +45,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('pun_session_id');
   };
 
+  const updateDisplayName = async (displayName: string) => {
+    const { user: updatedUser } = await profileApi.updateDisplayName(displayName);
+    setUser(updatedUser);
+    return updatedUser;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isReady, login, logout }}>
+    <AuthContext.Provider value={{ user, isReady, login, logout, updateDisplayName }}>
       {children}
     </AuthContext.Provider>
   );

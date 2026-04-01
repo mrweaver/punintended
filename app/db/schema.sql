@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     google_id VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255),
     display_name VARCHAR(255),
+    custom_display_name VARCHAR(255),
     photo_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

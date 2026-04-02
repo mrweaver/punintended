@@ -45,27 +45,25 @@ function CommentBubble({
       <img
         src={comment.userPhoto || ""}
         alt={comment.userName}
-        className="w-6 h-6 rounded-full border border-gray-200 dark:border-zinc-700 shrink-0"
+        className="w-6 h-6 rounded-full border border-border-strong shrink-0"
       />
       <div className="flex-1 min-w-0 relative">
         <div
           {...longPressHandlers}
-          className="bg-gray-50 dark:bg-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-2 select-none"
+          className="bg-surface-muted rounded-2xl rounded-tl-sm px-4 py-2 select-none"
         >
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold text-gray-900 dark:text-zinc-200">
+            <span className="text-xs font-bold text-text">
               {comment.userName}
             </span>
-            <span className="text-[10px] text-gray-400 dark:text-zinc-500">
+            <span className="text-[10px] text-text-muted">
               {new Date(comment.createdAt).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
             </span>
           </div>
-          <p className="text-sm text-gray-700 dark:text-zinc-300">
-            {comment.text}
-          </p>
+          <p className="text-sm text-text-secondary">{comment.text}</p>
         </div>
         <ReactionSummary reactions={comment.reactions ?? {}} />
         <AnimatePresence>
@@ -132,14 +130,14 @@ export function PunCard({
         }
       }}
       viewport={{ once: true, amount: 0.3 }}
-      className="bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 flex flex-col gap-3"
+      className="bg-surface p-4 rounded-2xl shadow-sm border border-border flex flex-col gap-3"
     >
       {/* Header */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-bold text-gray-900 dark:text-zinc-100 truncate max-w-[120px] sm:max-w-none">
+        <span className="font-bold text-text truncate max-w-[120px] sm:max-w-none">
           {pun.authorName}
         </span>
-        <span className="text-xs text-gray-400 dark:text-zinc-500 whitespace-nowrap">
+        <span className="text-xs text-text-muted whitespace-nowrap">
           •{" "}
           {new Date(pun.createdAt).toLocaleTimeString([], {
             hour: "2-digit",
@@ -147,7 +145,7 @@ export function PunCard({
           })}
         </span>
         {pun.responseTimeMs != null && (
-          <span className="text-xs text-gray-400 dark:text-zinc-500 whitespace-nowrap">
+          <span className="text-xs text-text-muted whitespace-nowrap">
             •{" "}
             {pun.responseTimeMs >= 60000
               ? `${Math.floor(pun.responseTimeMs / 60000)}m ${Math.round((pun.responseTimeMs % 60000) / 1000)}s`
@@ -155,7 +153,7 @@ export function PunCard({
           </span>
         )}
         {!pun.viewed && (
-          <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-violet-900/50 dark:text-violet-200">
+          <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-warning-subtle text-warning">
             New
           </span>
         )}
@@ -167,7 +165,7 @@ export function PunCard({
                 setIsEditing(true);
                 setEditText(pun.text);
               }}
-              className="p-1.5 text-gray-400 hover:text-orange-500 dark:hover:text-violet-500 hover:bg-orange-50 dark:hover:bg-violet-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-text-muted hover:text-accent hover:bg-accent-subtle rounded-lg transition-colors"
             >
               <Pencil className="w-4 h-4" />
             </button>
@@ -176,7 +174,7 @@ export function PunCard({
                 e.stopPropagation();
                 onDelete(pun.id);
               }}
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+              className="p-1.5 text-text-muted hover:text-danger hover:bg-danger-subtle rounded-lg transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -190,7 +188,7 @@ export function PunCard({
           <textarea
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
-            className="w-full p-3 sm:p-4 text-lg font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl border border-gray-200 dark:border-zinc-800 focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[80px] resize-none"
+            className="w-full p-3 sm:p-4 text-lg font-serif italic bg-surface-muted text-text rounded-xl border border-border-strong focus:ring-2 focus:ring-accent-ring min-h-[80px] resize-none"
           />
           <div className="flex gap-2 justify-end">
             <Button
@@ -219,25 +217,22 @@ export function PunCard({
           </div>
         </div>
       ) : (
-        <p className="text-xl sm:text-2xl font-serif italic text-gray-800 dark:text-zinc-200">
+        <p className="text-xl sm:text-2xl font-serif italic text-text">
           "{pun.text}"
         </p>
       )}
 
       {/* AI feedback */}
       {pun.aiScore !== undefined && pun.aiScore !== null && !isEditing && (
-        <div className="flex items-start gap-3 p-3 bg-orange-50 dark:bg-violet-900/20 rounded-xl">
-          <Logo
-            className="w-4 h-4 text-orange-500 dark:text-violet-400 shrink-0 mt-0.5"
-            accent
-          />
+        <div className="flex items-start gap-3 p-3 bg-accent-subtle rounded-xl">
+          <Logo className="w-4 h-4 text-accent shrink-0 mt-0.5" accent />
           <div>
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-sm font-bold text-orange-700 dark:text-violet-300">
+              <span className="text-sm font-bold text-accent-foreground">
                 AI Score: {pun.aiScore}/10
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">
+            <p className="text-xs sm:text-sm text-accent italic">
               {pun.aiFeedback}
             </p>
           </div>
@@ -245,12 +240,12 @@ export function PunCard({
       )}
 
       {pun.aiFeedback === "Re-evaluating..." && !isEditing && (
-        <div className="flex items-start gap-3 p-3 bg-orange-50 dark:bg-violet-900/20 rounded-xl">
+        <div className="flex items-start gap-3 p-3 bg-accent-subtle rounded-xl">
           <Logo
-            className="w-4 h-4 text-orange-500 dark:text-violet-400 shrink-0 mt-0.5 animate-spin"
+            className="w-4 h-4 text-accent shrink-0 mt-0.5 animate-spin"
             accent
           />
-          <p className="text-xs sm:text-sm text-orange-600 dark:text-violet-400/80 italic">
+          <p className="text-xs sm:text-sm text-accent italic">
             Re-evaluating...
           </p>
         </div>
@@ -277,12 +272,12 @@ export function PunCard({
             }
             className={`group flex items-center text-sm transition-all disabled:cursor-default ${
               pun.myReaction
-                ? "text-orange-600 dark:text-violet-400 opacity-100"
+                ? "text-accent-foreground opacity-100"
                 : `disabled:opacity-50 ${
                     pun.groanCount > 0
-                      ? "text-gray-600 dark:text-zinc-400 opacity-100"
-                      : "text-gray-400 dark:text-zinc-500 opacity-80"
-                  } ${!isAuthor && "hover:text-gray-800 dark:hover:text-zinc-200"}`
+                      ? "text-text-secondary opacity-100"
+                      : "text-text-muted opacity-80"
+                  } ${!isAuthor && "hover:text-text"}`
             }`}
           >
             <span
@@ -307,10 +302,10 @@ export function PunCard({
                 count={pun.groanCount}
                 groaners={pun.groaners}
                 showIcon={false}
-                triggerClassName={`inline-flex items-center rounded-md text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:focus-visible:ring-violet-500 ${
+                triggerClassName={`inline-flex items-center rounded-md text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${
                   pun.myReaction
-                    ? "font-medium text-orange-600 dark:text-violet-400"
-                    : "font-medium text-gray-600 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    ? "font-medium text-accent-foreground"
+                    : "font-medium text-text-secondary hover:text-text"
                 }`}
               />
             </motion.div>
@@ -326,8 +321,8 @@ export function PunCard({
           }}
           className={`flex items-center gap-1.5 text-sm transition-colors ${
             isExpanded
-              ? "text-orange-500 dark:text-violet-500"
-              : "text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300"
+              ? "text-accent"
+              : "text-text-muted hover:text-text-secondary"
           }`}
         >
           <MessageCircle
@@ -349,11 +344,11 @@ export function PunCard({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden border-t border-gray-100 dark:border-zinc-800 pt-3"
+            className="overflow-hidden border-t border-border pt-3"
           >
             <div className="space-y-3 mb-3">
               {comments.length === 0 ? (
-                <p className="text-sm text-gray-400 dark:text-zinc-500 italic text-center py-2">
+                <p className="text-sm text-text-muted italic text-center py-2">
                   No comments yet. Be the first!
                 </p>
               ) : (
@@ -372,12 +367,12 @@ export function PunCard({
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Add a comment..."
-                className="flex-1 bg-transparent border-b border-gray-200 dark:border-zinc-800 text-gray-900 dark:text-zinc-100 px-2 py-2 text-sm focus:outline-none focus:border-orange-500 dark:focus:border-violet-500 transition-colors"
+                className="flex-1 bg-transparent border-b border-border-strong text-text px-2 py-2 text-sm focus:outline-none focus:border-accent transition-colors"
               />
               <Button
                 variant="ghost"
                 type="submit"
-                className="p-2 rounded-full min-w-[36px] h-[36px] flex items-center justify-center text-orange-500 dark:text-violet-500 hover:bg-orange-50 dark:hover:bg-violet-900/20"
+                className="p-2 rounded-full min-w-[36px] h-[36px] flex items-center justify-center text-accent hover:bg-accent-subtle"
               >
                 <Send className="w-4 h-4" />
               </Button>

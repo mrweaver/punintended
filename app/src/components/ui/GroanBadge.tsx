@@ -98,7 +98,7 @@ export function GroanBadge({
         aria-describedby={canOpen && open ? popoverId : undefined}
         className={
           triggerClassName ??
-          "inline-flex items-center gap-1 rounded-md text-sm font-semibold text-orange-500 transition-colors hover:text-orange-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:text-violet-400 dark:hover:text-violet-300 dark:focus-visible:ring-violet-500"
+          "inline-flex items-center gap-1 rounded-md text-sm font-semibold text-accent transition-colors hover:text-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
         }
         onClick={(event) => {
           event.stopPropagation();
@@ -142,11 +142,11 @@ export function GroanBadge({
               y: popoverPosition === "above" ? 4 : -4,
             }}
             transition={{ duration: 0.15 }}
-            className={`absolute z-50 min-w-40 max-w-64 rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-800 ${
+            className={`absolute z-50 min-w-40 max-w-64 rounded-2xl border border-border-strong bg-surface px-3 py-2 shadow-lg ${
               popoverPosition === "above" ? "bottom-full mb-2" : "top-full mt-2"
             } ${popoverAlign === "right" ? "right-0" : "left-0"}`}
           >
-            <p className="text-sm font-medium text-gray-700 dark:text-zinc-200 whitespace-nowrap">
+            <p className="text-sm font-medium text-text whitespace-nowrap">
               {summaryText}
             </p>
           </motion.div>

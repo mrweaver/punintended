@@ -34,16 +34,14 @@ function CommunityPreviewTile({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/60 p-4 sm:p-5 space-y-2 min-h-[168px]">
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-orange-500 dark:text-violet-400">
+    <div className="rounded-2xl border border-border bg-surface-muted p-4 sm:p-5 space-y-2 min-h-[168px]">
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
         {eyebrow}
       </p>
-      <p className="font-serif italic text-lg text-zinc-900 dark:text-zinc-100 leading-snug">
+      <p className="font-serif italic text-lg text-text leading-snug">
         {title}
       </p>
-      <p className="text-sm text-gray-500 dark:text-zinc-400 leading-relaxed">
-        {detail}
-      </p>
+      <p className="text-sm text-text-secondary leading-relaxed">{detail}</p>
     </div>
   );
 }
@@ -92,9 +90,7 @@ export function SessionLobby({
     dailyApi.getChallenge(todayId).then(setChallenge).catch(console.error);
   }, [todayId]);
 
-  const revealKey = challenge
-    ? `pun-reveal:${challenge.challengeId}`
-    : null;
+  const revealKey = challenge ? `pun-reveal:${challenge.challengeId}` : null;
 
   const [revealTimestamp, setRevealTimestamp] = useState<number | null>(() => {
     if (typeof window === "undefined") return null;
@@ -179,7 +175,7 @@ export function SessionLobby({
       {/* ── Section 1: Today's Challenge Hero ── */}
       <Card className="relative overflow-hidden">
         <div className="space-y-4">
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-orange-500 dark:text-violet-400">
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-accent">
             Today&apos;s Challenge &middot;{" "}
             {new Date().toLocaleDateString("en-AU", {
               weekday: "long",
@@ -197,7 +193,7 @@ export function SessionLobby({
                 exit={{ opacity: 0 }}
                 className="py-8 text-center"
               >
-                <p className="text-lg text-gray-400 dark:text-zinc-500 font-serif italic">
+                <p className="text-lg text-text-muted font-serif italic">
                   Loading today&apos;s challenge&hellip;
                 </p>
               </motion.div>
@@ -209,14 +205,17 @@ export function SessionLobby({
                 exit={{ opacity: 0, y: -10 }}
                 className="py-6 sm:py-10 flex flex-col items-center text-center gap-4"
               >
-                <h1 className="text-3xl sm:text-5xl font-serif italic text-zinc-900 dark:text-zinc-100">
+                <h1 className="text-3xl sm:text-5xl font-serif italic text-text">
                   Ready to play?
                 </h1>
-                <p className="text-sm sm:text-base text-gray-500 dark:text-zinc-400 max-w-md leading-relaxed">
+                <p className="text-sm sm:text-base text-text-secondary max-w-md leading-relaxed">
                   Your timer starts the moment you reveal the challenge. Take a
                   breath, then hit the button when you&apos;re ready.
                 </p>
-                <Button onClick={handleReveal} className="mt-2 px-8 py-4 text-lg">
+                <Button
+                  onClick={handleReveal}
+                  className="mt-2 px-8 py-4 text-lg"
+                >
                   <Eye className="w-5 h-5" />
                   Begin Today&apos;s Challenge
                 </Button>
@@ -236,9 +235,9 @@ export function SessionLobby({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
                     whileHover={{ rotate: -1 }}
-                    className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden border border-transparent dark:border-zinc-700"
+                    className="bg-surface-inverse text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden"
                   >
-                    <p className="text-orange-500 dark:text-violet-400 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+                    <p className="text-accent font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
                       Topic
                     </p>
                     <h2 className="text-2xl sm:text-4xl font-serif italic">
@@ -250,7 +249,7 @@ export function SessionLobby({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: 0.05 }}
                     whileHover={{ rotate: 1 }}
-                    className="bg-orange-500 dark:bg-violet-600 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden border border-transparent dark:border-violet-500"
+                    className="bg-accent text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden"
                   >
                     <p className="text-white/60 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
                       Focus
@@ -262,7 +261,7 @@ export function SessionLobby({
                 </div>
 
                 {/* Pun submission form */}
-                <div className="rounded-2xl border-2 border-orange-100 dark:border-violet-900/50 bg-white dark:bg-zinc-900 p-4 sm:p-5 space-y-3">
+                <div className="rounded-2xl border-2 border-accent-border bg-surface p-4 sm:p-5 space-y-3">
                   <textarea
                     placeholder={
                       attemptsLeft === 0
@@ -278,16 +277,18 @@ export function SessionLobby({
                         handleSubmitPun();
                       }
                     }}
-                    className="w-full p-4 text-lg font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[80px] sm:min-h-[100px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full p-4 text-lg font-serif italic bg-surface-muted text-text rounded-xl border-none focus:ring-2 focus:ring-accent-ring min-h-[80px] sm:min-h-[100px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <p className="text-xs text-gray-500 dark:text-zinc-400">
+                    <p className="text-xs text-text-secondary">
                       {attemptsLeft} attempt{attemptsLeft !== 1 ? "s" : ""}{" "}
                       remaining &middot; Ctrl+Enter to submit
                     </p>
                     <Button
                       onClick={handleSubmitPun}
-                      disabled={!punText.trim() || submitting || attemptsLeft === 0}
+                      disabled={
+                        !punText.trim() || submitting || attemptsLeft === 0
+                      }
                       loading={submitting}
                     >
                       <Send className="w-4 h-4" />
@@ -298,14 +299,14 @@ export function SessionLobby({
 
                 {/* Today's leader preview */}
                 {todayLeader && (
-                  <div className="rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/60 p-4 space-y-1">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gray-400 dark:text-zinc-500">
+                  <div className="rounded-2xl border border-border bg-surface-muted p-4 space-y-1">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
                       Leading pun today
                     </p>
-                    <p className="font-serif italic text-base text-zinc-900 dark:text-zinc-100 leading-snug">
+                    <p className="font-serif italic text-base text-text leading-snug">
                       &ldquo;{truncateCopy(todayLeader.text, 100)}&rdquo;
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-zinc-400">
+                    <p className="text-xs text-text-secondary">
                       {todayLeader.authorName} &middot; {todayLeader.aiScore}/10
                     </p>
                   </div>
@@ -326,7 +327,7 @@ export function SessionLobby({
               value={newSessionName}
               onChange={(e) => setNewSessionName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 transition-all"
+              className="flex-1 px-4 py-3 rounded-xl border border-border-strong bg-surface text-text focus:outline-none focus:ring-2 focus:ring-accent-ring transition-all"
             />
             <Button
               onClick={handleCreate}
@@ -342,7 +343,7 @@ export function SessionLobby({
             <button
               type="button"
               onClick={() => setShowInviteCode((v) => !v)}
-              className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400 hover:text-orange-500 dark:hover:text-violet-400 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-accent transition-colors"
             >
               {showInviteCode ? (
                 <ChevronUp className="w-3.5 h-3.5" />
@@ -370,7 +371,7 @@ export function SessionLobby({
                         setJoinByIdError("");
                       }}
                       onKeyDown={(e) => e.key === "Enter" && handleJoinById()}
-                      className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 transition-all"
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-border-strong bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring transition-all"
                     />
                     <Button
                       onClick={handleJoinById}
@@ -383,9 +384,7 @@ export function SessionLobby({
                     </Button>
                   </div>
                   {joinByIdError && (
-                    <p className="text-xs text-red-500 dark:text-red-400">
-                      {joinByIdError}
-                    </p>
+                    <p className="text-xs text-danger">{joinByIdError}</p>
                   )}
                 </motion.div>
               )}
@@ -416,16 +415,16 @@ export function SessionLobby({
       {/* ── Section 3: Community Pulse ── */}
       <div className="space-y-4">
         <div className="space-y-1">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-orange-500 dark:text-violet-400">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
             Community Pulse
           </p>
-          <h2 className="text-2xl sm:text-3xl font-serif italic dark:text-zinc-100">
+          <h2 className="text-2xl sm:text-3xl font-serif italic text-text">
             What&apos;s landing right now
           </h2>
         </div>
 
         {leaderboardLoading ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700 px-4 py-8 text-center text-sm text-gray-500 dark:text-zinc-500">
+          <div className="rounded-2xl border border-dashed border-border-dashed px-4 py-8 text-center text-sm text-text-secondary">
             Loading the latest leaderboard pulse&hellip;
           </div>
         ) : (
@@ -482,17 +481,17 @@ export function SessionLobby({
       {/* ── Section 4: Active Groups ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gray-400 dark:text-zinc-500">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
             Active Groups
           </p>
-          <span className="text-xs text-gray-400 dark:text-zinc-500">
+          <span className="text-xs text-text-muted">
             {sessions.length} group{sessions.length !== 1 ? "s" : ""} &middot;{" "}
             {livePlayers} player{livePlayers !== 1 ? "s" : ""}
           </span>
         </div>
 
         {sessions.length === 0 ? (
-          <p className="text-gray-500 dark:text-zinc-500 italic text-sm py-4">
+          <p className="text-text-secondary italic text-sm py-4">
             No active groups right now. Create one above to get started.
           </p>
         ) : (
@@ -500,14 +499,14 @@ export function SessionLobby({
             {sessions.map((session) => (
               <motion.div
                 key={session.id}
-                className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:border-orange-200 dark:hover:border-violet-500 hover:shadow-sm transition-all"
+                className="bg-surface p-3 rounded-xl border border-border flex items-center justify-between cursor-pointer hover:border-accent-border hover:shadow-sm transition-all"
                 onClick={() => onJoinSession(session)}
               >
                 <div className="min-w-0">
-                  <h3 className="font-bold text-base dark:text-zinc-100 truncate">
+                  <h3 className="font-bold text-base text-text truncate">
                     {session.name}
                   </h3>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
+                  <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                     <Users className="w-3.5 h-3.5" />
                     {session.players.length} player
                     {session.players.length !== 1 ? "s" : ""}
@@ -517,7 +516,7 @@ export function SessionLobby({
                   {session.ownerId === user?.uid && (
                     <Button
                       variant="ghost"
-                      className="px-2 py-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600"
+                      className="px-2 py-1.5 text-danger hover:bg-danger-subtle hover:text-danger"
                       onClick={(e) => {
                         e?.stopPropagation();
                         onDeleteSession(session.id);

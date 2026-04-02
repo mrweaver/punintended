@@ -1,2 +1,109 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* === Base surfaces === */
+  --color-background: #F5F5F0;
+  --color-foreground: #1A1A1A;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f9fafb;
+  --color-surface-inverse: #18181b;
+
+  /* === Borders === */
+  --color-border: #f3f4f6;
+  --color-border-strong: #e5e7eb;
+  --color-border-dashed: #e5e7eb;
+  --color-border-accent: #fed7aa;
+
+  /* === Text hierarchy === */
+  --color-text: #111827;
+  --color-text-muted: #9ca3af;
+  --color-text-secondary: #6b7280;
+  --color-text-faint: #d1d5db;
+
+  /* === Primary accent (orange light / violet dark) === */
+  --color-accent: #f97316;
+  --color-accent-hover: #ea580c;
+  --color-accent-subtle: #fff7ed;
+  --color-accent-muted: #ffedd5;
+  --color-accent-foreground: #c2410c;
+  --color-accent-border: #fed7aa;
+  --color-accent-ring: #f97316;
+
+  /* === Status colors === */
+  --color-success: #16a34a;
+  --color-success-subtle: #f0fdf4;
+  --color-warning: #ca8a04;
+  --color-warning-subtle: #fefce8;
+  --color-danger: #ef4444;
+  --color-danger-subtle: #fef2f2;
+  --color-info: #2563eb;
+  --color-info-subtle: #eff6ff;
+
+  /* === Scrollbar === */
+  --scrollbar-track: #f3f4f6;
+  --scrollbar-thumb: #d1d5db;
+  --scrollbar-thumb-hover: #9ca3af;
+}
+
+/* Dark mode overrides */
+.dark {
+  --color-background: #09090b;
+  --color-foreground: #f4f4f5;
+  --color-surface: #18181b;
+  --color-surface-muted: #27272a;
+  --color-surface-inverse: #27272a;
+  --color-border: #27272a;
+  --color-border-strong: #3f3f46;
+  --color-border-dashed: #3f3f46;
+  --color-border-accent: #6d28d9;
+  --color-text: #f4f4f5;
+  --color-text-muted: #a1a1aa;
+  --color-text-secondary: #71717a;
+  --color-text-faint: #3f3f46;
+  --color-accent: #7c3aed;
+  --color-accent-hover: #8b5cf6;
+  --color-accent-subtle: rgba(139, 92, 246, 0.15);
+  --color-accent-muted: rgba(139, 92, 246, 0.25);
+  --color-accent-foreground: #c4b5fd;
+  --color-accent-border: #6d28d9;
+  --color-accent-ring: #8b5cf6;
+  --color-success: #4ade80;
+  --color-success-subtle: rgba(34, 197, 94, 0.15);
+  --color-warning: #facc15;
+  --color-warning-subtle: rgba(234, 179, 8, 0.15);
+  --color-danger: #f87171;
+  --color-danger-subtle: rgba(239, 68, 68, 0.15);
+  --color-info: #60a5fa;
+  --color-info-subtle: rgba(59, 130, 246, 0.15);
+  --scrollbar-track: #27272a;
+  --scrollbar-thumb: #52525b;
+  --scrollbar-thumb-hover: #71717a;
+}
+
+/* === Custom Scrollbar Styles === */
+
+/* Webkit scrollbars (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}

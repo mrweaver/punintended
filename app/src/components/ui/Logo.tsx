@@ -1,4 +1,10 @@
-export function Logo({ className = '', accent = false }: { className?: string; accent?: boolean }) {
+export function Logo({
+  className = "",
+  accent = false,
+}: {
+  className?: string;
+  accent?: boolean;
+}) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -17,7 +23,7 @@ export function Logo({ className = '', accent = false }: { className?: string; a
         cx="15"
         cy="11"
         r="6"
-        className={accent ? 'fill-orange-500 dark:fill-violet-500 stroke-none' : ''}
+        className={accent ? "fill-accent stroke-none" : ""}
       />
     </svg>
   );

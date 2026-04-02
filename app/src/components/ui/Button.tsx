@@ -1,18 +1,19 @@
-import React from 'react';
-import { RefreshCw } from 'lucide-react';
+import React from "react";
+import { RefreshCw } from "lucide-react";
 
 const variants = {
-  primary: 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-violet-600 dark:hover:bg-violet-500',
+  primary:
+    "bg-text text-surface hover:bg-text/90 dark:bg-accent dark:hover:bg-accent-hover dark:text-white",
   secondary:
-    'bg-amber-500 text-zinc-950 hover:bg-amber-400 dark:bg-violet-500 dark:text-white dark:hover:bg-violet-400',
+    "bg-accent text-text hover:bg-accent-hover dark:bg-accent-hover dark:text-white dark:hover:bg-accent",
   outline:
-    'border border-zinc-900 text-zinc-900 hover:bg-zinc-50 dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800',
-  ghost: 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
+    "border border-text text-text hover:bg-surface-muted dark:border-text dark:text-text dark:hover:bg-surface-muted",
+  ghost: "text-text-secondary hover:bg-surface-muted",
 };
 
 const sizes = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-4 py-2 sm:px-6 sm:py-3',
+  sm: "px-3 py-1.5 text-xs",
+  md: "px-4 py-2 sm:px-6 sm:py-3",
 };
 
 interface ButtonProps {
@@ -23,18 +24,18 @@ interface ButtonProps {
   className?: string;
   disabled?: boolean;
   loading?: boolean;
-  type?: 'button' | 'submit';
+  type?: "button" | "submit";
 }
 
 export function Button({
   children,
   onClick,
-  variant = 'primary',
-  size = 'md',
-  className = '',
+  variant = "primary",
+  size = "md",
+  className = "",
   disabled = false,
   loading = false,
-  type = 'button',
+  type = "button",
 }: ButtonProps) {
   return (
     <button

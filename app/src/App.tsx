@@ -68,8 +68,8 @@ function LoginNoticeBanner({
           <div
             className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur ${
               notice.tone === "success"
-                ? "border-green-200 bg-green-50/95 text-green-700 dark:border-green-900/50 dark:bg-green-950/90 dark:text-green-300"
-                : "border-red-200 bg-red-50/95 text-red-700 dark:border-red-900/50 dark:bg-red-950/90 dark:text-red-300"
+                ? "border-success bg-success-subtle text-success dark:border-success/50"
+                : "border-danger bg-danger-subtle text-danger dark:border-danger/50"
             }`}
           >
             {notice.tone === "success" ? (
@@ -172,7 +172,7 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#F5F5F0] dark:bg-zinc-950 flex flex-col items-center justify-center p-6 transition-colors">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 transition-colors">
         <LoginNoticeBanner
           notice={loginNotice}
           onClose={() => setLoginNotice(null)}
@@ -182,16 +182,13 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-md w-full text-center"
         >
-          <div className="mb-6 sm:mb-8 inline-block p-3 sm:p-4 bg-orange-100 dark:bg-violet-900/30 rounded-2xl sm:rounded-3xl">
-            <Logo
-              className="w-10 h-10 sm:w-12 sm:h-12 text-orange-600 dark:text-violet-400"
-              accent
-            />
+          <div className="mb-6 sm:mb-8 inline-block p-3 sm:p-4 bg-accent-muted rounded-2xl sm:rounded-3xl">
+            <Logo className="w-10 h-10 sm:w-12 sm:h-12 text-accent" accent />
           </div>
-          <h1 className="text-4xl sm:text-6xl font-serif italic mb-4 text-zinc-900 dark:text-zinc-100">
+          <h1 className="text-4xl sm:text-6xl font-serif italic mb-4 text-foreground">
             PunIntended
           </h1>
-          <p className="text-lg sm:text-xl text-gray-600 dark:text-zinc-400 mb-8 sm:mb-12">
+          <p className="text-lg sm:text-xl text-text-secondary mb-8 sm:mb-12">
             The social game where wit meets wordplay. Compete with friends for
             the ultimate pun glory.
           </p>
@@ -206,7 +203,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#F5F5F0] dark:bg-zinc-950 text-[#1A1A1A] dark:text-zinc-100 font-sans transition-colors">
+      <div className="min-h-screen bg-background text-foreground font-sans transition-colors">
         <LoginNoticeBanner
           notice={loginNotice}
           onClose={() => setLoginNotice(null)}
@@ -270,13 +267,13 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        <footer className="p-12 text-center text-gray-400 dark:text-zinc-600 text-sm">
+        <footer className="p-12 text-center text-text-muted text-sm">
           <p>
             &copy; 2026 Cotlone Studios &bull; Built with AI for the pun of it.
           </p>
           <button
             onClick={() => setShowChangelog(true)}
-            className="mt-2 text-xs opacity-50 hover:opacity-100 hover:text-orange-500 dark:hover:text-violet-400 transition-all cursor-pointer"
+            className="mt-2 text-xs opacity-50 hover:opacity-100 hover:text-accent transition-all cursor-pointer"
           >
             v{__APP_VERSION__}
           </button>

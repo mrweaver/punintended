@@ -40,15 +40,15 @@ function HeaderMenuItem({
       onClick={onClick}
       className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors ${
         danger
-          ? "text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
-          : "text-gray-700 hover:bg-gray-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          ? "text-danger hover:bg-danger-subtle"
+          : "text-text hover:bg-surface-muted"
       }`}
     >
       <span
         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
           danger
-            ? "bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-300"
-            : "bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400"
+            ? "bg-danger-subtle text-danger"
+            : "bg-surface-muted text-text-secondary"
         }`}
       >
         <Icon className="h-4 w-4" />
@@ -57,13 +57,13 @@ function HeaderMenuItem({
         <span className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium">{label}</span>
           {meta && (
-            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:bg-violet-900/40 dark:text-violet-300">
+            <span className="rounded-full bg-accent-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-foreground">
               {meta}
             </span>
           )}
         </span>
         {sublabel && (
-          <span className="mt-0.5 block truncate text-xs text-gray-400 dark:text-zinc-500">
+          <span className="mt-0.5 block truncate text-xs text-text-muted">
             {sublabel}
           </span>
         )}
@@ -158,14 +158,14 @@ export function Header({
   if (!user) return null;
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-gray-200 dark:border-zinc-800 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
+    <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-border px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
       <button
         onClick={onLogoClick}
         className="flex items-center gap-2 rounded-lg transition-opacity hover:opacity-75 disabled:pointer-events-none sm:gap-3"
         disabled={!onLogoClick}
         aria-label="Go to lobby"
       >
-        <div className="p-1.5 sm:p-2 bg-orange-500 dark:bg-violet-600 rounded-lg sm:rounded-xl">
+        <div className="p-1.5 sm:p-2 bg-accent rounded-lg sm:rounded-xl">
           <Logo className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
         </div>
         <span className="hidden text-base font-serif italic font-bold min-[380px]:inline sm:text-xl">
@@ -175,21 +175,21 @@ export function Header({
       <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:gap-3">
         <button
           onClick={handleHeaderAction(onOpenLeaderboard)}
-          className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
+          className="p-2 rounded-full hover:bg-surface-muted text-text-secondary transition-colors"
           aria-label="Leaderboards"
         >
           <Trophy className="w-5 h-5" />
         </button>
         <button
           onClick={handleHeaderAction(onOpenGauntlet)}
-          className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
+          className="p-2 rounded-full hover:bg-surface-muted text-text-secondary transition-colors"
           aria-label="The Gauntlet"
         >
           <Swords className="w-5 h-5" />
         </button>
         <button
           onClick={handleHeaderAction(toggleTheme)}
-          className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-400 transition-colors"
+          className="p-2 rounded-full hover:bg-surface-muted text-text-secondary transition-colors"
           aria-label="Toggle Dark Mode"
         >
           {isDarkMode ? (
@@ -208,7 +208,7 @@ export function Header({
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-zinc-950"></span>
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-danger rounded-full border-2 border-background"></span>
             )}
           </Button>
 
@@ -218,25 +218,23 @@ export function Header({
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="fixed left-4 right-4 top-20 z-[60] overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80"
+                className="fixed left-4 right-4 top-20 z-[60] overflow-hidden rounded-3xl border border-border bg-surface shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80"
               >
-                <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                <div className="flex items-center justify-between border-b border-border bg-surface-muted p-4">
                   <div>
-                    <h3 className="font-bold text-gray-900 dark:text-zinc-100">
-                      Notifications
-                    </h3>
-                    <p className="text-xs text-gray-400 dark:text-zinc-500">
+                    <h3 className="font-bold text-text">Notifications</h3>
+                    <p className="text-xs text-text-muted">
                       Recent activity and session links.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-gray-200 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-zinc-800 dark:text-zinc-400">
+                    <span className="rounded-full bg-border px-2 py-1 text-xs font-medium text-text-secondary">
                       {unreadCount} New
                     </span>
                     <button
                       type="button"
                       onClick={closeNotifications}
-                      className="rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                      className="rounded-full p-1 text-text-muted transition-colors hover:bg-border hover:text-text"
                       aria-label="Close notifications"
                     >
                       <X className="h-4 w-4" />
@@ -245,7 +243,7 @@ export function Header({
                 </div>
                 <div className="max-h-[min(70vh,24rem)] overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="p-8 text-center text-gray-400 dark:text-zinc-500 text-sm">
+                    <div className="p-8 text-center text-text-muted text-sm">
                       No notifications yet.
                     </div>
                   ) : (
@@ -257,14 +255,14 @@ export function Header({
                           onNotificationClick(notif.link);
                           closeNotifications();
                         }}
-                        className={`p-4 border-b border-gray-50 dark:border-zinc-800 hover:bg-orange-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? "bg-orange-50/50 dark:bg-violet-900/20" : ""}`}
+                        className={`p-4 border-b border-border hover:bg-accent-subtle cursor-pointer transition-colors ${!notif.read ? "bg-accent-subtle" : ""}`}
                       >
                         <p
-                          className={`text-sm ${!notif.read ? "font-medium text-gray-900 dark:text-zinc-100" : "text-gray-600 dark:text-zinc-400"}`}
+                          className={`text-sm ${!notif.read ? "font-medium text-text" : "text-text-secondary"}`}
                         >
                           {notif.message}
                         </p>
-                        <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">
+                        <p className="text-xs text-text-muted mt-1">
                           {new Date(notif.createdAt).toLocaleString(undefined, {
                             dateStyle: "short",
                             timeStyle: "short",
@@ -286,7 +284,7 @@ export function Header({
               setShowNotifications(false);
               setShowAccountMenu((open) => !open);
             }}
-            className="flex items-center gap-2 rounded-full p-1 pr-2 transition-colors hover:bg-gray-100 dark:hover:bg-zinc-800"
+            className="flex items-center gap-2 rounded-full p-1 pr-2 transition-colors hover:bg-surface-muted"
             aria-label="Open account menu"
             aria-expanded={showAccountMenu}
             aria-haspopup="menu"
@@ -294,22 +292,20 @@ export function Header({
             <span className="relative shrink-0">
               <img
                 src={user.photoURL || ""}
-                className="h-9 w-9 rounded-full border border-gray-200 dark:border-zinc-700"
+                className="h-9 w-9 rounded-full border border-border-strong"
                 alt="Profile"
               />
               {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-red-500 dark:border-zinc-950"></span>
+                <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-danger"></span>
               )}
             </span>
             <span className="hidden text-left lg:block">
-              <span className="block text-sm font-medium dark:text-zinc-200">
+              <span className="block text-sm font-medium text-text">
                 {user.displayName}
               </span>
-              <span className="block text-xs text-gray-400 dark:text-zinc-500">
-                Menu
-              </span>
+              <span className="block text-xs text-text-muted">Menu</span>
             </span>
-            <ChevronDown className="hidden h-4 w-4 text-gray-400 dark:text-zinc-500 sm:block" />
+            <ChevronDown className="hidden h-4 w-4 text-text-muted sm:block" />
           </button>
 
           <AnimatePresence>
@@ -318,20 +314,20 @@ export function Header({
                 initial={{ opacity: 0, y: 10, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.96 }}
-                className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-gray-100 bg-white p-2 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+                className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-border bg-surface p-2 shadow-2xl"
               >
-                <div className="rounded-[1.25rem] bg-gray-50 px-4 py-3 dark:bg-zinc-950">
+                <div className="rounded-[1.25rem] bg-surface-muted px-4 py-3">
                   <div className="flex items-center gap-3">
                     <img
                       src={user.photoURL || ""}
-                      className="h-11 w-11 rounded-full border border-gray-200 dark:border-zinc-700"
+                      className="h-11 w-11 rounded-full border border-border-strong"
                       alt="Profile"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-zinc-100">
+                      <p className="truncate text-sm font-semibold text-text">
                         {user.displayName}
                       </p>
-                      <p className="truncate text-xs text-gray-400 dark:text-zinc-500">
+                      <p className="truncate text-xs text-text-muted">
                         {user.email}
                       </p>
                     </div>

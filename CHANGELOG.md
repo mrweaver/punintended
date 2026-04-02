@@ -4,6 +4,28 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.17.0] - 2026-04-02
+
+### Added
+
+- **PunCard `hideAuthor` / `disableComments` Props:** PunCard now supports hiding the author name and disabling the comment section, enabling reuse in contexts like the SessionLobby where those features shouldn't appear.
+
+### Changed
+
+- **SessionLobby Uses PunCard:** Submitted puns and the "Leading Pun Today" preview now render through `PunCard` instead of custom markup, ensuring visual consistency across the app.
+- **SessionLobby Layout Improvements:** Submission form collapses when attempts are exhausted; reveal metadata uses a divided two-column grid; leader preview uses PunCard styling.
+
+## [1.17.0] - 2026-04-02
+
+### Added
+
+- **PunCard `hideAuthor` / `disableComments` Props:** PunCard now supports hiding the author name and disabling the comment section, enabling reuse in contexts like the SessionLobby where those features shouldn't appear.
+
+### Changed
+
+- **SessionLobby Uses PunCard:** Submitted puns and the "Leading Pun Today" preview now render through `PunCard` instead of custom markup, ensuring visual consistency across the app.
+- **SessionLobby Layout Improvements:** Submission form collapses when attempts are exhausted; reveal metadata uses a divided two-column grid; leader preview uses PunCard styling.
+
 ## [1.16.0] - 2026-04-02
 
 ### Added

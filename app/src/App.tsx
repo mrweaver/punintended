@@ -10,6 +10,7 @@ import { SessionLobby } from "./components/SessionLobby";
 import { GameBoard } from "./components/GameBoard";
 import { GauntletMode } from "./components/GauntletMode";
 import { GlobalLeaderboard } from "./components/GlobalLeaderboard";
+import { MySubmissionsView } from "./components/MySubmissionsView";
 import { ProfileModal } from "./components/modals/ProfileModal";
 import { AboutModal } from "./components/modals/AboutModal";
 import { DeleteConfirmModal } from "./components/modals/DeleteConfirmModal";
@@ -115,6 +116,7 @@ export default function App() {
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showSubmissions, setShowSubmissions] = useState(false);
   const [loginNotice, setLoginNotice] = useState<LoginNotice | null>(null);
 
   useEffect(() => {
@@ -144,17 +146,27 @@ export default function App() {
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowLeaderboard(false);
+    setShowSubmissions(false);
   };
 
   const handleOpenLeaderboard = () => {
     setGauntletMode(false);
     setSharedGauntletId(null);
+    setShowSubmissions(false);
     setShowLeaderboard(true);
   };
 
   const handleOpenGauntlet = () => {
     setShowLeaderboard(false);
+    setShowSubmissions(false);
     setGauntletMode(true);
+  };
+
+  const handleOpenSubmissions = () => {
+    setGauntletMode(false);
+    setSharedGauntletId(null);
+    setShowLeaderboard(false);
+    setShowSubmissions(true);
   };
 
   const handleLogoClick = () => {
@@ -210,12 +222,13 @@ export default function App() {
         />
         <Header
           onOpenProfile={() => setShowProfile(true)}
+          onOpenSubmissions={handleOpenSubmissions}
           onOpenAbout={() => setShowAbout(true)}
           onOpenChangelog={() => setShowChangelog(true)}
           onOpenLeaderboard={handleOpenLeaderboard}
           onOpenGauntlet={handleOpenGauntlet}
           onLogoClick={
-            gauntletMode || showLeaderboard || !!currentGroup
+            gauntletMode || showLeaderboard || showSubmissions || !!currentGroup
               ? handleLogoClick
               : undefined
           }
@@ -243,6 +256,11 @@ export default function App() {
                 key="leaderboard"
                 onClose={() => setShowLeaderboard(false)}
               />
+            ) : showSubmissions ? (
+              <MySubmissionsView
+                key="submissions"
+                onClose={() => setShowSubmissions(false)}
+              />
             ) : !currentGroup ? (
               <SessionLobby
                 sessions={groups}
@@ -253,11 +271,13 @@ export default function App() {
                 onDeleteSession={(id) => setGroupToDelete(id)}
                 onStartGauntlet={handleOpenGauntlet}
                 onOpenLeaderboard={handleOpenLeaderboard}
+                onOpenSubmissions={handleOpenSubmissions}
               />
             ) : (
               <GameBoard
                 session={currentGroup}
                 loading={loading}
+                onOpenSubmissions={handleOpenSubmissions}
                 onLeave={leaveGroup}
                 onDelete={deleteExistingGroup}
                 onRename={renameCurrentGroup}

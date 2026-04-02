@@ -13,6 +13,11 @@ import {
   UserMinus,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  formatElapsedTime,
+  formatRevealTime,
+  useChallengeReveal,
+} from "../hooks/useChallengeReveal";
 import { usePuns } from "../hooks/usePuns";
 import { useChallengeHistory } from "../hooks/useChallengeHistory";
 import { useMessages } from "../hooks/useMessages";
@@ -34,6 +39,7 @@ import { dailyApi } from "../api/client";
 interface GameBoardProps {
   session: Group;
   loading: boolean;
+  onOpenSubmissions: () => void;
 
   onLeave: () => void;
   onDelete: (groupId: string) => Promise<void>;
@@ -44,6 +50,7 @@ interface GameBoardProps {
 export function GameBoard({
   session,
   loading,
+  onOpenSubmissions,
 
   onLeave,
   onDelete,
@@ -59,6 +66,9 @@ export function GameBoard({
     dailyApi.getChallenge(todayId).then(setChallenge).catch(console.error);
   }, [todayId]);
 
+  const { revealedAt, isRevealed, elapsedMs, revealChallenge } =
+    useChallengeReveal(challenge?.challengeId);
+
   const {
     puns,
     unviewedCount,
@@ -70,7 +80,7 @@ export function GameBoard({
     deletePun,
     reactPun,
     markPunViewed,
-  } = usePuns(todayId, user?.uid, session.id);
+  } = usePuns(isRevealed ? todayId : "", user?.uid, session.id);
   const historyState = useChallengeHistory(session.id);
   const { messages, sendMessage, reactToMessage } = useMessages(session.id);
   const { addComment, reactToComment, getCommentsForPun, loadCommentsForPun } =
@@ -123,10 +133,10 @@ export function GameBoard({
   }, [puns, user?.uid, playScore]);
 
   const handleSubmitPun = useCallback(async () => {
-    if (!punText.trim() || attemptsLeft === 0) return;
+    if (!punText.trim() || attemptsLeft === 0 || !revealedAt) return;
     unlockAudio();
     try {
-      await submitPun(punText.trim());
+      await submitPun(punText.trim(), Date.now() - revealedAt);
       reportTyping("submitted");
       setPunText("");
     } catch (err: unknown) {
@@ -134,7 +144,7 @@ export function GameBoard({
         err instanceof Error ? err.message : "Failed to submit pun";
       alert(message);
     }
-  }, [punText, attemptsLeft, unlockAudio, submitPun, reportTyping]);
+  }, [punText, attemptsLeft, revealedAt, unlockAudio, submitPun, reportTyping]);
 
   const handleRename = useCallback(async () => {
     const trimmed = nameInput.trim();
@@ -284,89 +294,156 @@ export function GameBoard({
           )}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4 sm:gap-6">
-        <motion.div
-          key={`topic-${challenge?.challengeId}`}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          whileHover={{ rotate: -1 }}
-          className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-zinc-700"
-        >
-          <p className="text-orange-500 dark:text-violet-400 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
-            Topic
-          </p>
-          <h2 className="text-2xl sm:text-4xl font-serif italic">
-            {challenge?.topic || "Generating..."}
-          </h2>
-        </motion.div>
-        <motion.div
-          key={`focus-${challenge?.challengeId}`}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.05 }}
-          whileHover={{ rotate: 1 }}
-          className="bg-orange-500 dark:bg-violet-600 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-violet-500"
-        >
-          <p className="text-white/60 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
-            Focus
-          </p>
-          <h2 className="text-2xl sm:text-4xl font-serif italic">
-            {challenge?.focus || "Generating..."}
-          </h2>
-        </motion.div>
-      </div>
+      {!isRevealed ? (
+        <Card className="border-2 border-dashed border-orange-200 dark:border-violet-800/60">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="max-w-2xl space-y-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-orange-500 dark:text-violet-400">
+                Sealed Challenge
+              </p>
+              <h3 className="text-2xl font-serif italic text-gray-900 dark:text-zinc-100">
+                Start today's challenge from inside the group.
+              </h3>
+              <p className="text-sm leading-relaxed text-gray-500 dark:text-zinc-400">
+                Reveal the topic and focus here when you are ready. Your timer
+                starts the moment you open it, then you can submit and compare
+                with the group.
+              </p>
+            </div>
+            <Button onClick={revealChallenge} className="w-full sm:w-auto">
+              Reveal Challenge
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {revealedAt && (
+            <div className="grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/70 sm:grid-cols-2">
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-gray-400 dark:text-zinc-500">
+                  Revealed At
+                </p>
+                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-zinc-100">
+                  {formatRevealTime(revealedAt)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-gray-400 dark:text-zinc-500">
+                  Time Since Reveal
+                </p>
+                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-zinc-100">
+                  {formatElapsedTime(elapsedMs)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4 sm:gap-6">
+            <motion.div
+              key={`topic-${challenge?.challengeId}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              whileHover={{ rotate: -1 }}
+              className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-zinc-700"
+            >
+              <p className="text-orange-500 dark:text-violet-400 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+                Topic
+              </p>
+              <h2 className="text-2xl sm:text-4xl font-serif italic">
+                {challenge?.topic || "Generating..."}
+              </h2>
+            </motion.div>
+            <motion.div
+              key={`focus-${challenge?.challengeId}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.05 }}
+              whileHover={{ rotate: 1 }}
+              className="bg-orange-500 dark:bg-violet-600 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-violet-500"
+            >
+              <p className="text-white/60 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+                Focus
+              </p>
+              <h2 className="text-2xl sm:text-4xl font-serif italic">
+                {challenge?.focus || "Generating..."}
+              </h2>
+            </motion.div>
+          </div>
+        </div>
+      )}
 
       {/* Submission Form */}
       <Card className="border-2 border-orange-100 dark:border-violet-900/50">
-        <div className="flex flex-col gap-4">
-          <textarea
-            placeholder={
-              attemptsLeft === 0
-                ? "No submissions remaining today."
-                : "Type your pun here..."
-            }
-            value={punText}
-            disabled={attemptsLeft === 0}
-            onChange={(e) => {
-              setPunText(e.target.value);
-              onTextChange(e.target.value.trim().length > 0);
-            }}
-            onBlur={() => reportTyping("idle")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && e.ctrlKey) {
-                e.preventDefault();
-                handleSubmitPun();
-              }
-            }}
-            className="w-full p-4 sm:p-6 text-lg sm:text-xl font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl sm:rounded-2xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[100px] sm:min-h-[120px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-                Tip: Combine {challenge?.topic} and {challenge?.focus} for
-                maximum points!
-              </p>
-              <p
-                className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}
-              >
-                {attemptsLeft === 0
-                  ? "No submissions remaining today — come back tomorrow!"
-                  : `${attemptsLeft} submission${attemptsLeft !== 1 ? "s" : ""} remaining today`}
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              onClick={handleSubmitPun}
-              disabled={!punText.trim() || submitting || attemptsLeft === 0}
-              loading={submitting}
-              className="w-full sm:w-auto"
-            >
-              <Send className="w-5 h-5" />
-              Submit Pun
+        {!isRevealed ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500 dark:text-zinc-400">
+              Reveal the challenge above to unlock the submission box and start
+              your timer.
+            </p>
+            <Button onClick={revealChallenge} variant="secondary">
+              Reveal And Start
             </Button>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <textarea
+              placeholder={
+                attemptsLeft === 0
+                  ? "No submissions remaining today."
+                  : "Type your pun here..."
+              }
+              value={punText}
+              disabled={attemptsLeft === 0}
+              onChange={(e) => {
+                setPunText(e.target.value);
+                onTextChange(e.target.value.trim().length > 0);
+              }}
+              onBlur={() => reportTyping("idle")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.ctrlKey) {
+                  e.preventDefault();
+                  handleSubmitPun();
+                }
+              }}
+              className="w-full p-4 sm:p-6 text-lg sm:text-xl font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl sm:rounded-2xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[100px] sm:min-h-[120px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
+                  Tip: Combine {challenge?.topic} and {challenge?.focus} for
+                  maximum points!
+                </p>
+                <p
+                  className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}
+                >
+                  {attemptsLeft === 0
+                    ? "No submissions remaining today - come back tomorrow!"
+                    : `${attemptsLeft} submission${attemptsLeft !== 1 ? "s" : ""} remaining today`}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onOpenSubmissions}
+                  className="w-full sm:w-auto"
+                >
+                  My Submissions
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleSubmitPun}
+                  disabled={!punText.trim() || submitting || attemptsLeft === 0}
+                  loading={submitting}
+                  className="w-full sm:w-auto"
+                >
+                  <Send className="w-5 h-5" />
+                  Submit Pun
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Live Leaderboard */}
@@ -388,6 +465,9 @@ export function GameBoard({
             </h2>
 
             <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={onOpenSubmissions}>
+                My Submissions
+              </Button>
               {!showHistory && hasSubmittedToday && (
                 <>
                   {(["unviewed", "top", "new"] as const).map((mode) => (
@@ -457,7 +537,14 @@ export function GameBoard({
                 transition={{ duration: 0.15 }}
                 className="grid grid-cols-1 gap-4 sm:gap-6"
               >
-                {!hasSubmittedToday ? (
+                {!isRevealed ? (
+                  <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-orange-200 dark:border-violet-800">
+                    <p className="text-gray-500 dark:text-zinc-400 italic">
+                      Reveal today's challenge above to unlock this group's
+                      board.
+                    </p>
+                  </div>
+                ) : !hasSubmittedToday ? (
                   <div className="text-center py-8 sm:py-12 bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-3xl border border-dashed border-orange-200 dark:border-violet-800">
                     <p className="text-gray-500 dark:text-zinc-400 italic">
                       Submit your pun above to reveal your group's submissions.

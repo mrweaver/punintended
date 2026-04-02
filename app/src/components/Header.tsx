@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell,
+  Calendar,
   ChevronDown,
   FileText,
   Info,
@@ -74,6 +75,7 @@ function HeaderMenuItem({
 
 interface HeaderProps {
   onOpenProfile: () => void;
+  onOpenSubmissions: () => void;
   onOpenAbout: () => void;
   onOpenChangelog: () => void;
   onOpenLeaderboard: () => void;
@@ -84,6 +86,7 @@ interface HeaderProps {
 
 export function Header({
   onOpenProfile,
+  onOpenSubmissions,
   onOpenAbout,
   onOpenChangelog,
   onOpenLeaderboard,
@@ -345,6 +348,12 @@ export function Header({
                         : "No recent activity"
                     }
                     onClick={handleOpenNotifications}
+                  />
+                  <HeaderMenuItem
+                    icon={Calendar}
+                    label="My Submissions"
+                    sublabel="Daily puns, scores, and comments"
+                    onClick={handleHeaderAction(onOpenSubmissions)}
                   />
                   <HeaderMenuItem
                     icon={User}

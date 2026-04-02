@@ -13,6 +13,11 @@ import {
   Eye,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  formatElapsedTime,
+  formatRevealTime,
+  useChallengeReveal,
+} from "../hooks/useChallengeReveal";
 import { useGlobalLeaderboard } from "../hooks/useGlobalLeaderboard";
 import { usePuns } from "../hooks/usePuns";
 import { dailyApi, type DailyChallenge, type Group } from "../api/client";
@@ -55,6 +60,7 @@ interface SessionLobbyProps {
   onDeleteSession: (sessionId: string) => void;
   onStartGauntlet: () => void;
   onOpenLeaderboard: () => void;
+  onOpenSubmissions: () => void;
 }
 
 export function SessionLobby({
@@ -66,6 +72,7 @@ export function SessionLobby({
   onDeleteSession,
   onStartGauntlet,
   onOpenLeaderboard,
+  onOpenSubmissions,
 }: SessionLobbyProps) {
   const { user } = useAuth();
   const {
@@ -90,29 +97,8 @@ export function SessionLobby({
     dailyApi.getChallenge(todayId).then(setChallenge).catch(console.error);
   }, [todayId]);
 
-  const revealKey = challenge ? `pun-reveal:${challenge.challengeId}` : null;
-
-  const [revealTimestamp, setRevealTimestamp] = useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
-    // We don't know the challengeId yet — we'll hydrate in an effect
-    return null;
-  });
-
-  // Hydrate reveal timestamp from localStorage once challenge arrives
-  useEffect(() => {
-    if (!revealKey) return;
-    const stored = localStorage.getItem(revealKey);
-    if (stored) setRevealTimestamp(Number(stored));
-  }, [revealKey]);
-
-  const isRevealed = revealTimestamp !== null;
-
-  const handleReveal = () => {
-    if (!revealKey) return;
-    const now = Date.now();
-    localStorage.setItem(revealKey, String(now));
-    setRevealTimestamp(now);
-  };
+  const { revealedAt, isRevealed, elapsedMs, revealChallenge } =
+    useChallengeReveal(challenge?.challengeId);
 
   // ── Pun submission from the lobby (global, no group) ──
   const {
@@ -126,8 +112,8 @@ export function SessionLobby({
   const [punText, setPunText] = useState("");
 
   const handleSubmitPun = async () => {
-    if (!punText.trim() || attemptsLeft === 0 || !revealTimestamp) return;
-    const responseTimeMs = Date.now() - revealTimestamp;
+    if (!punText.trim() || attemptsLeft === 0 || !revealedAt) return;
+    const responseTimeMs = Date.now() - revealedAt;
     await submitPun(punText.trim(), responseTimeMs);
     setPunText("");
   };
@@ -213,7 +199,7 @@ export function SessionLobby({
                   breath, then hit the button when you&apos;re ready.
                 </p>
                 <Button
-                  onClick={handleReveal}
+                  onClick={revealChallenge}
                   className="mt-2 px-8 py-4 text-lg"
                 >
                   <Eye className="w-5 h-5" />
@@ -228,6 +214,27 @@ export function SessionLobby({
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-5"
               >
+                {revealedAt && (
+                  <div className="grid gap-3 rounded-2xl border border-border bg-surface-muted p-4 sm:grid-cols-2">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
+                        Revealed At
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-text">
+                        {formatRevealTime(revealedAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
+                        Time Since Reveal
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-text">
+                        {formatElapsedTime(elapsedMs)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Topic + Focus cards */}
                 <div className="grid grid-cols-2 gap-4 sm:gap-6">
                   <motion.div
@@ -394,6 +401,13 @@ export function SessionLobby({
 
         <div className="flex flex-row lg:flex-col gap-3">
           <Button
+            onClick={onOpenSubmissions}
+            variant="outline"
+            className="flex-1 lg:flex-none"
+          >
+            My Submissions
+          </Button>
+          <Button
             onClick={onStartGauntlet}
             variant="outline"
             className="flex-1 lg:flex-none"
@@ -432,14 +446,18 @@ export function SessionLobby({
             <CommunityPreviewTile
               eyebrow="Today"
               title={
-                todayLeader
-                  ? `"${truncateCopy(todayLeader.text)}"`
-                  : "No scored puns yet."
+                !isRevealed
+                  ? "Today's board stays sealed."
+                  : todayLeader
+                    ? `"${truncateCopy(todayLeader.text)}"`
+                    : "No scored puns yet."
               }
               detail={
-                todayLeader
-                  ? `${todayLeader.authorName} is leading the day at ${todayLeader.aiScore}/10.${todayLeader.challengeTopic ? ` Topic: ${todayLeader.challengeTopic}${todayLeader.challengeFocus ? ` · ${todayLeader.challengeFocus}` : ""}` : ""}`
-                  : "The daily board will fill in as soon as the first strong pun lands."
+                !isRevealed
+                  ? "Reveal today's challenge before you peek at the live board. Hall of fame and gauntlet updates stay visible without spoiling the current brief."
+                  : todayLeader
+                    ? `${todayLeader.authorName} is leading the day at ${todayLeader.aiScore}/10.${todayLeader.challengeTopic ? ` Topic: ${todayLeader.challengeTopic}${todayLeader.challengeFocus ? ` · ${todayLeader.challengeFocus}` : ""}` : ""}`
+                    : "The daily board will fill in as soon as the first strong pun lands."
               }
             />
             <CommunityPreviewTile
@@ -533,7 +551,7 @@ export function SessionLobby({
                       onJoinSession(session);
                     }}
                   >
-                    Join
+                    Open Group
                   </Button>
                 </div>
               </motion.div>

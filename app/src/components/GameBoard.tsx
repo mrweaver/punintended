@@ -318,23 +318,20 @@ export function GameBoard({
       ) : (
         <div className="space-y-4">
           {revealedAt && (
-            <div className="grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900/70 sm:grid-cols-2">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-gray-400 dark:text-zinc-500">
-                  Revealed At
-                </p>
-                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-zinc-100">
+            <div className="flex items-center gap-3 text-sm text-text-muted">
+              <span>
+                Revealed:{" "}
+                <span className="font-medium text-text">
                   {formatRevealTime(revealedAt)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-gray-400 dark:text-zinc-500">
-                  Time Since Reveal
-                </p>
-                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-zinc-100">
+                </span>
+              </span>
+              <span className="h-3 w-[1px] bg-border" aria-hidden="true" />
+              <span className="tabular-nums">
+                Elapsed:{" "}
+                <span className="font-medium text-text">
                   {formatElapsedTime(elapsedMs)}
-                </p>
-              </div>
+                </span>
+              </span>
             </div>
           )}
 
@@ -374,77 +371,62 @@ export function GameBoard({
       )}
 
       {/* Submission Form */}
-      <Card className="border-2 border-orange-100 dark:border-violet-900/50">
-        {!isRevealed ? (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-500 dark:text-zinc-400">
-              Reveal the challenge above to unlock the submission box and start
-              your timer.
-            </p>
-            <Button onClick={revealChallenge} variant="secondary">
-              Reveal And Start
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <textarea
-              placeholder={
-                attemptsLeft === 0
-                  ? "No submissions remaining today."
-                  : "Type your pun here..."
-              }
-              value={punText}
-              disabled={attemptsLeft === 0}
-              onChange={(e) => {
-                setPunText(e.target.value);
-                onTextChange(e.target.value.trim().length > 0);
-              }}
-              onBlur={() => reportTyping("idle")}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.ctrlKey) {
-                  e.preventDefault();
-                  handleSubmitPun();
-                }
-              }}
-              className="w-full p-4 sm:p-6 text-lg sm:text-xl font-serif italic bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 rounded-xl sm:rounded-2xl border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[100px] sm:min-h-[120px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-col gap-1">
-                <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-                  Tip: Combine {challenge?.topic} and {challenge?.focus} for
-                  maximum points!
+      {isRevealed && (
+        <Card className="border-2 border-orange-100 dark:border-violet-900/50">
+          {/* Collapsible submission form */}
+          <AnimatePresence mode="wait">
+            {attemptsLeft > 0 ? (
+              <motion.div
+                key="submission-form"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <textarea
+                  placeholder="Type your pun here..."
+                  value={punText}
+                  onChange={(e) => setPunText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.ctrlKey) {
+                      e.preventDefault();
+                      handleSubmitPun();
+                    }
+                  }}
+                  className="w-full p-4 text-lg font-serif italic bg-surface-muted text-text rounded-xl border-none focus:ring-2 focus:ring-accent-ring min-h-[80px] sm:min-h-[100px] resize-none"
+                />
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <p className="text-xs text-text-secondary">
+                    {attemptsLeft} attempt
+                    {attemptsLeft !== 1 ? "s" : ""} remaining &middot; Ctrl+Enter
+                    to submit
+                  </p>
+                  <Button
+                    onClick={handleSubmitPun}
+                    disabled={!punText.trim() || submitting}
+                    loading={submitting}
+                  >
+                    <Send className="w-4 h-4" />
+                    Submit Pun
+                  </Button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="out-of-attempts"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <p className="text-text-secondary text-center">
+                  You've used all your attempts for today.
+                  <br />
+                  Check back tomorrow!
                 </p>
-                <p
-                  className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}
-                >
-                  {attemptsLeft === 0
-                    ? "No submissions remaining today - come back tomorrow!"
-                    : `${attemptsLeft} submission${attemptsLeft !== 1 ? "s" : ""} remaining today`}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={onOpenSubmissions}
-                  className="w-full sm:w-auto"
-                >
-                  My Submissions
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleSubmitPun}
-                  disabled={!punText.trim() || submitting || attemptsLeft === 0}
-                  loading={submitting}
-                  className="w-full sm:w-auto"
-                >
-                  <Send className="w-5 h-5" />
-                  Submit Pun
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </Card>
+      )}
 
       {/* Live Leaderboard */}
       {hasSubmittedToday && puns.length > 0 && (
@@ -564,6 +546,7 @@ export function GameBoard({
                         pun={pun}
                         index={i}
                         comments={getCommentsForPun(pun.id)}
+                        disableComments={false}
                         submitting={submitting}
                         onReact={reactPun}
                         onViewed={markPunViewed}

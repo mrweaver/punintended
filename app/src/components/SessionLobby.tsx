@@ -20,9 +20,15 @@ import {
 } from "../hooks/useChallengeReveal";
 import { useGlobalLeaderboard } from "../hooks/useGlobalLeaderboard";
 import { usePuns } from "../hooks/usePuns";
-import { dailyApi, type DailyChallenge, type Group } from "../api/client";
+import {
+  dailyApi,
+  type DailyChallenge,
+  type Group,
+  type Pun,
+} from "../api/client";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { PunCard } from "./PunCard";
 
 function truncateCopy(text: string, maxLength = 88) {
   if (text.length <= maxLength) return text;
@@ -107,7 +113,9 @@ export function SessionLobby({
     submitPun,
   } = usePuns(isRevealed ? todayId : "", user?.uid);
 
-  const myPunCount = lobbyPuns.filter((p) => p.authorId === user?.uid).length;
+  // Isolate myPuns to map over them
+  const myPuns = lobbyPuns.filter((p) => p.authorId === user?.uid);
+  const myPunCount = myPuns.length;
   const attemptsLeft = Math.max(0, 3 - myPunCount);
   const [punText, setPunText] = useState("");
 
@@ -161,14 +169,21 @@ export function SessionLobby({
       {/* ── Section 1: Today's Challenge Hero ── */}
       <Card className="relative overflow-hidden">
         <div className="space-y-4">
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-accent">
-            Today&apos;s Challenge &middot;{" "}
-            {new Date().toLocaleDateString("en-AU", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2 mb-2">
+            <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.24em] text-accent">
+              Today&apos;s Challenge
+            </p>
+            <span className="hidden sm:inline text-accent opacity-50">
+              &middot;
+            </span>
+            <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.24em] text-text-muted">
+              {new Date().toLocaleDateString("en-AU", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+          </div>
 
           <AnimatePresence mode="wait">
             {!challenge ? (
@@ -212,26 +227,26 @@ export function SessionLobby({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-5"
+                className="space-y-6"
               >
                 {revealedAt && (
-                  <div className="grid gap-3 rounded-2xl border border-border bg-surface-muted p-4 sm:grid-cols-2">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
-                        Revealed At
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-text">
+                  <div className="flex items-center gap-3 text-sm text-text-muted">
+                    <span>
+                      Revealed:{" "}
+                      <span className="font-medium text-text">
                         {formatRevealTime(revealedAt)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
-                        Time Since Reveal
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-text">
+                      </span>
+                    </span>
+                    <span
+                      className="h-3 w-[1px] bg-border"
+                      aria-hidden="true"
+                    />
+                    <span className="tabular-nums">
+                      Elapsed:{" "}
+                      <span className="font-medium text-text">
                         {formatElapsedTime(elapsedMs)}
-                      </p>
-                    </div>
+                      </span>
+                    </span>
                   </div>
                 )}
 
@@ -267,57 +282,151 @@ export function SessionLobby({
                   </motion.div>
                 </div>
 
-                {/* Pun submission form */}
-                <div className="rounded-2xl border-2 border-accent-border bg-surface p-4 sm:p-5 space-y-3">
-                  <textarea
-                    placeholder={
-                      attemptsLeft === 0
-                        ? "No submissions remaining today."
-                        : "Type your pun here..."
+                <div className="space-y-6">
+                  {/* Collapsible submission form */}
+                  <AnimatePresence>
+                    {attemptsLeft > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="rounded-2xl border-2 border-accent-border bg-surface p-4 sm:p-5 space-y-3 overflow-hidden"
+                      >
+                        <textarea
+                          placeholder="Type your pun here..."
+                          value={punText}
+                          onChange={(e) => setPunText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.ctrlKey) {
+                              e.preventDefault();
+                              handleSubmitPun();
+                            }
+                          }}
+                          className="w-full p-4 text-lg font-serif italic bg-surface-muted text-text rounded-xl border-none focus:ring-2 focus:ring-accent-ring min-h-[80px] sm:min-h-[100px] resize-none"
+                        />
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <p className="text-xs text-text-secondary">
+                            {attemptsLeft} attempt
+                            {attemptsLeft !== 1 ? "s" : ""} remaining &middot;
+                            Ctrl+Enter to submit
+                          </p>
+                          <Button
+                            onClick={handleSubmitPun}
+                            disabled={!punText.trim() || submitting}
+                            loading={submitting}
+                          >
+                            <Send className="w-4 h-4" />
+                            Submit Pun
+                          </Button>
+                        </div>
+                      </motion.div>
+                    )}{" "}
+                    :{" "}
+                    {
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="rounded-2xl border-2 border-accent-border bg-surface p-4 sm:p-5 space-y-3 overflow-hidden"
+                      >
+                        <p className="text-text-secondary text-center">
+                          You've used all your attempts for today.
+                          <br />
+                          Check back tomorrow!
+                        </p>
+                      </motion.div>
                     }
-                    value={punText}
-                    disabled={attemptsLeft === 0}
-                    onChange={(e) => setPunText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && e.ctrlKey) {
-                        e.preventDefault();
-                        handleSubmitPun();
-                      }
-                    }}
-                    className="w-full p-4 text-lg font-serif italic bg-surface-muted text-text rounded-xl border-none focus:ring-2 focus:ring-accent-ring min-h-[80px] sm:min-h-[100px] resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <p className="text-xs text-text-secondary">
-                      {attemptsLeft} attempt{attemptsLeft !== 1 ? "s" : ""}{" "}
-                      remaining &middot; Ctrl+Enter to submit
-                    </p>
-                    <Button
-                      onClick={handleSubmitPun}
-                      disabled={
-                        !punText.trim() || submitting || attemptsLeft === 0
-                      }
-                      loading={submitting}
-                    >
-                      <Send className="w-4 h-4" />
-                      Submit Pun
-                    </Button>
-                  </div>
-                </div>
+                  </AnimatePresence>
 
-                {/* Today's leader preview */}
-                {todayLeader && (
-                  <div className="rounded-2xl border border-border bg-surface-muted p-4 space-y-1">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
-                      Leading pun today
-                    </p>
-                    <p className="font-serif italic text-base text-text leading-snug">
-                      &ldquo;{truncateCopy(todayLeader.text, 100)}&rdquo;
-                    </p>
-                    <p className="text-xs text-text-secondary">
-                      {todayLeader.authorName} &middot; {todayLeader.aiScore}/10
-                    </p>
-                  </div>
-                )}
+                  {/* Render submitted puns using PunCard */}
+                  {myPuns.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="space-y-4 pt-4 border-t border-border"
+                    >
+                      <h3 className="text-xl sm:text-2xl font-serif italic text-text">
+                        Your Submissions Today
+                      </h3>
+                      <div className="grid gap-4">
+                        <AnimatePresence initial={false}>
+                          {myPuns.map((pun, index) => (
+                            <motion.div
+                              key={pun.id || index}
+                              initial={{
+                                opacity: 0,
+                                height: 0,
+                                scale: 0.95,
+                                marginTop: -12,
+                              }}
+                              animate={{
+                                opacity: 1,
+                                height: "auto",
+                                scale: 1,
+                                marginTop: 0,
+                              }}
+                              exit={{
+                                opacity: 0,
+                                height: 0,
+                                scale: 0.95,
+                                marginTop: -12,
+                              }}
+                              transition={{ duration: 0.25, ease: "easeOut" }}
+                              className="origin-top overflow-hidden rounded-2xl"
+                            >
+                              <PunCard
+                                pun={pun}
+                                index={index}
+                                comments={[]}
+                                submitting={submitting}
+                                hideAuthor={true}
+                                disableComments={true}
+                                onReact={(punId, reaction) => {}}
+                                onViewed={() => {}}
+                                onEdit={(punId, text) => {}}
+                                onDelete={(punId) => {}}
+                                onComment={() => {}}
+                              />
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Today's leader preview using PunCard */}
+                  {todayLeader && (
+                    <div className="space-y-4 pt-4 border-t border-border">
+                      <h3 className="text-xl sm:text-2xl font-serif italic text-text">
+                        Leading Pun Today
+                      </h3>
+                      <PunCard
+                        // Use double assertion to force the UI mapping
+                        pun={
+                          {
+                            ...todayLeader,
+                            authorId: -1, // Or "", whatever satisfies the visual render
+                            aiFeedback: undefined,
+                            responseTimeMs: undefined,
+                            myReaction: null,
+                            updatedAt: todayLeader.createdAt,
+                          } as unknown as Pun
+                        }
+                        index={0}
+                        comments={[]}
+                        submitting={false}
+                        disableComments={true} // Keeps the lobby clean of comments
+                        onReact={(punId, reaction) => {
+                          /* Global react handler */
+                        }}
+                        onViewed={() => {}}
+                        onEdit={() => {}}
+                        onDelete={() => {}}
+                        onComment={() => {}}
+                      />
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

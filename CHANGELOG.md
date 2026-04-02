@@ -4,6 +4,15 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.14.0] - 2026-04-02
+
+### Added
+
+- **Daily Challenge Reveal:** Landing page centers on a "Begin Today's Challenge" button that reveals the topic and starts a response timer. Puns can be submitted directly from the lobby without joining a group.
+- **Response Time Display:** Pun cards now show how long the author took to submit (e.g. "45s", "2m 30s") alongside the timestamp.
+- **Challenge Context in Leaderboards:** Community Pulse tiles and leaderboard entries include the challenge topic and focus so puns are funny in context.
+- **Leaderboard Privacy Toggle:** Users can hide their name on public leaderboards via a toggle in the profile modal. Anonymous users appear as "Anonymous Punster".
+
 ## [1.13.0] - 2026-04-02
 
 ### Added

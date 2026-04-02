@@ -270,6 +270,41 @@ async function getPastGlobalChallengeTopics() {
   return result.rows;
 }
 
+async function getChallengeReveal(challengeId, userId) {
+  const result = await query(
+    `SELECT challenge_id, user_id, revealed_at, created_at
+     FROM challenge_reveals
+     WHERE challenge_id = $1 AND user_id = $2`,
+    [challengeId, userId],
+  );
+  return result.rows[0] ? formatChallengeReveal(result.rows[0]) : null;
+}
+
+async function createChallengeReveal(challengeId, userId) {
+  const result = await query(
+    `INSERT INTO challenge_reveals (challenge_id, user_id)
+     VALUES ($1, $2)
+     ON CONFLICT (challenge_id, user_id) DO NOTHING
+     RETURNING challenge_id, user_id, revealed_at, created_at`,
+    [challengeId, userId],
+  );
+
+  if (result.rows[0]) {
+    return formatChallengeReveal(result.rows[0]);
+  }
+
+  return getChallengeReveal(challengeId, userId);
+}
+
+function formatChallengeReveal(row) {
+  return {
+    challengeId: row.challenge_id,
+    userId: row.user_id,
+    revealedAt: row.revealed_at,
+    createdAt: row.created_at,
+  };
+}
+
 // --- Pun functions (Tier 1: global, user-scoped) ---
 
 async function getPunsForChallenge(challengeId, viewerId = null) {
@@ -1150,6 +1185,18 @@ async function runMigrations() {
   await query(
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS anonymous_in_leaderboards BOOLEAN DEFAULT FALSE`,
   );
+  await query(`
+    CREATE TABLE IF NOT EXISTS challenge_reveals (
+      challenge_id VARCHAR(10) NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      revealed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      PRIMARY KEY (challenge_id, user_id)
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_challenge_reveals_user ON challenge_reveals(user_id)`,
+  );
 
   const usersToNormalize = await query(
     `SELECT id, display_name, custom_display_name FROM users`,
@@ -1247,6 +1294,8 @@ async function runMigrations() {
   await alterToTz("gauntlets", "created_at");
   await alterToTz("gauntlet_runs", "created_at");
   await alterToTz("gauntlet_runs", "updated_at");
+  await alterToTz("challenge_reveals", "revealed_at");
+  await alterToTz("challenge_reveals", "created_at");
 
   await query(`DELETE FROM pun_reactions WHERE reaction != 'groan'`);
   await query(`
@@ -1332,6 +1381,8 @@ export {
   getGlobalChallengeForDate,
   saveGlobalChallenge,
   getPastGlobalChallengeTopics,
+  getChallengeReveal,
+  createChallengeReveal,
   hasUserSubmittedForChallenge,
   getPunsForChallenge,
   getPunsForChallengeByGroup,

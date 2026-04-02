@@ -23,6 +23,8 @@ import {
   getGlobalChallengeForDate,
   saveGlobalChallenge,
   getPastGlobalChallengeTopics,
+  getChallengeReveal,
+  createChallengeReveal,
   hasUserSubmittedForChallenge,
   getPunsForChallenge,
   getPunsForChallengeByGroup,
@@ -121,6 +123,12 @@ async function getOrCreateGlobalChallenge(dateId) {
     await saveGlobalChallenge(dateId, challenge.topic, challenge.focus);
   }
   return challenge;
+}
+
+function getRevealElapsedMs(revealedAt) {
+  const parsed = new Date(revealedAt).getTime();
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Date.now() - parsed);
 }
 
 // Canonical server date — always AEST/AEDT (Australia/Sydney handles DST automatically).
@@ -801,10 +809,43 @@ app.get("/api/daily/challenge", ensureAuthenticated, async (req, res) => {
         ? localDateId
         : getAESTDateId();
     const challenge = await getOrCreateGlobalChallenge(dateId);
-    res.json({ challengeId: dateId, ...challenge });
+    const reveal = await getChallengeReveal(dateId, req.user.id);
+    res.json({
+      challengeId: dateId,
+      ...challenge,
+      revealedAt: reveal?.revealedAt ?? null,
+    });
   } catch (error) {
     console.error("Failed to get daily challenge:", error);
     res.status(500).json({ error: "Failed to get daily challenge" });
+  }
+});
+
+app.post("/api/daily/challenge/reveal", ensureAuthenticated, async (req, res) => {
+  const challengeId =
+    typeof req.body?.challengeId === "string" ? req.body.challengeId : "";
+
+  if (!isPlausibleLocalDate(challengeId)) {
+    return res.status(400).json({ error: "Invalid challenge id" });
+  }
+
+  try {
+    await getOrCreateGlobalChallenge(challengeId);
+    const reveal = await createChallengeReveal(challengeId, req.user.id);
+
+    if (!reveal) {
+      return res.status(500).json({ error: "Failed to reveal challenge" });
+    }
+
+    broadcastToUser(req.user.id, "challenge-reveal-update", {
+      challengeId,
+      revealedAt: reveal.revealedAt,
+    });
+
+    res.json({ challengeId, revealedAt: reveal.revealedAt });
+  } catch (error) {
+    console.error("Failed to reveal daily challenge:", error);
+    res.status(500).json({ error: "Failed to reveal daily challenge" });
   }
 });
 
@@ -845,19 +886,22 @@ app.get("/api/daily/puns", ensureAuthenticated, async (req, res) => {
 });
 
 app.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
-  const { text, responseTimeMs } = req.body;
+  const { text } = req.body;
   if (!text || !text.trim())
     return res.status(400).json({ error: "Pun text required" });
   if (text.length > 500)
     return res.status(400).json({ error: "Pun too long (max 500 chars)" });
-  const validatedResponseTimeMs =
-    Number.isInteger(responseTimeMs) && responseTimeMs > 0
-      ? responseTimeMs
-      : null;
 
   try {
     const todayId = getAESTDateId();
     const challenge = await getOrCreateGlobalChallenge(todayId);
+    const reveal = await getChallengeReveal(todayId, req.user.id);
+
+    if (!reveal) {
+      return res.status(403).json({
+        error: "Reveal today's challenge before submitting a pun.",
+      });
+    }
 
     // Hard cap: 3 submissions per player per day (global)
     const myCount = await countPunsByAuthorForChallenge(todayId, req.user.id);
@@ -868,11 +912,13 @@ app.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
       });
     }
 
+    const canonicalResponseTimeMs = getRevealElapsedMs(reveal.revealedAt);
+
     const pun = await createPun(
       todayId,
       req.user.id,
       text.trim(),
-      validatedResponseTimeMs,
+      canonicalResponseTimeMs,
     );
     broadcastPunsUpdate(todayId);
 

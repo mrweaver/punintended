@@ -61,6 +61,14 @@ export const dailyApi = {
     request<DailyChallenge>(
       `/api/daily/challenge${localDateId ? `?localDateId=${localDateId}` : ""}`,
     ),
+  revealChallenge: (challengeId: string) =>
+    request<{ challengeId: string; revealedAt: string }>(
+      "/api/daily/challenge/reveal",
+      {
+        method: "POST",
+        body: JSON.stringify({ challengeId }),
+      },
+    ),
 };
 
 // Puns (Tier 1: global, optionally filtered by group)
@@ -327,6 +335,7 @@ export interface DailyChallenge {
   challengeId: string;
   topic: string;
   focus: string;
+  revealedAt: string | null;
 }
 
 /** @deprecated Use Group instead */

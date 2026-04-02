@@ -104,7 +104,7 @@ export function SessionLobby({
   }, [todayId]);
 
   const { revealedAt, isRevealed, elapsedMs, revealChallenge } =
-    useChallengeReveal(challenge?.challengeId);
+    useChallengeReveal(challenge);
 
   // ── Pun submission from the lobby (global, no group) ──
   const {

@@ -67,7 +67,7 @@ export function GameBoard({
   }, [todayId]);
 
   const { revealedAt, isRevealed, elapsedMs, revealChallenge } =
-    useChallengeReveal(challenge?.challengeId);
+    useChallengeReveal(challenge);
 
   const {
     puns,

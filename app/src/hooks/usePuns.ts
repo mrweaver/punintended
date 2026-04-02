@@ -53,13 +53,8 @@ export function usePuns(
     }
 
     const result = await punsApi.list(challengeId, groupId || undefined);
-    setPuns(
-      result.map((pun) => ({
-        ...pun,
-        viewed: viewedIds.has(pun.id),
-      })),
-    );
-  }, [challengeId, groupId, viewedIds]);
+    setPuns(result);
+  }, [challengeId, groupId]);
 
   // Fetch initial puns
   useEffect(() => {
@@ -87,12 +82,17 @@ export function usePuns(
 
   // Count unviewed puns for badge display
   const unviewedCount = useMemo(
-    () => puns.filter((p) => !p.viewed).length,
-    [puns],
+    () => puns.filter((p) => !viewedIds.has(p.id)).length,
+    [puns, viewedIds],
   );
 
   const sortedPuns = useMemo(() => {
-    return [...puns].sort((a, b) => {
+    const decoratedPuns = puns.map((pun) => ({
+      ...pun,
+      viewed: viewedIds.has(pun.id),
+    }));
+
+    return [...decoratedPuns].sort((a, b) => {
       const timeSort =
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
@@ -111,7 +111,7 @@ export function usePuns(
       if (scoreDiff !== 0) return scoreDiff;
       return timeSort;
     });
-  }, [puns, sortMode]);
+  }, [puns, sortMode, viewedIds]);
 
   const submitPun = useCallback(
     async (text: string, responseTimeMs?: number | null) => {
@@ -148,16 +148,15 @@ export function usePuns(
 
   const markPunViewed = useCallback(
     (punId: string) => {
-      if (viewedIds.has(punId)) return;
-      const next = new Set(viewedIds);
-      next.add(punId);
-      setViewedIds(next);
-      persistViewedIds(next);
-      setPuns((prev) =>
-        prev.map((pun) => (pun.id === punId ? { ...pun, viewed: true } : pun)),
-      );
+      setViewedIds((prev) => {
+        if (prev.has(punId)) return prev;
+        const next = new Set(prev);
+        next.add(punId);
+        persistViewedIds(next);
+        return next;
+      });
     },
-    [viewedIds, persistViewedIds],
+    [persistViewedIds],
   );
 
   return {

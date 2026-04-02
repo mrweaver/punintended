@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS puns (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Challenge reveals (server-backed per-user reveal state)
+CREATE TABLE IF NOT EXISTS challenge_reveals (
+    challenge_id VARCHAR(10) NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    revealed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (challenge_id, user_id)
+);
+
 -- Pun reactions (single reaction per user per pun)
 CREATE TABLE IF NOT EXISTS pun_reactions (
     pun_id UUID REFERENCES puns(id) ON DELETE CASCADE,
@@ -96,6 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id);
 CREATE INDEX IF NOT EXISTS idx_puns_challenge ON puns(challenge_id);
 CREATE INDEX IF NOT EXISTS idx_puns_author ON puns(author_id);
 CREATE INDEX IF NOT EXISTS idx_puns_author_challenge ON puns(author_id, challenge_id);
+CREATE INDEX IF NOT EXISTS idx_challenge_reveals_user ON challenge_reveals(user_id);
 CREATE INDEX IF NOT EXISTS idx_pun_reactions_pun ON pun_reactions(pun_id);
 CREATE INDEX IF NOT EXISTS idx_pun_reactions_user ON pun_reactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id);

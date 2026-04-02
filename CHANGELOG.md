@@ -4,6 +4,18 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.15.0] - 2026-04-02
+
+### Added
+
+- **Centralized Theme System:** Added `@theme` block in `index.css` with ~20 semantic color tokens (background, surface, text, accent, status, scrollbar) that automatically switch between light (orange) and dark (violet) modes.
+- **Custom Scrollbar Styling:** Webkit and Firefox scrollbar styles that respect the theme colors.
+
+### Changed
+
+- **Migrated Components to Theme Classes:** Button, Card, Logo, GroanBadge UI primitives, App, Header, PunCard, and SessionLobby now use semantic theme classes instead of hardcoded color utilities.
+- **ProfileModal Layout:** Restructured profile header with improved responsive grid layout, separating avatar, identity, and stats into distinct sections.
+
 ## [1.14.0] - 2026-04-02
 
 ### Added

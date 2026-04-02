@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react';
-import { PunCard } from './PunCard';
-import type { PunComment, PunReaction } from '../api/client';
-import type { useChallengeHistory } from '../hooks/useChallengeHistory';
+import { useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { PunCard } from "./PunCard";
+import type { PunComment, PunReaction } from "../api/client";
+import type { useChallengeHistory } from "../hooks/useChallengeHistory";
 
 interface ChallengeHistoryPanelProps {
   historyState: ReturnType<typeof useChallengeHistory>;
@@ -16,13 +16,13 @@ interface ChallengeHistoryPanelProps {
 }
 
 function formatDateLabel(challengeId: string): string {
-  const [year, month, day] = challengeId.split('-').map(Number);
+  const [year, month, day] = challengeId.split("-").map(Number);
   const date = new Date(year, month - 1, day);
   return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 }
 
@@ -33,7 +33,7 @@ function pastDates(count: number): string[] {
   for (let i = 1; i <= count; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    dates.push(d.toLocaleDateString('en-CA'));
+    dates.push(d.toLocaleDateString("en-CA"));
   }
   return dates;
 }
@@ -79,8 +79,8 @@ export function ChallengeHistoryPanel({
               <span className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 opacity-60" />
                 {isExpanded && puns.length > 0
-                  ? `${puns.length} pun${puns.length !== 1 ? 's' : ''}`
-                  : 'View puns'}
+                  ? `${puns.length} pun${puns.length !== 1 ? "s" : ""}`
+                  : "View puns"}
               </span>
               {isExpanded ? (
                 <ChevronUp className="w-4 h-4 opacity-60" />
@@ -94,7 +94,7 @@ export function ChallengeHistoryPanel({
               {isExpanded && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
+                  animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden"

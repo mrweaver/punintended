@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { punsApi, type Pun } from '../api/client';
+import { useState, useCallback } from "react";
+import { punsApi, type Pun } from "../api/client";
 
 /**
  * Simplified challenge history - loads puns for past dates.
@@ -29,18 +29,21 @@ export function useChallengeHistory(groupId?: string | null) {
           const result = await punsApi.list(challengeId, groupId || undefined);
           setPunsByDate((prev) => ({ ...prev, [challengeId]: result }));
         } catch (err) {
-          console.error('Failed to load history puns:', err);
+          console.error("Failed to load history puns:", err);
         } finally {
           setLoadingDate(null);
         }
       }
     },
-    [expandedDates, punsByDate, groupId]
+    [expandedDates, punsByDate, groupId],
   );
 
-  const reactPun = useCallback(async (punId: string, reaction: Parameters<typeof punsApi.react>[1]) => {
-    await punsApi.react(punId, reaction);
-  }, []);
+  const reactPun = useCallback(
+    async (punId: string, reaction: Parameters<typeof punsApi.react>[1]) => {
+      await punsApi.react(punId, reaction);
+    },
+    [],
+  );
 
   return {
     expandedDates,

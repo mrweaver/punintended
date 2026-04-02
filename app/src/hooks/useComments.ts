@@ -1,23 +1,22 @@
-import { useState, useCallback } from 'react';
-import { commentsApi, type PunComment } from '../api/client';
+import { useState, useCallback } from "react";
+import { commentsApi, type PunComment } from "../api/client";
 
 export function useComments() {
-  const [commentsByPun, setCommentsByPun] = useState<Record<string, PunComment[]>>({});
+  const [commentsByPun, setCommentsByPun] = useState<
+    Record<string, PunComment[]>
+  >({});
 
-  const loadCommentsForPun = useCallback(
-    async (punId: string) => {
-      const data = await commentsApi.list(punId);
-      setCommentsByPun((prev) => ({ ...prev, [punId]: data }));
-    },
-    []
-  );
+  const loadCommentsForPun = useCallback(async (punId: string) => {
+    const data = await commentsApi.list(punId);
+    setCommentsByPun((prev) => ({ ...prev, [punId]: data }));
+  }, []);
 
   const addComment = useCallback(
     async (punId: string, text: string) => {
       await commentsApi.add(punId, text);
       await loadCommentsForPun(punId);
     },
-    [loadCommentsForPun]
+    [loadCommentsForPun],
   );
 
   const reactToComment = useCallback(
@@ -31,7 +30,10 @@ export function useComments() {
             const oldReaction = c.myReaction;
             const reactions = { ...(c.reactions ?? {}) };
             if (oldReaction) {
-              reactions[oldReaction] = Math.max(0, (reactions[oldReaction] ?? 0) - 1);
+              reactions[oldReaction] = Math.max(
+                0,
+                (reactions[oldReaction] ?? 0) - 1,
+              );
               if (reactions[oldReaction] === 0) delete reactions[oldReaction];
             }
             if (reaction) {
@@ -50,8 +52,14 @@ export function useComments() {
     (punId: string) => {
       return commentsByPun[punId] || [];
     },
-    [commentsByPun]
+    [commentsByPun],
   );
 
-  return { commentsByPun, loadCommentsForPun, addComment, reactToComment, getCommentsForPun };
+  return {
+    commentsByPun,
+    loadCommentsForPun,
+    addComment,
+    reactToComment,
+    getCommentsForPun,
+  };
 }

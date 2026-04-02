@@ -73,7 +73,8 @@ export function GameBoard({
   } = usePuns(todayId, user?.uid, session.id);
   const historyState = useChallengeHistory(session.id);
   const { messages, sendMessage, reactToMessage } = useMessages(session.id);
-  const { addComment, reactToComment, getCommentsForPun, loadCommentsForPun } = useComments();
+  const { addComment, reactToComment, getCommentsForPun, loadCommentsForPun } =
+    useComments();
   const { unlock: unlockAudio, playScore } = useScoreSound();
   const { typingPlayers, reportTyping, onTextChange } = useTypingStatus(
     session.id,
@@ -343,8 +344,8 @@ export function GameBoard({
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-col gap-1">
               <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-                Tip: Combine {challenge?.topic} and{" "}
-                {challenge?.focus} for maximum points!
+                Tip: Combine {challenge?.topic} and {challenge?.focus} for
+                maximum points!
               </p>
               <p
                 className={`text-xs font-mono ${attemptsLeft === 0 ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-zinc-500"}`}
@@ -421,7 +422,6 @@ export function GameBoard({
                   <>
                     <Calendar className="w-3.5 h-3.5" />
                     History
-
                   </>
                 )}
               </Button>
@@ -483,7 +483,9 @@ export function GameBoard({
                         onEdit={editPun}
                         onDelete={deletePun}
                         onComment={addComment}
-                        onCommentReact={(commentId, reaction) => reactToComment(commentId, pun.id, reaction)}
+                        onCommentReact={(commentId, reaction) =>
+                          reactToComment(commentId, pun.id, reaction)
+                        }
                         onLoadComments={loadCommentsForPun}
                       />
                     ))}

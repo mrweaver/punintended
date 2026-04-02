@@ -4,6 +4,17 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.16.0] - 2026-04-02
+
+### Added
+
+- **Challenge Reveal Gating:** Daily challenges now stay sealed in the lobby and inside groups until you explicitly reveal them, with the reveal time and elapsed timer shown after you start.
+- **My Submissions Archive:** Added a dedicated archive view for reviewing daily puns, AI scores, groans, and comments from the lobby, the group page, and the account menu.
+
+### Fixed
+
+- **Profile Modal Mobile Layout:** The profile modal now uses a full-height mobile layout with safer close-button placement and improved scrolling behavior.
+
 ## [1.15.0] - 2026-04-02
 
 ### Added

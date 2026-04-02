@@ -113,7 +113,9 @@ async function findOrCreateUser(googleProfile) {
   const googleDisplayName = normalizeDisplayNameInput(displayName);
   if (!email) throw new Error("Email not provided by Google");
 
-  let result = await query("SELECT * FROM users WHERE google_id = $1", [googleId]);
+  let result = await query("SELECT * FROM users WHERE google_id = $1", [
+    googleId,
+  ]);
   if (result.rows.length > 0) {
     result = await query(
       `UPDATE users SET display_name = $1, photo_url = $2, email = $3, updated_at = NOW()
@@ -145,6 +147,14 @@ async function updateCustomDisplayName(userId, customDisplayName) {
   return result.rows[0] ?? null;
 }
 
+async function updateUserPrivacy(userId, anonymous) {
+  const result = await query(
+    `UPDATE users SET anonymous_in_leaderboards = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [!!anonymous, userId],
+  );
+  return result.rows[0] ?? null;
+}
+
 async function getGroupIdsByUser(userId) {
   const result = await query(
     `SELECT group_id FROM group_members WHERE user_id = $1`,
@@ -161,10 +171,10 @@ async function createGroup(name, ownerId) {
     [name, ownerId],
   );
   const group = result.rows[0];
-  await query(
-    `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`,
-    [group.id, ownerId],
-  );
+  await query(`INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`, [
+    group.id,
+    ownerId,
+  ]);
   return group;
 }
 
@@ -288,7 +298,11 @@ async function getPunsForChallenge(challengeId, viewerId = null) {
   return result.rows.map(formatPun);
 }
 
-async function getPunsForChallengeByGroup(challengeId, groupId, viewerId = null) {
+async function getPunsForChallengeByGroup(
+  challengeId,
+  groupId,
+  viewerId = null,
+) {
   const result = await query(
     `SELECT p.*,
        ${displayNameSql("u")} AS author_name,
@@ -333,7 +347,9 @@ async function updatePunText(punId, text) {
 
 async function updatePunScore(punId, score, feedback) {
   await query(`UPDATE puns SET ai_score = $1, ai_feedback = $2 WHERE id = $3`, [
-    score, feedback, punId,
+    score,
+    feedback,
+    punId,
   ]);
 }
 
@@ -348,7 +364,10 @@ async function getPunById(punId) {
 
 async function setPunReaction(punId, userId, reaction) {
   if (!reaction) {
-    await query("DELETE FROM pun_reactions WHERE pun_id = $1 AND user_id = $2", [punId, userId]);
+    await query(
+      "DELETE FROM pun_reactions WHERE pun_id = $1 AND user_id = $2",
+      [punId, userId],
+    );
     return null;
   }
   const result = await query(
@@ -417,6 +436,7 @@ function formatPun(row) {
     text: row.text,
     aiScore: row.ai_score ? parseFloat(row.ai_score) : null,
     aiFeedback: row.ai_feedback,
+    responseTimeMs: row.response_time_ms ? Number(row.response_time_ms) : null,
     groanCount: Number(row.groan_count || 0),
     groaners: formatGroaners(row.groaners),
     myReaction: row.my_groan ? "groan" : null,
@@ -483,7 +503,9 @@ async function getWeeklyBestScores(groupId, weekStart, weekEnd) {
 async function getGlobalDailyRanking(challengeId) {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.created_at,
+       gdc.topic AS challenge_topic, gdc.focus AS challenge_focus,
        ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
+       u.anonymous_in_leaderboards,
        COALESCE(
          json_agg(
            json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
@@ -494,10 +516,11 @@ async function getGlobalDailyRanking(challengeId) {
        COUNT(pr.pun_id) AS groan_count
      FROM puns p
      JOIN users u ON u.id = p.author_id
+     LEFT JOIN global_daily_challenges gdc ON gdc.challenge_id = p.challenge_id
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.challenge_id = $1 AND p.ai_score IS NOT NULL
-     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, u.anonymous_in_leaderboards, gdc.topic, gdc.focus
      ORDER BY p.ai_score DESC, groan_count DESC, p.created_at ASC
      LIMIT 50`,
     [challengeId],
@@ -509,7 +532,9 @@ async function getGlobalDailyRanking(challengeId) {
 async function getGlobalAllTimeGroaners() {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
+       gdc.topic AS challenge_topic, gdc.focus AS challenge_focus,
        ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
+       u.anonymous_in_leaderboards,
        COALESCE(
          json_agg(
            json_build_object('uid', ru.id, 'name', ${displayNameSql("ru")})
@@ -520,10 +545,11 @@ async function getGlobalAllTimeGroaners() {
        COUNT(pr.pun_id) AS groan_count
      FROM puns p
      JOIN users u ON u.id = p.author_id
+     LEFT JOIN global_daily_challenges gdc ON gdc.challenge_id = p.challenge_id
      LEFT JOIN pun_reactions pr ON pr.pun_id = p.id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.ai_score >= 7.0
-     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
+     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, u.anonymous_in_leaderboards, gdc.topic, gdc.focus
      ORDER BY groan_count DESC, p.created_at ASC
      LIMIT 50`,
   );
@@ -531,13 +557,16 @@ async function getGlobalAllTimeGroaners() {
 }
 
 function formatLeaderboardRow(row) {
+  const anonymous = !!row.anonymous_in_leaderboards;
   return {
     id: row.id,
     text: row.text,
     aiScore: parseFloat(row.ai_score),
     challengeId: row.challenge_id || null,
-    authorName: row.author_name,
-    authorPhoto: row.author_photo,
+    challengeTopic: row.challenge_topic || null,
+    challengeFocus: row.challenge_focus || null,
+    authorName: anonymous ? "Anonymous Punster" : row.author_name,
+    authorPhoto: anonymous ? "" : row.author_photo,
     groanCount: Number(row.groan_count || 0),
     groaners: formatGroaners(row.groaners),
     createdAt: row.created_at,
@@ -644,7 +673,9 @@ async function createNotification(userId, type, message, link) {
 }
 
 async function markNotificationRead(notificationId) {
-  await query("UPDATE notifications SET read = TRUE WHERE id = $1", [notificationId]);
+  await query("UPDATE notifications SET read = TRUE WHERE id = $1", [
+    notificationId,
+  ]);
 }
 
 function formatNotification(row) {
@@ -683,11 +714,18 @@ async function createGauntletRun(gauntletId, playerId) {
 }
 
 async function getGauntletRunById(runId) {
-  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [runId]);
+  const result = await query(`SELECT * FROM gauntlet_runs WHERE id = $1`, [
+    runId,
+  ]);
   return result.rows[0] ? formatGauntletRun(result.rows[0]) : null;
 }
 
-async function submitGauntletRound(runId, roundIndex, punText, secondsRemaining) {
+async function submitGauntletRound(
+  runId,
+  roundIndex,
+  punText,
+  secondsRemaining,
+) {
   const newEntry = {
     pun_text: punText,
     ai_score: null,
@@ -706,7 +744,12 @@ async function submitGauntletRound(runId, roundIndex, punText, secondsRemaining)
   return formatGauntletRun(result.rows[0]);
 }
 
-async function updateGauntletRoundScore(runId, roundIndex, aiScore, aiFeedback) {
+async function updateGauntletRoundScore(
+  runId,
+  roundIndex,
+  aiScore,
+  aiFeedback,
+) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT rounds FROM gauntlet_runs WHERE id = $1 FOR UPDATE`,
@@ -751,7 +794,9 @@ async function setGauntletRunScoring(runId) {
 }
 
 async function getGauntletComparison(gauntletId) {
-  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [gauntletId]);
+  const gauntletResult = await query(`SELECT * FROM gauntlets WHERE id = $1`, [
+    gauntletId,
+  ]);
   if (!gauntletResult.rows[0]) return null;
   const gauntlet = formatGauntlet(gauntletResult.rows[0]);
   const runsResult = await query(
@@ -843,7 +888,13 @@ async function getGauntletLeaderboard(userId, limit = 50) {
   }));
 }
 
-async function addGauntletComment(gauntletId, runId, roundIndex, authorId, text) {
+async function addGauntletComment(
+  gauntletId,
+  runId,
+  roundIndex,
+  authorId,
+  text,
+) {
   const result = await query(
     `INSERT INTO gauntlet_comments (gauntlet_id, run_id, round_index, author_id, text)
      VALUES ($1, $2, $3, $4, $5)
@@ -949,7 +1000,8 @@ async function getMessageReactions(messageIds, messageType) {
   );
   const map = {};
   for (const row of result.rows) {
-    if (!map[row.message_id]) map[row.message_id] = { counts: {}, userReactions: {} };
+    if (!map[row.message_id])
+      map[row.message_id] = { counts: {}, userReactions: {} };
     map[row.message_id].counts[row.reaction] = row.count;
     for (const uid of row.user_ids) {
       map[row.message_id].userReactions[uid] = row.reaction;
@@ -978,14 +1030,24 @@ async function setMessageReaction(messageId, messageType, userId, reaction) {
 }
 
 function formatGauntlet(row) {
-  return { id: row.id, createdBy: row.created_by, rounds: row.rounds, createdAt: row.created_at };
+  return {
+    id: row.id,
+    createdBy: row.created_by,
+    rounds: row.rounds,
+    createdAt: row.created_at,
+  };
 }
 
 function formatGauntletRun(row) {
   return {
-    id: row.id, gauntletId: row.gauntlet_id, playerId: row.player_id,
-    rounds: row.rounds, status: row.status, totalScore: row.total_score,
-    createdAt: row.created_at, updatedAt: row.updated_at,
+    id: row.id,
+    gauntletId: row.gauntlet_id,
+    playerId: row.player_id,
+    rounds: row.rounds,
+    status: row.status,
+    totalScore: row.total_score,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -998,7 +1060,9 @@ async function runMigrations() {
   `);
 
   if (oldTableExists.rows.length > 0) {
-    console.log("[Migration] Migrating game_sessions -> groups architecture...");
+    console.log(
+      "[Migration] Migrating game_sessions -> groups architecture...",
+    );
 
     await query(`
       CREATE TABLE IF NOT EXISTS groups (
@@ -1064,7 +1128,9 @@ async function runMigrations() {
     `);
     if (hasMsgSessionId.rows.length > 0 && hasMsgGroupId.rows.length === 0) {
       await query(`ALTER TABLE messages RENAME COLUMN session_id TO group_id`);
-      await query(`ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_session_id_fkey`);
+      await query(
+        `ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_session_id_fkey`,
+      );
       await query(`
         ALTER TABLE messages ADD CONSTRAINT messages_group_id_fkey
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
@@ -1075,10 +1141,19 @@ async function runMigrations() {
   }
 
   // --- Standard idempotent migrations ---
-  await query(`ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`);
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_display_name VARCHAR(255)`);
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`,
+  );
+  await query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_display_name VARCHAR(255)`,
+  );
+  await query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS anonymous_in_leaderboards BOOLEAN DEFAULT FALSE`,
+  );
 
-  const usersToNormalize = await query(`SELECT id, display_name, custom_display_name FROM users`);
+  const usersToNormalize = await query(
+    `SELECT id, display_name, custom_display_name FROM users`,
+  );
   for (const user of usersToNormalize.rows) {
     const nd = normalizeDisplayNameInput(user.display_name);
     const nc = normalizeDisplayNameInput(user.custom_display_name);
@@ -1109,9 +1184,15 @@ async function runMigrations() {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlets_created_by ON gauntlets(created_by)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_gauntlet ON gauntlet_runs(gauntlet_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`,
+  );
   await query(`
     CREATE TABLE IF NOT EXISTS gauntlet_comments (
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -1123,9 +1204,15 @@ async function runMigrations() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`);
-  await query(`ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check`);
-  await query(`ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN ('reaction', 'vote', 'system'))`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_comments_gauntlet ON gauntlet_comments(gauntlet_id)`,
+  );
+  await query(
+    `ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check`,
+  );
+  await query(
+    `ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN ('reaction', 'vote', 'system'))`,
+  );
   await query(`
     CREATE TABLE IF NOT EXISTS global_daily_challenges (
       challenge_id VARCHAR(10) PRIMARY KEY,
@@ -1177,7 +1264,9 @@ async function runMigrations() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`,
+  );
   await query(`
     CREATE TABLE IF NOT EXISTS message_reactions (
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -1189,14 +1278,26 @@ async function runMigrations() {
       UNIQUE(message_id, message_type, user_id)
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id, message_type)`,
+  );
 
   // Indexes for three-tier architecture
-  await query(`CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_puns_challenge ON puns(challenge_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_puns_author_challenge ON puns(author_id, challenge_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id)`);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_puns_challenge ON puns(challenge_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_puns_author_challenge ON puns(author_id, challenge_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id)`,
+  );
 
   await query(`
     DO $fn$ BEGIN
@@ -1210,21 +1311,64 @@ async function runMigrations() {
 }
 
 export {
-  pool, query, withTransaction,
-  getEffectiveDisplayName, normalizeDisplayNameInput, runMigrations,
-  findOrCreateUser, getUserById, updateCustomDisplayName, getGroupIdsByUser,
-  createGroup, getAllGroups, getGroupById, joinGroup, deleteGroup, renameGroup, removePlayerFromGroup,
-  getGlobalChallengeForDate, saveGlobalChallenge, getPastGlobalChallengeTopics,
-  hasUserSubmittedForChallenge, getPunsForChallenge, getPunsForChallengeByGroup,
-  createPun, updatePunText, updatePunScore, deletePun, getPunById,
-  setPunReaction, getPunsByAuthor, countPunsByAuthorForChallenge,
-  getWeeklyBestScores, getGlobalDailyRanking, getGlobalAllTimeGroaners,
-  getMessagesByGroup, createMessage,
-  getCommentsByPun, getCommentsForPuns, createComment,
-  getNotificationsByUser, createNotification, markNotificationRead,
-  createGauntlet, getGauntletById, createGauntletRun, getGauntletRunById,
-  submitGauntletRound, updateGauntletRoundScore, finalizeGauntletRun, setGauntletRunScoring,
-  getGauntletComparison, getUserGauntletHistory, getGauntletLeaderboard,
-  addGauntletComment, getGauntletComments, getGauntletMessages, createGauntletMessage,
-  getMessageReactions, setMessageReaction,
+  pool,
+  query,
+  withTransaction,
+  getEffectiveDisplayName,
+  normalizeDisplayNameInput,
+  runMigrations,
+  findOrCreateUser,
+  getUserById,
+  updateCustomDisplayName,
+  updateUserPrivacy,
+  getGroupIdsByUser,
+  createGroup,
+  getAllGroups,
+  getGroupById,
+  joinGroup,
+  deleteGroup,
+  renameGroup,
+  removePlayerFromGroup,
+  getGlobalChallengeForDate,
+  saveGlobalChallenge,
+  getPastGlobalChallengeTopics,
+  hasUserSubmittedForChallenge,
+  getPunsForChallenge,
+  getPunsForChallengeByGroup,
+  createPun,
+  updatePunText,
+  updatePunScore,
+  deletePun,
+  getPunById,
+  setPunReaction,
+  getPunsByAuthor,
+  countPunsByAuthorForChallenge,
+  getWeeklyBestScores,
+  getGlobalDailyRanking,
+  getGlobalAllTimeGroaners,
+  getMessagesByGroup,
+  createMessage,
+  getCommentsByPun,
+  getCommentsForPuns,
+  createComment,
+  getNotificationsByUser,
+  createNotification,
+  markNotificationRead,
+  createGauntlet,
+  getGauntletById,
+  createGauntletRun,
+  getGauntletRunById,
+  submitGauntletRound,
+  updateGauntletRoundScore,
+  finalizeGauntletRun,
+  setGauntletRunScoring,
+  getGauntletComparison,
+  getUserGauntletHistory,
+  getGauntletLeaderboard,
+  addGauntletComment,
+  getGauntletComments,
+  getGauntletMessages,
+  createGauntletMessage,
+  getMessageReactions,
+  setMessageReaction,
 };

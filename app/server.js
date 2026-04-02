@@ -64,6 +64,7 @@ import {
   setMessageReaction,
   runMigrations,
   updateCustomDisplayName,
+  updateUserPrivacy,
 } from "./db/database.js";
 
 const pgSession = connectPgSimple(session);
@@ -388,7 +389,10 @@ async function broadcastMessagesUpdate(groupId) {
 async function broadcastCommentsUpdate(challengeId) {
   const todayId = getAESTDateId();
   if (challengeId === todayId) {
-    broadcastToDaily("comments-update", { challengeId, updatedAt: new Date().toISOString() });
+    broadcastToDaily("comments-update", {
+      challengeId,
+      updatedAt: new Date().toISOString(),
+    });
   }
 }
 
@@ -441,6 +445,7 @@ function formatAuthUser(user) {
     googleDisplayName: user.display_name ?? null,
     photoURL: user.photo_url,
     email: user.email,
+    anonymousInLeaderboards: !!user.anonymous_in_leaderboards,
   };
 }
 
@@ -812,7 +817,11 @@ app.get("/api/daily/puns", ensureAuthenticated, async (req, res) => {
 
     let puns;
     if (groupId) {
-      puns = await getPunsForChallengeByGroup(challengeId, groupId, req.user.id);
+      puns = await getPunsForChallengeByGroup(
+        challengeId,
+        groupId,
+        req.user.id,
+      );
     } else {
       puns = await getPunsForChallenge(challengeId, req.user.id);
     }
@@ -851,10 +860,7 @@ app.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
     const challenge = await getOrCreateGlobalChallenge(todayId);
 
     // Hard cap: 3 submissions per player per day (global)
-    const myCount = await countPunsByAuthorForChallenge(
-      todayId,
-      req.user.id,
-    );
+    const myCount = await countPunsByAuthorForChallenge(todayId, req.user.id);
     if (myCount >= 3) {
       return res.status(429).json({
         error:
@@ -1026,26 +1032,22 @@ app.get("/api/groups/:id/messages", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.post(
-  "/api/groups/:id/messages",
-  ensureAuthenticated,
-  async (req, res) => {
-    const { text } = req.body;
-    if (!text || !text.trim())
-      return res.status(400).json({ error: "Message text required" });
-    if (text.length > 500)
-      return res.status(400).json({ error: "Message too long" });
+app.post("/api/groups/:id/messages", ensureAuthenticated, async (req, res) => {
+  const { text } = req.body;
+  if (!text || !text.trim())
+    return res.status(400).json({ error: "Message text required" });
+  if (text.length > 500)
+    return res.status(400).json({ error: "Message too long" });
 
-    try {
-      await createMessage(req.params.id, req.user.id, text.trim());
-      broadcastMessagesUpdate(req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      res.status(500).json({ error: "Failed to send message" });
-    }
-  },
-);
+  try {
+    await createMessage(req.params.id, req.user.id, text.trim());
+    broadcastMessagesUpdate(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to send message:", error);
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
 
 // --- Comment API ---
 app.get("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
@@ -1281,6 +1283,20 @@ app.put("/api/profile/display-name", ensureAuthenticated, async (req, res) => {
   } catch (error) {
     console.error("Failed to update display name:", error);
     res.status(500).json({ error: "Failed to update display name" });
+  }
+});
+
+app.put("/api/profile/privacy", ensureAuthenticated, async (req, res) => {
+  const anonymous = !!req.body?.anonymous;
+  try {
+    const updatedUser = await updateUserPrivacy(req.user.id, anonymous);
+    if (!updatedUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json({ user: formatAuthUser(updatedUser) });
+  } catch (error) {
+    console.error("Failed to update privacy setting:", error);
+    res.status(500).json({ error: "Failed to update privacy setting" });
   }
 });
 

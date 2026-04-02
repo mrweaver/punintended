@@ -64,7 +64,7 @@ const SORT_OPTIONS: { label: string; value: SortField }[] = [
 ];
 
 export function ProfileModal({ onClose }: ProfileModalProps) {
-  const { user, logout, updateDisplayName } = useAuth();
+  const { user, logout, updateDisplayName, updatePrivacy } = useAuth();
   const [userPuns, setUserPuns] = useState<Pun[]>([]);
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState("");
@@ -77,6 +77,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
     {},
   );
   const [loadingComments, setLoadingComments] = useState<string | null>(null);
+  const [isSavingPrivacy, setIsSavingPrivacy] = useState(false);
 
   useEffect(() => {
     profileApi.getPuns().then(setUserPuns).catch(console.error);
@@ -295,6 +296,32 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                   )}
                 </div>
               </div>
+              {/* Privacy toggle */}
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={user.anonymousInLeaderboards}
+                    disabled={isSavingPrivacy}
+                    onChange={async () => {
+                      setIsSavingPrivacy(true);
+                      try {
+                        await updatePrivacy(!user.anonymousInLeaderboards);
+                      } catch {
+                        // ignore
+                      } finally {
+                        setIsSavingPrivacy(false);
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 dark:bg-zinc-700 rounded-full peer-checked:bg-orange-500 dark:peer-checked:bg-violet-500 transition-colors" />
+                  <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+                </div>
+                <span className="text-sm text-gray-700 dark:text-zinc-300">
+                  Hide my name on public leaderboards
+                </span>
+              </label>
               {/* sm:pr-10 keeps buttons clear of the close button on desktop */}
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:pr-10">
                 <Button

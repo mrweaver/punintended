@@ -142,6 +142,11 @@ export const profileApi = {
       method: "PUT",
       body: JSON.stringify({ displayName }),
     }),
+  updatePrivacy: (anonymous: boolean) =>
+    request<{ user: AuthUser }>("/api/profile/privacy", {
+      method: "PUT",
+      body: JSON.stringify({ anonymous }),
+    }),
 };
 
 // Leaderboards
@@ -306,6 +311,7 @@ export interface AuthUser {
   googleDisplayName: string | null;
   photoURL: string;
   email: string;
+  anonymousInLeaderboards: boolean;
 }
 
 export interface Group {
@@ -346,6 +352,7 @@ export interface Pun {
   text: string;
   aiScore: number | null;
   aiFeedback: string | null;
+  responseTimeMs: number | null;
   groanCount: number;
   groaners?: Groaner[];
   myReaction: "groan" | null;
@@ -371,6 +378,8 @@ export interface LeaderboardEntry {
   text: string;
   aiScore: number;
   challengeId: string | null;
+  challengeTopic: string | null;
+  challengeFocus: string | null;
   authorName: string;
   authorPhoto: string;
   groanCount: number;
@@ -406,8 +415,6 @@ export interface PunComment {
   reactions?: Record<string, number>;
   myReaction?: string | null;
 }
-
-
 
 export interface TypingPlayer {
   uid: number;

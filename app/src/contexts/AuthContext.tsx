@@ -7,6 +7,7 @@ interface AuthContextValue {
   login: () => void;
   logout: () => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<AuthUser>;
+  updatePrivacy: (anonymous: boolean) => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -15,6 +16,9 @@ const AuthContext = createContext<AuthContextValue>({
   login: () => {},
   logout: async () => {},
   updateDisplayName: async () => {
+    throw new Error('AuthContext not initialized');
+  },
+  updatePrivacy: async () => {
     throw new Error('AuthContext not initialized');
   },
 });
@@ -51,8 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return updatedUser;
   };
 
+  const updatePrivacy = async (anonymous: boolean) => {
+    const { user: updatedUser } = await profileApi.updatePrivacy(anonymous);
+    setUser(updatedUser);
+    return updatedUser;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isReady, login, logout, updateDisplayName }}>
+    <AuthContext.Provider value={{ user, isReady, login, logout, updateDisplayName, updatePrivacy }}>
       {children}
     </AuthContext.Provider>
   );

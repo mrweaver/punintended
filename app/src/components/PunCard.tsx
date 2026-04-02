@@ -146,6 +146,14 @@ export function PunCard({
             minute: "2-digit",
           })}
         </span>
+        {pun.responseTimeMs != null && (
+          <span className="text-xs text-gray-400 dark:text-zinc-500 whitespace-nowrap">
+            •{" "}
+            {pun.responseTimeMs >= 60000
+              ? `${Math.floor(pun.responseTimeMs / 60000)}m ${Math.round((pun.responseTimeMs % 60000) / 1000)}s`
+              : `${Math.round(pun.responseTimeMs / 1000)}s`}
+          </span>
+        )}
         {!pun.viewed && (
           <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-violet-900/50 dark:text-violet-200">
             New

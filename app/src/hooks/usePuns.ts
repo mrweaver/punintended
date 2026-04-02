@@ -114,11 +114,11 @@ export function usePuns(
   }, [puns, sortMode]);
 
   const submitPun = useCallback(
-    async (text: string) => {
+    async (text: string, responseTimeMs?: number | null) => {
       if (!challengeId) return;
       setSubmitting(true);
       try {
-        await punsApi.submit(text, null);
+        await punsApi.submit(text, responseTimeMs ?? null);
       } finally {
         setSubmitting(false);
       }

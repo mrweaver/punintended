@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authApi, profileApi, type AuthUser } from '../api/client';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { authApi, profileApi, type AuthUser } from "../api/client";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -16,10 +16,10 @@ const AuthContext = createContext<AuthContextValue>({
   login: () => {},
   logout: async () => {},
   updateDisplayName: async () => {
-    throw new Error('AuthContext not initialized');
+    throw new Error("AuthContext not initialized");
   },
   updatePrivacy: async () => {
-    throw new Error('AuthContext not initialized');
+    throw new Error("AuthContext not initialized");
   },
 });
 
@@ -40,17 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = () => {
-    window.location.href = '/auth/google';
+    window.location.href = "/auth/google";
   };
 
   const logout = async () => {
     await authApi.logout();
     setUser(null);
-    localStorage.removeItem('pun_session_id');
+    localStorage.removeItem("pun_session_id");
   };
 
   const updateDisplayName = async (displayName: string) => {
-    const { user: updatedUser } = await profileApi.updateDisplayName(displayName);
+    const { user: updatedUser } =
+      await profileApi.updateDisplayName(displayName);
     setUser(updatedUser);
     return updatedUser;
   };
@@ -62,7 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isReady, login, logout, updateDisplayName, updatePrivacy }}>
+    <AuthContext.Provider
+      value={{ user, isReady, login, logout, updateDisplayName, updatePrivacy }}
+    >
       {children}
     </AuthContext.Provider>
   );

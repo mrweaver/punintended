@@ -33,7 +33,13 @@
       "Skill(update-config)",
       "Skill(update-config:*)",
       "Bash(grep -n \"getScoreRating\\\\|scoreColor\\\\|getTier\" /opt/stacks/punintended/app/src/components/*.tsx)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(grep -n \"import.*from.*server\" /opt/stacks/punintended/app/*.js /opt/stacks/punintended/app/**/*.js)",
+      "Bash(node --check server.js)",
+      "Bash(timeout 10 node -e ':*)"
+    ],
+    "additionalDirectories": [
+      "/opt/stacks/punintended/app"
     ]
   }
 }

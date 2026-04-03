@@ -9,7 +9,10 @@ function parseServerTimestamp(raw: string | null | undefined): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function persistRevealTimestamp(storageKey: string | null, timestamp: number | null) {
+function persistRevealTimestamp(
+  storageKey: string | null,
+  timestamp: number | null,
+) {
   if (!storageKey || typeof window === "undefined") return;
 
   if (timestamp === null) {

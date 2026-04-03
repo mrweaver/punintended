@@ -397,8 +397,8 @@ export function GameBoard({
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <p className="text-xs text-text-secondary">
                     {attemptsLeft} attempt
-                    {attemptsLeft !== 1 ? "s" : ""} remaining &middot; Ctrl+Enter
-                    to submit
+                    {attemptsLeft !== 1 ? "s" : ""} remaining &middot;
+                    Ctrl+Enter to submit
                   </p>
                   <Button
                     onClick={handleSubmitPun}

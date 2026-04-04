@@ -12,6 +12,11 @@ import { fileURLToPath } from "url";
 import { runMigrations } from "./db/database.js";
 import { applyMiddleware } from "./middleware/index.js";
 import { startHeartbeat } from "./services/sse.js";
+import {
+  startBufferMonitor,
+  backfillEmbeddings,
+  maybeRefillBuffer,
+} from "./services/buffer.js";
 import analyticsRoutes from "./routes/analytics.js";
 import authRoutes from "./routes/auth.js";
 import dailyRoutes from "./routes/daily.js";
@@ -62,6 +67,10 @@ startHeartbeat();
 
 runMigrations()
   .then(() => {
+    startBufferMonitor();
+    backfillEmbeddings().catch(console.error);
+    maybeRefillBuffer().catch(console.error);
+
     app.listen(PORT, () => {
       console.log(`PunIntended server running on port ${PORT}`);
     });

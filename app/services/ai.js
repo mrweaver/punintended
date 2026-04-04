@@ -11,6 +11,7 @@ import {
   getGlobalChallengeForDate,
   saveGlobalChallenge,
   getPastGlobalChallengeTopics,
+  popOldestPendingChallenge,
 } from "../db/database.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -34,6 +35,9 @@ export async function generateDailyChallenge(pastChallenges = []) {
 
     The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON.${avoidClause}`,
     config: {
+      temperature: 0.95, // Elevated for higher variance across the 20 pairs
+      topK: 64,          // Widened pool for more diverse everyday objects
+      topP: 0.95,        // Standard cutoff to prevent total gibberish
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -50,12 +54,80 @@ export async function generateDailyChallenge(pastChallenges = []) {
 
 export async function getOrCreateGlobalChallenge(dateId) {
   let challenge = await getGlobalChallengeForDate(dateId);
-  if (!challenge) {
+  if (challenge) return challenge;
+
+  // Try the pre-approved buffer first (instant, no LLM call)
+  const buffered = await popOldestPendingChallenge();
+  if (buffered) {
+    await saveGlobalChallenge(
+      dateId,
+      buffered.topic,
+      buffered.focus,
+      buffered.embedding,
+    );
+    challenge = { topic: buffered.topic, focus: buffered.focus };
+    console.log(
+      `[Daily] Served from buffer: "${buffered.topic} | ${buffered.focus}"`,
+    );
+  } else {
+    // Buffer empty — fall back to live Gemini generation
+    console.warn(
+      "[Daily] Buffer empty, falling back to live Gemini generation.",
+    );
     const past = await getPastGlobalChallengeTopics();
     challenge = await generateDailyChallenge(past);
     await saveGlobalChallenge(dateId, challenge.topic, challenge.focus);
   }
+
   return challenge;
+}
+
+export async function generateChallengeBatch(recentChallenges = []) {
+  const avoidClause =
+    recentChallenges.length > 0
+      ? `\n\nSTRICTLY AVOID repeating or closely resembling these recent combinations:\n${recentChallenges
+          .map((c) => `- Topic: "${c.topic}", Focus: "${c.focus}"`)
+          .join("\n")}`
+      : "";
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: `Generate 20 completely unique 'Topic' and 'Focus' pairs for a pun-making game inspired by Punderdome.
+
+    CRITICAL RULES:
+    1. Each Topic and Focus MUST be completely unrelated and contrasting. Do NOT make them logically connected.
+    2. All 20 Topics must be different from each other.
+    3. All 20 Focuses must be different from each other.
+    4. Topics: broad categories (e.g., "Human Body", "IT Infrastructure", "History", "Power Tools", "Marine Biology").
+    5. Focuses: specific, unrelated objects, situations, or places (e.g., "Bread", "A Flat Tire", "Coffee", "A Retaining Wall").
+    6. Aim for MAXIMUM diversity — cover a wide range of knowledge domains and everyday situations.
+
+    The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON with a 'challenges' array of exactly 20 objects.${avoidClause}`,
+    config: {
+      temperature: 0.95,
+      topK: 64,
+      topP: 0.95,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          challenges: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                topic: { type: Type.STRING },
+                focus: { type: Type.STRING },
+              },
+              required: ["topic", "focus"],
+            },
+          },
+        },
+        required: ["challenges"],
+      },
+    },
+  });
+  return JSON.parse(response.text).challenges;
 }
 
 export async function scorePunText(topic, focus, punText) {

@@ -254,18 +254,96 @@ async function getGlobalChallengeForDate(dateId) {
   return result.rows[0] || null;
 }
 
-async function saveGlobalChallenge(dateId, topic, focus) {
-  await query(
-    `INSERT INTO global_daily_challenges (challenge_id, topic, focus)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (challenge_id) DO UPDATE SET topic = EXCLUDED.topic, focus = EXCLUDED.focus`,
-    [dateId, topic, focus],
-  );
+async function saveGlobalChallenge(dateId, topic, focus, embedding = null) {
+  if (embedding) {
+    await query(
+      `INSERT INTO global_daily_challenges (challenge_id, topic, focus, embedding)
+       VALUES ($1, $2, $3, $4::vector)
+       ON CONFLICT (challenge_id) DO UPDATE SET topic = EXCLUDED.topic, focus = EXCLUDED.focus, embedding = EXCLUDED.embedding`,
+      [dateId, topic, focus, embedding],
+    );
+  } else {
+    await query(
+      `INSERT INTO global_daily_challenges (challenge_id, topic, focus)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (challenge_id) DO UPDATE SET topic = EXCLUDED.topic, focus = EXCLUDED.focus`,
+      [dateId, topic, focus],
+    );
+  }
 }
 
 async function getPastGlobalChallengeTopics() {
   const result = await query(
     `SELECT topic, focus FROM global_daily_challenges ORDER BY challenge_id DESC`,
+  );
+  return result.rows;
+}
+
+// --- Buffer queue queries ---
+
+async function getPendingChallengeCount() {
+  const result = await query(
+    `SELECT COUNT(*)::int AS count FROM pending_challenges`,
+  );
+  return result.rows[0].count;
+}
+
+async function popOldestPendingChallenge() {
+  const result = await query(`
+    DELETE FROM pending_challenges
+    WHERE id = (
+      SELECT id FROM pending_challenges
+      ORDER BY created_at ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING topic, focus, embedding
+  `);
+  return result.rows[0] || null;
+}
+
+async function insertPendingChallenge(topic, focus, embedding) {
+  await query(
+    `INSERT INTO pending_challenges (topic, focus, embedding)
+     VALUES ($1, $2, $3::vector)`,
+    [topic, focus, embedding],
+  );
+}
+
+async function findSimilarChallenges(embedding, limit = 10) {
+  const result = await query(
+    `SELECT topic, focus, distance FROM (
+       SELECT topic, focus, embedding <=> $1::vector AS distance
+       FROM global_daily_challenges WHERE embedding IS NOT NULL
+       UNION ALL
+       SELECT topic, focus, embedding <=> $1::vector AS distance
+       FROM pending_challenges
+     ) combined
+     ORDER BY distance ASC
+     LIMIT $2`,
+    [embedding, limit],
+  );
+  return result.rows;
+}
+
+async function getRecentChallengesForFilter(limit = 50) {
+  const result = await query(
+    `SELECT topic, focus FROM global_daily_challenges ORDER BY challenge_id DESC LIMIT $1`,
+    [limit],
+  );
+  return result.rows;
+}
+
+async function updateChallengeEmbedding(challengeId, embedding) {
+  await query(
+    `UPDATE global_daily_challenges SET embedding = $2::vector WHERE challenge_id = $1`,
+    [challengeId, embedding],
+  );
+}
+
+async function getChallengesWithoutEmbedding() {
+  const result = await query(
+    `SELECT challenge_id, topic, focus FROM global_daily_challenges WHERE embedding IS NULL ORDER BY challenge_id`,
   );
   return result.rows;
 }
@@ -1357,6 +1435,21 @@ async function runMigrations() {
       END IF;
     END $fn$
   `);
+
+  // --- pgvector + buffer queue ---
+  await query(`CREATE EXTENSION IF NOT EXISTS vector`);
+  await query(
+    `ALTER TABLE global_daily_challenges ADD COLUMN IF NOT EXISTS embedding vector(1024)`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS pending_challenges (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      topic VARCHAR(500) NOT NULL,
+      focus VARCHAR(500) NOT NULL,
+      embedding vector(1024) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
 }
 
 export {
@@ -1381,6 +1474,13 @@ export {
   getGlobalChallengeForDate,
   saveGlobalChallenge,
   getPastGlobalChallengeTopics,
+  getPendingChallengeCount,
+  popOldestPendingChallenge,
+  insertPendingChallenge,
+  findSimilarChallenges,
+  getRecentChallengesForFilter,
+  updateChallengeEmbedding,
+  getChallengesWithoutEmbedding,
   getChallengeReveal,
   createChallengeReveal,
   hasUserSubmittedForChallenge,

@@ -20,6 +20,12 @@ services:
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - UMAMI_BASE_URL=${UMAMI_BASE_URL:-http://umami:3000}
+      # Buffer queue + semantic deduplication
+      - OLLAMA_URL=http://ollama:11434
+      - RERANKER_URL=http://reranker:7997
+      - SIMILARITY_THRESHOLD=0.85
+      - BUFFER_MIN_SIZE=5
+      - RERANKER_ENABLED=true
     networks:
       - dockge_default
     depends_on:
@@ -27,7 +33,7 @@ services:
         condition: service_healthy
 
   punintended-db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: punintended-db
     restart: unless-stopped
     environment:

@@ -28,6 +28,7 @@ import {
 } from "../db/database.js";
 import { getAESTDateId, isPlausibleLocalDate, getRevealElapsedMs } from "../lib/date.js";
 import { getOrCreateGlobalChallenge, scorePunText } from "../services/ai.js";
+import { maybeRefillBuffer } from "../services/buffer.js";
 import {
   addDailyClient,
   removeDailyClient,
@@ -73,6 +74,10 @@ router.get("/api/daily/challenge", ensureAuthenticated, async (req, res) => {
       ...challenge,
       revealedAt: reveal?.revealedAt ?? null,
     });
+    // Async: top up the buffer if it's running low
+    maybeRefillBuffer().catch((err) =>
+      console.error("[Daily] Async buffer refill failed:", err.message),
+    );
   } catch (error) {
     console.error("Failed to get daily challenge:", error);
     res.status(500).json({ error: "Failed to get daily challenge" });

@@ -23,7 +23,7 @@ services:
       # Buffer queue + semantic deduplication
       - OLLAMA_URL=http://ollama:11434
       - RERANKER_URL=http://reranker:7997
-      - SIMILARITY_THRESHOLD=0.85
+      - SANITY_CEILING=0.95
       - BUFFER_MIN_SIZE=5
       - RERANKER_ENABLED=true
     networks:

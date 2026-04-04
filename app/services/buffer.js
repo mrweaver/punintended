@@ -1,10 +1,11 @@
 /**
- * services/buffer.js — Batched buffer queue with two-stage semantic rejection.
+ * services/buffer.js — Batched buffer queue with novelty-sort selection.
  *
  * Maintains a pool of pre-approved challenges in `pending_challenges`.
  * Refills by generating candidates via Gemini, embedding them via Ollama,
- * and filtering duplicates using pgvector cosine similarity (Stage 1)
- * and optionally a cross-encoder reranker (Stage 2).
+ * scoring each against the corpus (cosine similarity + optional reranker),
+ * then sorting by novelty and slicing the most diverse candidates to fill
+ * the buffer. A high sanity ceiling rejects only near-exact duplicates.
  */
 import {
   getPendingChallengeCount,
@@ -19,9 +20,7 @@ import { generateChallengeBatch } from "./ai.js";
 // --- Configuration ---
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://ollama:11434";
 const RERANKER_URL = process.env.RERANKER_URL || "http://reranker:7997";
-const SIMILARITY_THRESHOLD = parseFloat(
-  process.env.SIMILARITY_THRESHOLD || "0.85",
-);
+const SANITY_CEILING = parseFloat(process.env.SANITY_CEILING || "0.95");
 const BUFFER_MIN = parseInt(process.env.BUFFER_MIN_SIZE || "5", 10);
 const BUFFER_TARGET = BUFFER_MIN * 3;
 const RERANKER_ENABLED = process.env.RERANKER_ENABLED !== "false";
@@ -82,53 +81,46 @@ async function rerankCandidates(queryText, documents) {
 }
 
 /**
- * Evaluate a single candidate against the existing corpus.
- * Stage 1: cosine similarity via pgvector.
- * Stage 2 (optional): cross-encoder reranking for higher precision.
+ * Score a candidate's similarity against the existing corpus.
+ * Returns a number 0–1 (higher = more similar to existing challenges).
  */
-async function evaluateCandidate(topic, focus, embedding) {
+async function scoreCandidate(topic, focus, embedding) {
   const vecStr = toVectorString(embedding);
-  const similar = await findSimilarChallenges(vecStr, 10);
+  const limit = RERANKER_ENABLED ? 10 : 1;
+  const similar = await findSimilarChallenges(vecStr, limit);
 
-  if (similar.length === 0) {
-    return { approved: true, similarity: 0 };
-  }
-
-  let maxSimilarity;
+  if (similar.length === 0) return 0;
 
   if (RERANKER_ENABLED) {
     try {
       const queryText = challengeToText(topic, focus);
       const documents = similar.map((s) => challengeToText(s.topic, s.focus));
       const reranked = await rerankCandidates(queryText, documents);
-      maxSimilarity = Math.max(...reranked.map((r) => r.relevance_score));
+      return Math.max(...reranked.map((r) => r.relevance_score));
     } catch (err) {
       console.warn(
         "[Buffer] Reranker unavailable, falling back to cosine similarity:",
         err.message,
       );
-      maxSimilarity = 1 - similar[0].distance;
     }
-  } else {
-    maxSimilarity = 1 - similar[0].distance;
   }
 
-  return {
-    approved: maxSimilarity < SIMILARITY_THRESHOLD,
-    similarity: maxSimilarity,
-  };
+  return 1 - similar[0].distance;
 }
 
 /**
- * Core refill: generate candidates via Gemini, embed, filter, insert.
+ * Core refill: generate candidates via Gemini, embed, score, novelty-sort, slice.
  */
 async function refillBuffer() {
   const count = await getPendingChallengeCount();
-  console.log(`[Buffer] Current pending: ${count}, target: ${BUFFER_TARGET}`);
+  const slotsNeeded = BUFFER_TARGET - count;
+  console.log(
+    `[Buffer] Current pending: ${count}, target: ${BUFFER_TARGET}, slots needed: ${slotsNeeded}`,
+  );
 
-  if (count >= BUFFER_TARGET) {
+  if (slotsNeeded <= 0) {
     console.log("[Buffer] Buffer is healthy, skipping refill.");
-    return { approved: 0, rejected: 0 };
+    return { accepted: 0, ceilingRejected: 0, skipped: 0 };
   }
 
   const recent = await getRecentChallengesForFilter(50);
@@ -142,51 +134,83 @@ async function refillBuffer() {
     console.log(`[Buffer] LLM generated ${candidates.length} candidates.`);
   } catch (err) {
     console.error("[Buffer] LLM batch generation failed:", err.message);
-    return { approved: 0, rejected: 0 };
+    return { accepted: 0, ceilingRejected: 0, skipped: 0 };
   }
 
-  let approved = 0;
-  let rejected = 0;
+  // --- Score all candidates ---
+  const scored = [];
+  let embedFailures = 0;
 
   for (const candidate of candidates) {
     try {
       const text = challengeToText(candidate.topic, candidate.focus);
       const embedding = await generateEmbedding(text);
-      const result = await evaluateCandidate(
+      const similarity = await scoreCandidate(
         candidate.topic,
         candidate.focus,
         embedding,
       );
-
-      if (result.approved) {
-        await insertPendingChallenge(
-          candidate.topic,
-          candidate.focus,
-          toVectorString(embedding),
-        );
-        console.log(
-          `[Buffer] APPROVED "${candidate.topic} | ${candidate.focus}" (similarity: ${result.similarity.toFixed(3)})`,
-        );
-        approved++;
-      } else {
-        console.log(
-          `[Buffer] REJECTED "${candidate.topic} | ${candidate.focus}" (similarity: ${result.similarity.toFixed(3)})`,
-        );
-        rejected++;
-      }
+      scored.push({ ...candidate, embedding, similarity });
     } catch (err) {
-      console.error(
-        `[Buffer] Error processing "${candidate.topic} | ${candidate.focus}":`,
-        err.message,
+      console.warn(
+        `[Buffer] Embed failed for "${candidate.topic} | ${candidate.focus}": ${err.message}`,
       );
-      rejected++;
+      embedFailures++;
     }
   }
 
   console.log(
-    `[Buffer] Refill complete: ${approved} approved, ${rejected} rejected. New total: ${count + approved}`,
+    `[Buffer] Scored ${scored.length} candidates (${embedFailures} embed failures).`,
   );
-  return { approved, rejected };
+
+  // --- Sanity ceiling: reject near-exact duplicates ---
+  const ceilingRejected = scored.filter((c) => c.similarity >= SANITY_CEILING);
+  const viable = scored.filter((c) => c.similarity < SANITY_CEILING);
+
+  if (ceilingRejected.length > 0) {
+    console.log(
+      `[Buffer] Ceiling-rejected: ${ceilingRejected.length} (>= ${SANITY_CEILING.toFixed(3)})`,
+    );
+    for (const c of ceilingRejected) {
+      console.log(
+        `[Buffer]   ✗ "${c.topic} | ${c.focus}" (${c.similarity.toFixed(3)})`,
+      );
+    }
+  }
+
+  if (viable.length === 0) {
+    console.log("[Buffer] No viable candidates after ceiling filter.");
+    return { accepted: 0, ceilingRejected: ceilingRejected.length, skipped: 0 };
+  }
+
+  // --- Sort by novelty (lowest similarity first) and slice ---
+  viable.sort((a, b) => a.similarity - b.similarity);
+  const toAccept = viable.slice(0, slotsNeeded);
+  const skipped = viable.length - toAccept.length;
+
+  console.log(
+    `[Buffer] Sorted ${viable.length} by novelty. Similarity range: ${viable[0].similarity.toFixed(3)} – ${viable[viable.length - 1].similarity.toFixed(3)}`,
+  );
+  console.log(
+    `[Buffer] Accepting top ${toAccept.length} to fill buffer (target: ${BUFFER_TARGET}).`,
+  );
+
+  // --- Insert winners ---
+  for (const c of toAccept) {
+    await insertPendingChallenge(c.topic, c.focus, toVectorString(c.embedding));
+    console.log(
+      `[Buffer]   ✓ "${c.topic} | ${c.focus}" (${c.similarity.toFixed(3)})`,
+    );
+  }
+
+  console.log(
+    `[Buffer] Refill complete: ${toAccept.length} accepted, ${ceilingRejected.length} ceiling-rejected, ${skipped} skipped (over target). New total: ${count + toAccept.length}`,
+  );
+  return {
+    accepted: toAccept.length,
+    ceilingRejected: ceilingRejected.length,
+    skipped,
+  };
 }
 
 /**
@@ -254,7 +278,7 @@ export async function backfillEmbeddings() {
  */
 export function startBufferMonitor() {
   console.log(
-    `[Buffer] Monitor started (interval: ${REFILL_INTERVAL_MS / 3600000}h, min: ${BUFFER_MIN}, target: ${BUFFER_TARGET}, threshold: ${SIMILARITY_THRESHOLD})`,
+    `[Buffer] Monitor started (interval: ${REFILL_INTERVAL_MS / 3600000}h, min: ${BUFFER_MIN}, target: ${BUFFER_TARGET}, ceiling: ${SANITY_CEILING})`,
   );
   console.log(
     `[Buffer] Ollama: ${OLLAMA_URL}, Reranker: ${RERANKER_URL} (${RERANKER_ENABLED ? "enabled" : "disabled"})`,

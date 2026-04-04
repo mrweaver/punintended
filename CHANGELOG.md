@@ -4,6 +4,19 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.18.0] - 2026-04-04
+
+### Added
+
+- **Batched Challenge Buffer:** Daily challenges are now pre-generated into a buffer queue and served instantly, eliminating front-end latency and Gemini API dependency at request time.
+- **Two-Stage Semantic Deduplication:** New challenges are embedded via Ollama (qwen3-embedding:0.6b) and filtered against the existing corpus using pgvector cosine similarity, with an optional cross-encoder reranker (jina-reranker-v3) for higher precision.
+- **pgvector Support:** Database switched to pgvector/pgvector:pg16 with a `pending_challenges` table and embedding columns for semantic similarity search.
+- **Background Buffer Monitor:** Automatic 6-hour refill cycle with on-demand top-up when buffer drops below threshold.
+
+### Fixed
+
+- **Dockerfile Missing Directories:** Production Dockerfile now includes `lib/`, `middleware/`, `routes/`, and `services/` directories added during the modular refactor.
+
 ## [1.17.1] - 2026-04-02
 
 ### Fixed

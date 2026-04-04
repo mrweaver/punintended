@@ -37,9 +37,6 @@ const PORT = process.env.PORT || 3000;
 applyMiddleware(app);
 
 // --- Routes ---
-// Analytics proxy must be registered before express.json() body parsing kicks in
-// for the raw body handler, but applyMiddleware already sets up json parsing.
-// The analytics router uses its own express.raw() middleware on its POST route.
 app.use(analyticsRoutes);
 app.use(authRoutes);
 app.use(dailyRoutes);

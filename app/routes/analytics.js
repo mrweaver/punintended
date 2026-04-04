@@ -6,7 +6,6 @@
  * interference.
  */
 import { Router } from "express";
-import express from "express";
 
 const router = Router();
 const UMAMI_BASE_URL = process.env.UMAMI_BASE_URL || "http://umami:3000";
@@ -35,31 +34,27 @@ router.get("/umami/script.js", async (req, res) => {
   }
 });
 
-router.post(
-  "/umami/api/send",
-  express.raw({ type: "*/*", limit: "1mb" }),
-  async (req, res) => {
-    try {
-      const upstream = await fetch(`${UMAMI_BASE_URL}/api/send`, {
-        method: "POST",
-        headers: {
-          "content-type": req.get("content-type") || "application/json",
-          "user-agent": req.get("user-agent") || "PunIntended/umami-proxy",
-        },
-        body: req.body,
-      });
+router.post("/umami/api/send", async (req, res) => {
+  try {
+    const upstream = await fetch(`${UMAMI_BASE_URL}/api/send`, {
+      method: "POST",
+      headers: {
+        "content-type": req.get("content-type") || "application/json",
+        "user-agent": req.get("user-agent") || "PunIntended/umami-proxy",
+      },
+      body: Buffer.isBuffer(req.body) ? req.body : JSON.stringify(req.body),
+    });
 
-      const text = await upstream.text();
-      res.status(upstream.status);
-      if (upstream.headers.get("content-type")) {
-        res.setHeader("Content-Type", upstream.headers.get("content-type"));
-      }
-      res.send(text);
-    } catch (error) {
-      console.error("Umami event proxy failed:", error);
-      res.status(502).json({ error: "Analytics proxy error" });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    if (upstream.headers.get("content-type")) {
+      res.setHeader("Content-Type", upstream.headers.get("content-type"));
     }
-  },
-);
+    res.send(text);
+  } catch (error) {
+    console.error("Umami event proxy failed:", error);
+    res.status(502).json({ error: "Analytics proxy error" });
+  }
+});
 
 export default router;

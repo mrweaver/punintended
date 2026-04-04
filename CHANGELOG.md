@@ -4,6 +4,16 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.19.0] - 2026-04-04
+
+### Added
+
+- **Novelty-Sort Buffer Selection:** Buffer refill now scores all candidates, sorts by novelty (lowest similarity first), and slices the most diverse to fill slots — replacing the binary approve/reject threshold filter.
+
+### Fixed
+
+- **Umami Analytics Proxy 400:** Fixed proxy forwarding `[object Object]` instead of JSON to Umami due to global `express.json()` pre-parsing the request body.
+
 ## [1.18.0] - 2026-04-04
 
 ### Added

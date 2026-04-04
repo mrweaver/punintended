@@ -17,6 +17,10 @@ RUN npm ci --omit=dev
 COPY app/server.js ./
 COPY app/auth/ ./auth/
 COPY app/db/ ./db/
+COPY app/lib/ ./lib/
+COPY app/middleware/ ./middleware/
+COPY app/routes/ ./routes/
+COPY app/services/ ./services/
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
 CMD ["node", "server.js"]

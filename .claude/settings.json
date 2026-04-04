@@ -36,7 +36,8 @@
       "Bash(npx vite:*)",
       "Bash(grep -n \"import.*from.*server\" /opt/stacks/punintended/app/*.js /opt/stacks/punintended/app/**/*.js)",
       "Bash(node --check server.js)",
-      "Bash(timeout 10 node -e ':*)"
+      "Bash(timeout 10 node -e ':*)",
+      "Bash(grep -n \"cron\\\\|schedule\\\\|interval\\\\|timeout\\\\|setTimeout\\\\|setInterval\" /opt/stacks/punintended/app/db/database.js /opt/stacks/punintended/app/server.js /opt/stacks/punintended/app/services/*.js)"
     ],
     "additionalDirectories": [
       "/opt/stacks/punintended/app"

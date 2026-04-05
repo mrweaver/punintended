@@ -269,8 +269,6 @@ export default function App() {
                 onJoinSession={joinExistingGroup}
                 onJoinById={joinGroupById}
                 onDeleteSession={(id) => setGroupToDelete(id)}
-                onStartGauntlet={handleOpenGauntlet}
-                onOpenLeaderboard={handleOpenLeaderboard}
                 onOpenSubmissions={handleOpenSubmissions}
               />
             ) : (

@@ -4,20 +4,17 @@ import {
   Plus,
   Users,
   Trash2,
-  Swords,
   LogIn,
-  Trophy,
-  ChevronDown,
-  ChevronUp,
   Send,
   Eye,
+  X,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  formatElapsedTime,
   formatRevealTime,
   useChallengeReveal,
 } from "../hooks/useChallengeReveal";
+import { formatFuzzyTime } from "../utils/time";
 import { useGlobalLeaderboard } from "../hooks/useGlobalLeaderboard";
 import { usePuns } from "../hooks/usePuns";
 import {
@@ -30,33 +27,6 @@ import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { PunCard } from "./PunCard";
 
-function truncateCopy(text: string, maxLength = 88) {
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength).trimEnd()}...`;
-}
-
-function CommunityPreviewTile({
-  eyebrow,
-  title,
-  detail,
-}: {
-  eyebrow: string;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface-muted p-4 sm:p-5 space-y-2 min-h-[168px]">
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
-        {eyebrow}
-      </p>
-      <p className="font-serif italic text-lg text-text leading-snug">
-        {title}
-      </p>
-      <p className="text-sm text-text-secondary leading-relaxed">{detail}</p>
-    </div>
-  );
-}
-
 interface SessionLobbyProps {
   sessions: Group[];
   loading: boolean;
@@ -64,8 +34,6 @@ interface SessionLobbyProps {
   onJoinSession: (session: Group) => void;
   onJoinById: (id: string) => Promise<void>;
   onDeleteSession: (sessionId: string) => void;
-  onStartGauntlet: () => void;
-  onOpenLeaderboard: () => void;
   onOpenSubmissions: () => void;
 }
 
@@ -76,24 +44,18 @@ export function SessionLobby({
   onJoinSession,
   onJoinById,
   onDeleteSession,
-  onStartGauntlet,
-  onOpenLeaderboard,
   onOpenSubmissions,
 }: SessionLobbyProps) {
   const { user } = useAuth();
-  const {
-    daily,
-    allTime,
-    gauntlet,
-    loading: leaderboardLoading,
-  } = useGlobalLeaderboard();
+  const { daily } = useGlobalLeaderboard();
 
   // ── Group / invite state ──
   const [newSessionName, setNewSessionName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [joiningById, setJoiningById] = useState(false);
   const [joinByIdError, setJoinByIdError] = useState("");
-  const [showInviteCode, setShowInviteCode] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
   // ── Daily challenge + reveal state ──
   const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
@@ -117,6 +79,12 @@ export function SessionLobby({
   const myPuns = lobbyPuns.filter((p) => p.authorId === user?.uid);
   const myPunCount = myPuns.length;
   const attemptsLeft = Math.max(0, 3 - myPunCount);
+  const bestPun =
+    myPuns.length > 0
+      ? myPuns.reduce((best, p) =>
+          (p.aiScore ?? 0) > (best.aiScore ?? 0) ? p : best,
+        )
+      : null;
   const [punText, setPunText] = useState("");
 
   const handleSubmitPun = async () => {
@@ -132,15 +100,17 @@ export function SessionLobby({
     [sessions],
   );
 
-  const gauntletLeader = gauntlet[0];
   const todayLeader = daily?.puns[0] ?? null;
-  const hallOfFameLeader = allTime[0] ?? null;
+  const isBestAlsoLeader =
+    bestPun != null && todayLeader != null && bestPun.id === todayLeader.id;
+  const othersCount = myPunCount - (bestPun ? 1 : 0);
 
   // ── Group handlers ──
   const handleCreate = async () => {
     if (!newSessionName.trim()) return;
     await onCreateSession(newSessionName.trim());
     setNewSessionName("");
+    setShowCreateModal(false);
   };
 
   const handleJoinById = async () => {
@@ -151,6 +121,7 @@ export function SessionLobby({
     try {
       await onJoinById(code);
       setInviteCode("");
+      setShowJoinModal(false);
     } catch {
       setJoinByIdError("Group not found. Check the code and try again.");
     } finally {
@@ -244,25 +215,24 @@ export function SessionLobby({
                     <span className="tabular-nums">
                       Elapsed:{" "}
                       <span className="font-medium text-text">
-                        {formatElapsedTime(elapsedMs)}
+                        {formatFuzzyTime(elapsedMs)}
                       </span>
                     </span>
                   </div>
                 )}
 
                 {/* Topic + Focus cards */}
-                <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                <div className="grid grid-cols-2 gap-4">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    whileHover={{ rotate: -1 }}
-                    className="bg-surface-inverse text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden"
+                    className="bg-surface-inverse text-white p-4 rounded-2xl"
                   >
-                    <p className="text-accent font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+                    <p className="text-accent font-mono text-[10px] uppercase tracking-widest mb-1">
                       Topic
                     </p>
-                    <h2 className="text-2xl sm:text-4xl font-serif italic">
+                    <h2 className="text-xl sm:text-2xl font-serif italic">
                       {challenge.topic}
                     </h2>
                   </motion.div>
@@ -270,13 +240,12 @@ export function SessionLobby({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: 0.05 }}
-                    whileHover={{ rotate: 1 }}
-                    className="bg-accent text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden"
+                    className="bg-accent text-white p-4 rounded-2xl"
                   >
-                    <p className="text-white/60 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+                    <p className="text-white/60 font-mono text-[10px] uppercase tracking-widest mb-1">
                       Focus
                     </p>
-                    <h2 className="text-2xl sm:text-4xl font-serif italic">
+                    <h2 className="text-xl sm:text-2xl font-serif italic">
                       {challenge.focus}
                     </h2>
                   </motion.div>
@@ -284,9 +253,10 @@ export function SessionLobby({
 
                 <div className="space-y-6">
                   {/* Collapsible submission form */}
-                  <AnimatePresence>
-                    {attemptsLeft > 0 && (
+                  <AnimatePresence mode="wait">
+                    {attemptsLeft > 0 ? (
                       <motion.div
+                        key="pun-form"
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
@@ -320,10 +290,9 @@ export function SessionLobby({
                           </Button>
                         </div>
                       </motion.div>
-                    )}{" "}
-                    :{" "}
-                    {
+                    ) : (
                       <motion.div
+                        key="no-attempts-message"
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
@@ -335,95 +304,102 @@ export function SessionLobby({
                           Check back tomorrow!
                         </p>
                       </motion.div>
-                    }
+                    )}
                   </AnimatePresence>
 
-                  {/* Render submitted puns using PunCard */}
-                  {myPuns.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="space-y-4 pt-4 border-t border-border"
+                  {/* Best Submission + Leading Pun (merge when same) */}
+                  {(bestPun || todayLeader) && (
+                    <div
+                      className={`grid gap-4 pt-4 border-t border-border ${
+                        isBestAlsoLeader || (!bestPun || !todayLeader)
+                          ? "grid-cols-1"
+                          : "grid-cols-1 md:grid-cols-2"
+                      }`}
                     >
-                      <h3 className="text-xl sm:text-2xl font-serif italic text-text">
-                        Your Submissions Today
-                      </h3>
-                      <div className="grid gap-4">
-                        <AnimatePresence initial={false}>
-                          {myPuns.map((pun, index) => (
-                            <motion.div
-                              key={pun.id || index}
-                              initial={{
-                                opacity: 0,
-                                height: 0,
-                                scale: 0.95,
-                                marginTop: -12,
-                              }}
-                              animate={{
-                                opacity: 1,
-                                height: "auto",
-                                scale: 1,
-                                marginTop: 0,
-                              }}
-                              exit={{
-                                opacity: 0,
-                                height: 0,
-                                scale: 0.95,
-                                marginTop: -12,
-                              }}
-                              transition={{ duration: 0.25, ease: "easeOut" }}
-                              className="origin-top overflow-hidden rounded-2xl"
-                            >
+                      {isBestAlsoLeader ? (
+                        <div>
+                          <h3 className="text-lg font-serif italic text-text mb-3">
+                            Your Best &mdash; Leading Today
+                          </h3>
+                          <PunCard
+                            pun={bestPun}
+                            index={0}
+                            comments={[]}
+                            submitting={submitting}
+                            hideAuthor={true}
+                            disableComments={true}
+                            onReact={() => {}}
+                            onViewed={() => {}}
+                            onEdit={() => {}}
+                            onDelete={() => {}}
+                            onComment={() => {}}
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          {bestPun && (
+                            <div>
+                              <h3 className="text-lg font-serif italic text-text mb-3">
+                                Your Best Submission
+                              </h3>
                               <PunCard
-                                pun={pun}
-                                index={index}
+                                pun={bestPun}
+                                index={0}
                                 comments={[]}
                                 submitting={submitting}
                                 hideAuthor={true}
                                 disableComments={true}
-                                onReact={(punId, reaction) => {}}
+                                onReact={() => {}}
                                 onViewed={() => {}}
-                                onEdit={(punId, text) => {}}
-                                onDelete={(punId) => {}}
+                                onEdit={() => {}}
+                                onDelete={() => {}}
                                 onComment={() => {}}
                               />
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Today's leader preview using PunCard */}
-                  {todayLeader && (
-                    <div className="space-y-4 pt-4 border-t border-border">
-                      <h3 className="text-xl sm:text-2xl font-serif italic text-text">
-                        Leading Pun Today
-                      </h3>
-                      <PunCard
-                        // Use double assertion to force the UI mapping
-                        pun={
-                          {
-                            ...todayLeader,
-                            authorId: -1, // Or "", whatever satisfies the visual render
-                            aiFeedback: undefined,
-                            responseTimeMs: undefined,
-                            myReaction: null,
-                            updatedAt: todayLeader.createdAt,
-                          } as unknown as Pun
-                        }
-                        index={0}
-                        comments={[]}
-                        submitting={false}
-                        disableComments={true} // Keeps the lobby clean of comments
-                        onReact={(punId, reaction) => {
-                          /* Global react handler */
-                        }}
-                        onViewed={() => {}}
-                        onEdit={() => {}}
-                        onDelete={() => {}}
-                        onComment={() => {}}
-                      />
+                            </div>
+                          )}
+                          {todayLeader && (
+                            <div>
+                              <h3 className="text-lg font-serif italic text-text mb-3">
+                                Leading Pun Today
+                              </h3>
+                              <PunCard
+                                pun={
+                                  {
+                                    ...todayLeader,
+                                    authorId: -1,
+                                    aiFeedback: undefined,
+                                    responseTimeMs: undefined,
+                                    myReaction: null,
+                                    updatedAt: todayLeader.createdAt,
+                                  } as unknown as Pun
+                                }
+                                index={0}
+                                comments={[]}
+                                submitting={false}
+                                disableComments={true}
+                                onReact={() => {}}
+                                onViewed={() => {}}
+                                onEdit={() => {}}
+                                onDelete={() => {}}
+                                onComment={() => {}}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {othersCount > 0 && (
+                        <p className="text-xs text-text-secondary">
+                          {othersCount} more submission
+                          {othersCount !== 1 ? "s" : ""} &mdash;{" "}
+                          <button
+                            type="button"
+                            onClick={onOpenSubmissions}
+                            className="font-medium text-accent hover:underline"
+                          >
+                            view all in My Submissions
+                          </button>
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -433,193 +409,47 @@ export function SessionLobby({
         </div>
       </Card>
 
-      {/* ── Section 2: Quick Actions ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 items-start">
-        <Card className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              placeholder="Group name (e.g., Friday Fun)"
-              value={newSessionName}
-              onChange={(e) => setNewSessionName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="flex-1 px-4 py-3 rounded-xl border border-border-strong bg-surface text-text focus:outline-none focus:ring-2 focus:ring-accent-ring transition-all"
-            />
-            <Button
-              onClick={handleCreate}
-              disabled={!newSessionName.trim()}
-              loading={loading}
-            >
-              <Plus className="w-4 h-4" />
-              Create Group
-            </Button>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowInviteCode((v) => !v)}
-              className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-accent transition-colors"
-            >
-              {showInviteCode ? (
-                <ChevronUp className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
-              )}
-              Have an invite code?
-            </button>
-
-            <AnimatePresence>
-              {showInviteCode && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-3 space-y-2 overflow-hidden"
-                >
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Paste invite code..."
-                      value={inviteCode}
-                      onChange={(e) => {
-                        setInviteCode(e.target.value);
-                        setJoinByIdError("");
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && handleJoinById()}
-                      className="flex-1 px-4 py-2.5 rounded-xl border border-border-strong bg-surface text-text text-sm focus:outline-none focus:ring-2 focus:ring-accent-ring transition-all"
-                    />
-                    <Button
-                      onClick={handleJoinById}
-                      disabled={!inviteCode.trim()}
-                      loading={joiningById}
-                      className="shrink-0"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      Join
-                    </Button>
-                  </div>
-                  {joinByIdError && (
-                    <p className="text-xs text-danger">{joinByIdError}</p>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </Card>
-
-        <div className="flex flex-row lg:flex-col gap-3">
-          <Button
-            onClick={onOpenSubmissions}
-            variant="outline"
-            className="flex-1 lg:flex-none"
-          >
-            My Submissions
-          </Button>
-          <Button
-            onClick={onStartGauntlet}
-            variant="outline"
-            className="flex-1 lg:flex-none"
-          >
-            <Swords className="w-4 h-4" />
-            Solo Gauntlet
-          </Button>
-          <Button
-            onClick={onOpenLeaderboard}
-            variant="outline"
-            className="flex-1 lg:flex-none"
-          >
-            <Trophy className="w-4 h-4" />
-            Leaderboards
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Section 3: Community Pulse ── */}
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
-            Community Pulse
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-serif italic text-text">
-            What&apos;s landing right now
-          </h2>
-        </div>
-
-        {leaderboardLoading ? (
-          <div className="rounded-2xl border border-dashed border-border-dashed px-4 py-8 text-center text-sm text-text-secondary">
-            Loading the latest leaderboard pulse&hellip;
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <CommunityPreviewTile
-              eyebrow="Today"
-              title={
-                !isRevealed
-                  ? "Today's board stays sealed."
-                  : todayLeader
-                    ? `"${truncateCopy(todayLeader.text)}"`
-                    : "No scored puns yet."
-              }
-              detail={
-                !isRevealed
-                  ? "Reveal today's challenge before you peek at the live board. Hall of fame and gauntlet updates stay visible without spoiling the current brief."
-                  : todayLeader
-                    ? `${todayLeader.authorName} is leading the day at ${todayLeader.aiScore}/10.${todayLeader.challengeTopic ? ` Topic: ${todayLeader.challengeTopic}${todayLeader.challengeFocus ? ` · ${todayLeader.challengeFocus}` : ""}` : ""}`
-                    : "The daily board will fill in as soon as the first strong pun lands."
-              }
-            />
-            <CommunityPreviewTile
-              eyebrow="Hall Of Fame"
-              title={
-                hallOfFameLeader
-                  ? `"${truncateCopy(hallOfFameLeader.text, 72)}"`
-                  : "No all-time leader yet."
-              }
-              detail={
-                hallOfFameLeader
-                  ? `${hallOfFameLeader.authorName} is sitting on ${hallOfFameLeader.groanCount} groans.${hallOfFameLeader.challengeTopic ? ` Topic: ${hallOfFameLeader.challengeTopic}` : ""}`
-                  : "Once the greats start piling up, the hall of fame will surface here."
-              }
-            />
-            <CommunityPreviewTile
-              eyebrow="Gauntlet"
-              title={
-                gauntletLeader?.myScore
-                  ? `${gauntletLeader.myScore.toLocaleString()} points`
-                  : "No gauntlet score posted yet."
-              }
-              detail={
-                gauntletLeader?.myScore
-                  ? `${gauntletLeader.participants.length} player${gauntletLeader.participants.length === 1 ? "" : "s"} on ${new Date(
-                      gauntletLeader.createdAt,
-                    ).toLocaleDateString("en-AU", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}.`
-                  : "The first completed gauntlet will set the benchmark here."
-              }
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Section 4: Active Groups ── */}
+      {/* ── Section 2: Active Groups ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
-            Active Groups
-          </p>
-          <span className="text-xs text-text-muted">
-            {sessions.length} group{sessions.length !== 1 ? "s" : ""} &middot;{" "}
-            {livePlayers} player{livePlayers !== 1 ? "s" : ""}
-          </span>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
+              Active Groups
+            </p>
+            <span className="text-xs text-text-muted">
+              {sessions.length} group{sessions.length !== 1 ? "s" : ""}{" "}
+              &middot; {livePlayers} player{livePlayers !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="px-3 py-1.5 text-sm"
+              onClick={() => {
+                setInviteCode("");
+                setJoinByIdError("");
+                setShowJoinModal(true);
+              }}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Join Code
+            </Button>
+            <Button
+              className="px-3 py-1.5 text-sm"
+              onClick={() => {
+                setNewSessionName("");
+                setShowCreateModal(true);
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Create
+            </Button>
+          </div>
         </div>
 
         {sessions.length === 0 ? (
           <p className="text-text-secondary italic text-sm py-4">
-            No active groups right now. Create one above to get started.
+            No active groups yet. Create one or join with an invite code.
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -668,6 +498,116 @@ export function SessionLobby({
           </div>
         )}
       </div>
+
+      {/* ── Create Group Modal ── */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4"
+            onClick={() => setShowCreateModal(false)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-group-title"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-surface rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-border relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="absolute top-4 right-4 text-text-muted hover:text-text p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <h3
+                id="create-group-title"
+                className="text-xl font-serif italic text-text mb-4"
+              >
+                Create a Group
+              </h3>
+              <input
+                type="text"
+                placeholder="Group name (e.g., Friday Fun)"
+                value={newSessionName}
+                onChange={(e) => setNewSessionName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                autoFocus
+                className="w-full px-4 py-3 rounded-xl border border-border-strong bg-surface text-text focus:outline-none focus:ring-2 focus:ring-accent-ring transition-all mb-4"
+              />
+              <Button
+                onClick={handleCreate}
+                disabled={!newSessionName.trim()}
+                loading={loading}
+                className="w-full"
+              >
+                <Plus className="w-4 h-4" />
+                Create Group
+              </Button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Join via Code Modal ── */}
+      <AnimatePresence>
+        {showJoinModal && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4"
+            onClick={() => setShowJoinModal(false)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="join-group-title"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-surface rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-border relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="absolute top-4 right-4 text-text-muted hover:text-text p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <h3
+                id="join-group-title"
+                className="text-xl font-serif italic text-text mb-4"
+              >
+                Join via Invite Code
+              </h3>
+              <input
+                type="text"
+                placeholder="Paste invite code..."
+                value={inviteCode}
+                onChange={(e) => {
+                  setInviteCode(e.target.value);
+                  setJoinByIdError("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleJoinById()}
+                autoFocus
+                className="w-full px-4 py-3 rounded-xl border border-border-strong bg-surface text-text focus:outline-none focus:ring-2 focus:ring-accent-ring transition-all mb-2"
+              />
+              {joinByIdError && (
+                <p className="text-xs text-danger mb-2">{joinByIdError}</p>
+              )}
+              <Button
+                onClick={handleJoinById}
+                disabled={!inviteCode.trim()}
+                loading={joiningById}
+                className="w-full mt-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Join Group
+              </Button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

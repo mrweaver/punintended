@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { MessageCircle, ChevronDown, Pencil, Trash2, Send } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -6,6 +6,7 @@ import { Button } from "./ui/Button";
 import { GroanBadge } from "./ui/GroanBadge";
 import { Logo } from "./ui/Logo";
 import { useLongPress } from "../hooks/useLongPress";
+import { formatFuzzyTime } from '../utils/time';
 import {
   ReactionPicker,
   ReactionSummary,
@@ -105,6 +106,14 @@ export function PunCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [showNewBadge, setShowNewBadge] = useState(!pun.viewed);
+  const badgeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Sync if pun becomes unviewed again (e.g. new data)
+  useEffect(() => {
+    if (!pun.viewed && !showNewBadge) setShowNewBadge(true);
+    return () => clearTimeout(badgeTimerRef.current);
+  }, [pun.viewed]);
 
   const isAuthor = pun.authorId === user?.uid;
 
@@ -123,7 +132,7 @@ export function PunCard({
     onViewed(pun.id);
   };
 
-return (
+  return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -131,6 +140,7 @@ return (
       onViewportEnter={() => {
         if (!pun.viewed) {
           onViewed(pun.id);
+          badgeTimerRef.current = setTimeout(() => setShowNewBadge(false), 1200);
         }
       }}
       viewport={{ once: true, amount: 0.3 }}
@@ -156,17 +166,25 @@ return (
         </span>
         {pun.responseTimeMs != null && (
           <span className="text-xs text-text-muted whitespace-nowrap">
-            •{" "}
-            {pun.responseTimeMs >= 60000
-              ? `${Math.floor(pun.responseTimeMs / 60000)}m ${Math.round((pun.responseTimeMs % 60000) / 1000)}s`
-              : `${Math.round(pun.responseTimeMs / 1000)}s`}
+            • {formatFuzzyTime(pun.responseTimeMs)}
           </span>
         )}
-        {!pun.viewed && (
-          <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-warning-subtle text-warning">
-            New
-          </span>
-        )}
+        <AnimatePresence>
+          {showNewBadge && (
+            <motion.span
+              initial={{ scale: 1, opacity: 1 }}
+              exit={{
+                scale: [1.3, 0],
+                opacity: [1, 0],
+                filter: ["blur(0px)", "blur(4px)"],
+              }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-warning-subtle text-warning"
+            >
+              New
+            </motion.span>
+          )}
+        </AnimatePresence>
 
         {/* Spacer pushes the actions to the right */}
         <div className="flex-1" />

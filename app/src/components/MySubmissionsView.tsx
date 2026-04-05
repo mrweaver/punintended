@@ -12,7 +12,7 @@ import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { GroanBadge } from "./ui/GroanBadge";
 import { useComments } from "../hooks/useComments";
-import { formatElapsedTime } from "../hooks/useChallengeReveal";
+import { formatFuzzyTime } from "../utils/time";
 
 type SortField = "date" | "score" | "groans";
 
@@ -422,7 +422,7 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
                                     {pun.responseTimeMs !== null && (
                                       <span>
                                         Answered in{" "}
-                                        {formatElapsedTime(pun.responseTimeMs)}
+                                        {formatFuzzyTime(pun.responseTimeMs)}
                                       </span>
                                     )}
                                   </div>

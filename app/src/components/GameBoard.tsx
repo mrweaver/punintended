@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  formatElapsedTime,
   formatRevealTime,
   useChallengeReveal,
 } from "../hooks/useChallengeReveal";
+import { formatFuzzyTime } from "../utils/time";
 import { usePuns } from "../hooks/usePuns";
 import { useChallengeHistory } from "../hooks/useChallengeHistory";
 import { useMessages } from "../hooks/useMessages";
@@ -329,25 +329,24 @@ export function GameBoard({
               <span className="tabular-nums">
                 Elapsed:{" "}
                 <span className="font-medium text-text">
-                  {formatElapsedTime(elapsedMs)}
+                  {formatFuzzyTime(elapsedMs)}
                 </span>
               </span>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 gap-4">
             <motion.div
               key={`topic-${challenge?.challengeId}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              whileHover={{ rotate: -1 }}
-              className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-zinc-700"
+              className="bg-zinc-900 dark:bg-zinc-800 text-white p-4 rounded-2xl border border-transparent dark:border-zinc-700"
             >
-              <p className="text-orange-500 dark:text-violet-400 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+              <p className="text-orange-500 dark:text-violet-400 font-mono text-[10px] uppercase tracking-widest mb-1">
                 Topic
               </p>
-              <h2 className="text-2xl sm:text-4xl font-serif italic">
+              <h2 className="text-xl sm:text-2xl font-serif italic">
                 {challenge?.topic || "Generating..."}
               </h2>
             </motion.div>
@@ -356,13 +355,12 @@ export function GameBoard({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.05 }}
-              whileHover={{ rotate: 1 }}
-              className="bg-orange-500 dark:bg-violet-600 text-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] relative overflow-hidden group border border-transparent dark:border-violet-500"
+              className="bg-orange-500 dark:bg-violet-600 text-white p-4 rounded-2xl border border-transparent dark:border-violet-500"
             >
-              <p className="text-white/60 font-mono text-[10px] sm:text-xs uppercase tracking-widest mb-1 sm:mb-2">
+              <p className="text-white/60 font-mono text-[10px] uppercase tracking-widest mb-1">
                 Focus
               </p>
-              <h2 className="text-2xl sm:text-4xl font-serif italic">
+              <h2 className="text-xl sm:text-2xl font-serif italic">
                 {challenge?.focus || "Generating..."}
               </h2>
             </motion.div>

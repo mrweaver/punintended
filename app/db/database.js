@@ -791,6 +791,13 @@ async function markNotificationRead(notificationId) {
   ]);
 }
 
+async function markAllNotificationsRead(userId) {
+  await query(
+    "UPDATE notifications SET read = TRUE WHERE user_id = $1 AND read = FALSE",
+    [userId],
+  );
+}
+
 function formatNotification(row) {
   return {
     id: row.id,
@@ -1505,6 +1512,7 @@ export {
   getNotificationsByUser,
   createNotification,
   markNotificationRead,
+  markAllNotificationsRead,
   createGauntlet,
   getGauntletById,
   createGauntletRun,

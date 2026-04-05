@@ -9,6 +9,7 @@ import { ensureAuthenticated } from "../middleware/auth.js";
 import {
   getNotificationsByUser,
   markNotificationRead,
+  markAllNotificationsRead,
 } from "../db/database.js";
 import {
   addNotificationClient,
@@ -45,6 +46,17 @@ router.get("/api/notifications", ensureAuthenticated, async (req, res) => {
   } catch (error) {
     console.error("Failed to get notifications:", error);
     res.status(500).json({ error: "Failed to get notifications" });
+  }
+});
+
+router.put("/api/notifications/read-all", ensureAuthenticated, async (req, res) => {
+  try {
+    await markAllNotificationsRead(req.user.id);
+    broadcastNotificationUpdate(req.user.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to mark all notifications read:", error);
+    res.status(500).json({ error: "Failed to mark all notifications read" });
   }
 });
 

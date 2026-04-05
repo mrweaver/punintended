@@ -96,7 +96,7 @@ export function Header({
 }: HeaderProps) {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
-  const { notifications, unreadCount, markRead } = useNotifications();
+  const { notifications, unreadCount, markAllRead } = useNotifications();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -150,12 +150,16 @@ export function Header({
 
   const handleNotificationsToggle = () => {
     setShowAccountMenu(false);
-    setShowNotifications((open) => !open);
+    setShowNotifications((open) => {
+      if (!open) markAllRead();
+      return !open;
+    });
   };
 
   const handleOpenNotifications = () => {
     setShowAccountMenu(false);
     setShowNotifications(true);
+    markAllRead();
   };
 
   if (!user) return null;
@@ -210,9 +214,17 @@ export function Header({
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-danger rounded-full border-2 border-background"></span>
-            )}
+            <AnimatePresence>
+              {unreadCount > 0 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: [1.5, 0], opacity: [1, 0] }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute top-1 right-1 w-2.5 h-2.5 bg-danger rounded-full border-2 border-background"
+                />
+              )}
+            </AnimatePresence>
           </Button>
 
           <AnimatePresence>
@@ -231,9 +243,22 @@ export function Header({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-border px-2 py-1 text-xs font-medium text-text-secondary">
-                      {unreadCount} New
-                    </span>
+                    <AnimatePresence>
+                      {unreadCount > 0 && (
+                        <motion.span
+                          initial={{ scale: 1, opacity: 1 }}
+                          exit={{
+                            scale: [1.2, 0],
+                            opacity: [1, 0],
+                            filter: ["blur(0px)", "blur(4px)"],
+                          }}
+                          transition={{ duration: 0.35, ease: "easeOut" }}
+                          className="rounded-full bg-border px-2 py-1 text-xs font-medium text-text-secondary"
+                        >
+                          {unreadCount} New
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                     <button
                       type="button"
                       onClick={closeNotifications}
@@ -251,17 +276,22 @@ export function Header({
                     </div>
                   ) : (
                     notifications.map((notif) => (
-                      <div
+                      <motion.div
                         key={notif.id}
+                        animate={{
+                          backgroundColor: notif.read
+                            ? "rgba(0,0,0,0)"
+                            : "var(--color-accent-subtle)",
+                        }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
                         onClick={() => {
-                          markRead(notif.id);
                           onNotificationClick(notif.link);
                           closeNotifications();
                         }}
-                        className={`p-4 border-b border-border hover:bg-accent-subtle cursor-pointer transition-colors ${!notif.read ? "bg-accent-subtle" : ""}`}
+                        className="p-4 border-b border-border hover:bg-accent-subtle cursor-pointer transition-colors"
                       >
                         <p
-                          className={`text-sm ${!notif.read ? "font-medium text-text" : "text-text-secondary"}`}
+                          className={`text-sm transition-all duration-500 ${!notif.read ? "font-medium text-text" : "text-text-secondary"}`}
                         >
                           {notif.message}
                         </p>
@@ -271,7 +301,7 @@ export function Header({
                             timeStyle: "short",
                           })}
                         </p>
-                      </div>
+                      </motion.div>
                     ))
                   )}
                 </div>
@@ -298,9 +328,17 @@ export function Header({
                 className="h-9 w-9 rounded-full border border-border-strong"
                 alt="Profile"
               />
-              {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-danger"></span>
-              )}
+              <AnimatePresence>
+                {unreadCount > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: [1.5, 0], opacity: [1, 0] }}
+                    transition={{ duration: 0.3 }}
+                    className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-danger"
+                  />
+                )}
+              </AnimatePresence>
             </span>
             <span className="hidden text-left lg:block">
               <span className="block text-sm font-medium text-text">

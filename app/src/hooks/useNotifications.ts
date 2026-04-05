@@ -33,7 +33,13 @@ export function useNotifications() {
     await notificationsApi.markRead(id);
   }, []);
 
+  const markAllRead = useCallback(async () => {
+    if (notifications.some((n) => !n.read)) {
+      await notificationsApi.markAllRead();
+    }
+  }, [notifications]);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  return { notifications, unreadCount, markRead };
+  return { notifications, unreadCount, markRead, markAllRead };
 }

@@ -140,6 +140,10 @@ export const notificationsApi = {
     request<{ success: boolean }>(`/api/notifications/${id}/read`, {
       method: "PUT",
     }),
+  markAllRead: () =>
+    request<{ success: boolean }>("/api/notifications/read-all", {
+      method: "PUT",
+    }),
 };
 
 // Profile

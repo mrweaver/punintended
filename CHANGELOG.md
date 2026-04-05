@@ -4,6 +4,19 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.20.0] - 2026-04-05
+
+### Added
+
+- **Lobby Redesign:** Streamlined SessionLobby into a focused play dashboard — removed Community Pulse and Quick Actions sections, condensed Topic/Focus cards, replaced full submissions list with best-pun + leading-pun side-by-side grid (merging when identical), and moved group creation/joining into modals.
+- **Notification Mark-All-Read:** Opening the notification panel now marks all notifications as read, with animated badge fade-out transitions across bell icon and avatar dot.
+- **PunCard New Badge Animation:** New badge now fades out with a blur animation after the card enters the viewport instead of disappearing instantly.
+
+### Changed
+
+- **Time Formatting:** Extracted `formatFuzzyTime` utility, replacing `formatElapsedTime` across GameBoard, MySubmissionsView, and PunCard with human-friendly durations (e.g. "over a week", "2d 3h").
+- **GameBoard Cards:** Topic/Focus cards condensed to match the lobby's compact style.
+
 ## [1.19.0] - 2026-04-04
 
 ### Added

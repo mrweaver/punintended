@@ -73,6 +73,8 @@ export function SessionLobby({
     puns: lobbyPuns,
     submitting,
     submitPun,
+    reactPun,
+    markPunViewed,
   } = usePuns(isRevealed ? todayId : "", user?.uid);
 
   // Isolate myPuns to map over them
@@ -328,8 +330,8 @@ export function SessionLobby({
                             submitting={submitting}
                             hideAuthor={true}
                             disableComments={true}
-                            onReact={() => {}}
-                            onViewed={() => {}}
+                            onReact={reactPun}
+                            onViewed={markPunViewed}
                             onEdit={() => {}}
                             onDelete={() => {}}
                             onComment={() => {}}
@@ -349,8 +351,8 @@ export function SessionLobby({
                                 submitting={submitting}
                                 hideAuthor={true}
                                 disableComments={true}
-                                onReact={() => {}}
-                                onViewed={() => {}}
+                                onReact={reactPun}
+                                onViewed={markPunViewed}
                                 onEdit={() => {}}
                                 onDelete={() => {}}
                                 onComment={() => {}}
@@ -377,8 +379,8 @@ export function SessionLobby({
                                 comments={[]}
                                 submitting={false}
                                 disableComments={true}
-                                onReact={() => {}}
-                                onViewed={() => {}}
+                                onReact={reactPun}
+                                onViewed={markPunViewed}
                                 onEdit={() => {}}
                                 onDelete={() => {}}
                                 onComment={() => {}}

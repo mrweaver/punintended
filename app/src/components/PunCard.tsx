@@ -106,12 +106,16 @@ export function PunCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [commentText, setCommentText] = useState("");
+  const dismissedRef = useRef(pun.viewed);
   const [showNewBadge, setShowNewBadge] = useState(!pun.viewed);
   const badgeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Sync if pun becomes unviewed again (e.g. new data)
+  // Once viewed, never show badge again for this pun
   useEffect(() => {
-    if (!pun.viewed && !showNewBadge) setShowNewBadge(true);
+    if (pun.viewed && !dismissedRef.current) {
+      dismissedRef.current = true;
+      setShowNewBadge(false);
+    }
     return () => clearTimeout(badgeTimerRef.current);
   }, [pun.viewed]);
 
@@ -138,9 +142,12 @@ export function PunCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
       onViewportEnter={() => {
-        if (!pun.viewed) {
+        if (!pun.viewed && !dismissedRef.current) {
           onViewed(pun.id);
-          badgeTimerRef.current = setTimeout(() => setShowNewBadge(false), 1200);
+          badgeTimerRef.current = setTimeout(() => {
+            dismissedRef.current = true;
+            setShowNewBadge(false);
+          }, 1200);
         }
       }}
       viewport={{ once: true, amount: 0.3 }}

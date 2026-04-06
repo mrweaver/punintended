@@ -4,6 +4,16 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.21.0] - 2026-04-06
+
+### Added
+
+- **Expanded Submissions Archive:** Moved the richer pun-history browsing experience into My Submissions with streak stats, per-day grouping, and on-demand comment loading, while simplifying the profile modal.
+
+### Fixed
+
+- **Lobby Pun Card Interactions:** SessionLobby pun cards now use real reaction and view handlers, and viewed cards no longer incorrectly reshow the "New" badge.
+
 ## [1.20.0] - 2026-04-05
 
 ### Added

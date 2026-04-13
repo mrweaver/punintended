@@ -1,6 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MessageCircle, ChevronDown, Pencil, Trash2, Send } from "lucide-react";
+import {
+  MessageCircle,
+  ChevronDown,
+  Pencil,
+  Trash2,
+  Send,
+  Gavel,
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "./ui/Button";
 import { GroanBadge } from "./ui/GroanBadge";
@@ -105,6 +112,7 @@ export function PunCard({
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showJudgeDetails, setShowJudgeDetails] = useState(false);
   const [editText, setEditText] = useState("");
   const [commentText, setCommentText] = useState("");
   const dismissedRef = useRef(pun.viewed);
@@ -328,19 +336,53 @@ export function PunCard({
 
       {/* ── AI feedback ── */}
       {pun.aiScore !== undefined && pun.aiScore !== null && !isEditing && (
-        <div className="flex items-start gap-3 p-3 bg-accent-subtle rounded-xl">
-          <Logo className="w-4 h-4 text-accent shrink-0 mt-0.5" accent />
+        <div className="flex items-start gap-3 p-3 bg-accent-subtle rounded-xl relative">
+          {/* 1. The Trigger & Popover Anchor */}
+          <div className="relative mt-0.5 shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowJudgeDetails(!showJudgeDetails);
+              }}
+              className="p-1 -m-1 rounded-md text-accent hover:bg-accent/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+              aria-label="View judge details"
+            >
+              <Gavel className="w-5 h-5" />
+            </button>
+
+            {/* 2. The Popover (anchored to the Gavel) */}
+            <AnimatePresence>
+              {showJudgeDetails && (
+                <motion.div
+                  initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 mt-2 w-max min-w-[220px] p-3 bg-surface border border-border shadow-lg rounded-xl z-10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-sm text-text">
+                    Judged by{" "}
+                    <strong className="font-bold text-text-strong">
+                      {pun.aiJudgeName || "Unknown Judge"}
+                    </strong>
+                  </p>
+                  <div className="h-px bg-border my-2" />
+                  <p className="text-xs font-mono text-text-muted">
+                    Engine: v{pun.aiJudgeVersion || "1.0"} -{" "}
+                    {pun.aiJudgeModel || "legacy"}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* 3. The Text Content */}
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <span className="text-sm font-bold text-accent-foreground">
                 AI Score: {pun.aiScore}/10
               </span>
-              <JudgeHint
-                judgeName={pun.aiJudgeName}
-                judgeVersion={pun.aiJudgeVersion}
-                className="inline-flex items-center text-accent-foreground/60 hover:text-accent-foreground"
-                iconClassName="h-3.5 w-3.5"
-              />
             </div>
             <p className="text-xs sm:text-sm text-accent italic">
               {pun.aiFeedback}
@@ -349,12 +391,10 @@ export function PunCard({
         </div>
       )}
 
+      {/* ── Loading State ── */}
       {pun.aiFeedback === "Re-evaluating..." && !isEditing && (
         <div className="flex items-start gap-3 p-3 bg-accent-subtle rounded-xl">
-          <Logo
-            className="w-4 h-4 text-accent shrink-0 mt-0.5 animate-spin"
-            accent
-          />
+          <Gavel className="w-5 h-5 text-accent shrink-0 mt-0.5 animate-pulse" />
           <p className="text-xs sm:text-sm text-accent italic">
             Re-evaluating...
           </p>

@@ -188,6 +188,7 @@ export interface GauntletRunRound {
   ai_judge_key: string | null;
   ai_judge_name: string | null;
   ai_judge_version: string | null;
+  ai_judge_model: string | null;
   ai_judged_at: string | null;
   seconds_remaining: number;
   round_score: number | null;
@@ -372,6 +373,7 @@ export interface Pun {
   aiJudgeKey: string | null;
   aiJudgeName: string | null;
   aiJudgeVersion: string | null;
+  aiJudgeModel: string | null;
   aiJudgedAt: string | null;
   responseTimeMs: number | null;
   groanCount: number;

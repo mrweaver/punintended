@@ -467,6 +467,7 @@ function formatChallengeReveal(row) {
 async function getPunsForChallenge(challengeId, viewerId = null) {
   const result = await query(
     `SELECT p.*,
+       aj.model AS ai_judge_model,
        ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
@@ -480,10 +481,11 @@ async function getPunsForChallenge(challengeId, viewerId = null) {
        COUNT(*) FILTER (WHERE pr.user_id = $2) > 0 AS my_groan
      FROM puns p
      JOIN users u ON p.author_id = u.id
+       LEFT JOIN ai_judges aj ON aj.id = p.ai_judge_id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.challenge_id = $1
-     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
+       GROUP BY p.id, aj.model, ${displayNameSql("u")}, u.photo_url
      ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
     [challengeId, viewerId],
   );
@@ -497,6 +499,7 @@ async function getPunsForChallengeByGroup(
 ) {
   const result = await query(
     `SELECT p.*,
+       aj.model AS ai_judge_model,
        ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
@@ -511,10 +514,11 @@ async function getPunsForChallengeByGroup(
      FROM puns p
      JOIN users u ON p.author_id = u.id
      JOIN group_members gm ON gm.user_id = p.author_id AND gm.group_id = $2
+     LEFT JOIN ai_judges aj ON aj.id = p.ai_judge_id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      LEFT JOIN users ru ON pr.user_id = ru.id
      WHERE p.challenge_id = $1
-     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url
+     GROUP BY p.id, aj.model, ${displayNameSql("u")}, u.photo_url
      ORDER BY groan_count DESC, p.ai_score DESC NULLS LAST, p.created_at DESC`,
     [challengeId, groupId, viewerId],
   );
@@ -662,6 +666,7 @@ async function setPunReaction(punId, userId, reaction) {
 async function getPunsByAuthor(authorId) {
   const result = await query(
     `SELECT p.*,
+       aj.model AS ai_judge_model,
        ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
@@ -677,11 +682,12 @@ async function getPunsByAuthor(authorId) {
        gdc.focus AS challenge_focus
      FROM puns p
      JOIN users u ON p.author_id = u.id
+     LEFT JOIN ai_judges aj ON aj.id = p.ai_judge_id
      LEFT JOIN pun_reactions pr ON p.id = pr.pun_id
      LEFT JOIN users ru ON pr.user_id = ru.id
      LEFT JOIN global_daily_challenges gdc ON p.challenge_id = gdc.challenge_id
      WHERE p.author_id = $1
-     GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, gdc.topic, gdc.focus
+     GROUP BY p.id, aj.model, ${displayNameSql("u")}, u.photo_url, gdc.topic, gdc.focus
      ORDER BY p.created_at DESC`,
     [authorId],
   );
@@ -720,6 +726,7 @@ function formatPun(row) {
     aiJudgeKey: row.ai_judge_key || null,
     aiJudgeName: row.ai_judge_name || null,
     aiJudgeVersion: row.ai_judge_version || null,
+    aiJudgeModel: row.ai_judge_model || null,
     aiJudgedAt: row.ai_judged_at || null,
     responseTimeMs:
       row.response_time_ms === null || row.response_time_ms === undefined
@@ -1035,6 +1042,7 @@ async function submitGauntletRound(
     ai_judge_key: null,
     ai_judge_name: null,
     ai_judge_version: null,
+    ai_judge_model: null,
     ai_judged_at: null,
     seconds_remaining: secondsRemaining,
     round_score: null,
@@ -1131,6 +1139,7 @@ async function updateGauntletRoundScore(
       ai_judge_key: judge.key,
       ai_judge_name: judge.name,
       ai_judge_version: judge.version,
+      ai_judge_model: judge.model,
       ai_judged_at: judgedAt,
       round_score: baseScore + timeBonus,
     };
@@ -1682,6 +1691,12 @@ async function runMigrations() {
   const unknownJudge = await upsertAiJudgeDefinition(
     getUnknownAiJudgeDefinition(),
   );
+  const aiJudgeModelsByIdResult = await query(
+    `SELECT id, model FROM ai_judges`,
+  );
+  const aiJudgeModelsById = new Map(
+    aiJudgeModelsByIdResult.rows.map((row) => [row.id, row.model || null]),
+  );
 
   await query(
     `UPDATE ai_judges
@@ -1718,22 +1733,32 @@ async function runMigrations() {
   for (const row of gauntletRunsToBackfill.rows) {
     let changed = false;
     const nextRounds = (row.rounds || []).map((round) => {
-      if (!round || round.ai_judge_key) return round;
-      if (!hasRecordedJudgeResult(round.ai_score, round.ai_feedback)) {
+      if (
+        !round ||
+        !hasRecordedJudgeResult(round.ai_score, round.ai_feedback)
+      ) {
         return round;
       }
 
-      changed = true;
+      const nextRound = { ...round };
 
-      return {
-        ...round,
-        ai_judge_id: unknownJudge.id,
-        ai_judge_key: unknownJudge.key,
-        ai_judge_name: unknownJudge.name,
-        ai_judge_version: unknownJudge.version,
-        ai_judged_at:
-          round.ai_judged_at || row.updated_at || row.created_at || null,
-      };
+      if (!nextRound.ai_judge_key) {
+        nextRound.ai_judge_id = unknownJudge.id;
+        nextRound.ai_judge_key = unknownJudge.key;
+        nextRound.ai_judge_name = unknownJudge.name;
+        nextRound.ai_judge_version = unknownJudge.version;
+        nextRound.ai_judged_at =
+          nextRound.ai_judged_at || row.updated_at || row.created_at || null;
+        changed = true;
+      }
+
+      if (!nextRound.ai_judge_model) {
+        nextRound.ai_judge_model =
+          aiJudgeModelsById.get(nextRound.ai_judge_id) ?? unknownJudge.model;
+        changed = true;
+      }
+
+      return nextRound;
     });
 
     if (!changed) continue;

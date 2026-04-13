@@ -29,7 +29,7 @@ const CURRENT_PUN_JUDGE = createJudgeDefinition({
 
 const UNKNOWN_AI_JUDGE = createJudgeDefinition({
   key: "unknown-judge",
-  name: "Unknown Judge",
+  name: "Judge Nomen Nescio",
   version: "0",
   model: "legacy",
   systemPrompt: null,
@@ -70,11 +70,9 @@ function normalizeJudgeVersion(version) {
 
 export function formatJudgeLabel(name, version) {
   const normalizedName = typeof name === "string" ? name.trim() : "";
-  const normalizedVersion = normalizeJudgeVersion(version);
 
   if (!normalizedName) return null;
-  if (!normalizedVersion) return normalizedName;
-  return `${normalizedName} v${normalizedVersion}`;
+  return normalizedName;
 }
 
 export function getActivePunJudgeDefinition() {

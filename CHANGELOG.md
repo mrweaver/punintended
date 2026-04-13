@@ -4,6 +4,13 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.24.0] - 2026-04-14
+
+### Added
+
+- **Judge Metadata Visibility:** Stored AI judge model metadata across daily puns and gauntlet rounds, while upgrading judge labels and fallback naming in the UI.
+- **PunCard Archive Reuse:** Reworked My Submissions to render archived entries through PunCard, with cleaner day grouping and lazy comment loading that matches the rest of the app.
+
 ## [1.23.0] - 2026-04-13
 
 ### Added

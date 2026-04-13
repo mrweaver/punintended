@@ -4,6 +4,19 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.23.0] - 2026-04-13
+
+### Added
+
+- **Versioned AI Judges:** Introduced named AI judge identities with stored metadata and immutable judgement history for daily puns and gauntlet rounds.
+- **Challenge History Refresh:** Historical daily challenge views can now load challenge metadata reliably, refresh per-date submissions, and accept stricter validated date targets.
+
+### Fixed
+
+- **Judge UI Density:** Judge identity now appears as a compact hover hint instead of consuming card space across pun and leaderboard views.
+- **SSE HTTP/2 Transport:** Removed invalid `Connection` headers from event-stream responses and aligned gauntlet SSE headers for proxy compatibility.
+- **Pun Re-score Stability:** Fixed pun edit re-scoring and the all-time leaderboard route to avoid server crashes and 500 responses.
+
 ## [1.22.0] - 2026-04-13
 
 ### Added

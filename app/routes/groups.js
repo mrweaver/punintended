@@ -191,11 +191,7 @@ router.get(
   async (req, res) => {
     try {
       const messages = await getMessagesByGroup(req.params.id);
-      const enriched = await enrichWithReactions(
-        messages,
-        "chat",
-        req.user.id,
-      );
+      const enriched = await enrichWithReactions(messages, "chat", req.user.id);
       res.json(enriched);
     } catch (error) {
       console.error("Failed to get messages:", error);

@@ -1,6 +1,7 @@
 {
   "chat.tools.terminal.autoApprove": {
     "npm run lint": true,
-    "git push": true
+    "git push": true,
+    "npm --prefix app": true
   }
 }

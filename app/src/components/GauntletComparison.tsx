@@ -24,6 +24,7 @@ import {
 import { ShareModal } from "./modals/ShareModal";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { JudgeHint } from "./ui/JudgeHint";
 
 interface GauntletComparisonProps {
   gauntletId: string;
@@ -354,9 +355,17 @@ export function GauntletComparison({
                   )}
 
                   {round?.ai_feedback && (
-                    <p className="text-xs text-gray-500 dark:text-zinc-500 italic pl-8">
-                      AI ({aiScore}/10): {round.ai_feedback}
-                    </p>
+                    <div className="pl-8">
+                      <p className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-zinc-500 italic">
+                        AI ({aiScore}/10): {round.ai_feedback}
+                        <JudgeHint
+                          judgeName={round?.ai_judge_name}
+                          judgeVersion={round?.ai_judge_version}
+                          className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+                          iconClassName="h-3.5 w-3.5 shrink-0"
+                        />
+                      </p>
+                    </div>
                   )}
 
                   <div className="pl-8">

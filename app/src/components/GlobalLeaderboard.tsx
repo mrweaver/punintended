@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { punsApi } from "../api/client";
 import { Button } from "./ui/Button";
 import { GroanBadge } from "./ui/GroanBadge";
+import { JudgeHint } from "./ui/JudgeHint";
 import type { LeaderboardEntry, GauntletHistoryEntry } from "../api/client";
 
 interface Props {
@@ -74,11 +75,19 @@ function LeaderboardRow({
           </span>
         </div>
       </div>
-      <span
-        className={`text-xs font-bold font-mono px-2 py-1 rounded-lg shrink-0 ${scoreColor(entry.aiScore)}`}
-      >
-        {entry.aiScore}/10
-      </span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span
+          className={`text-xs font-bold font-mono px-2 py-1 rounded-lg ${scoreColor(entry.aiScore)}`}
+        >
+          {entry.aiScore}/10
+        </span>
+        <JudgeHint
+          judgeName={entry.aiJudgeName}
+          judgeVersion={entry.aiJudgeVersion}
+          className="inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+          iconClassName="h-3.5 w-3.5"
+        />
+      </div>
     </div>
   );
 }
@@ -143,7 +152,8 @@ function GauntletLeaderboardRow({
 export function GlobalLeaderboard({ onClose }: Props) {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("today");
-  const { daily, allTime, gauntlet, loading, refresh, optimisticUpdateReact } = useGlobalLeaderboard();
+  const { daily, allTime, gauntlet, loading, refresh, optimisticUpdateReact } =
+    useGlobalLeaderboard();
 
   const handleReact = (punId: string, currentReaction: "groan" | null) => {
     if (!user) return;
@@ -257,7 +267,12 @@ export function GlobalLeaderboard({ onClose }: Props) {
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {punEntries.map((entry, i) => (
-            <LeaderboardRow key={entry.id} rank={i + 1} entry={entry} onReact={handleReact} />
+            <LeaderboardRow
+              key={entry.id}
+              rank={i + 1}
+              entry={entry}
+              onReact={handleReact}
+            />
           ))}
         </div>
       )}

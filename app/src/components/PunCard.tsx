@@ -4,9 +4,10 @@ import { MessageCircle, ChevronDown, Pencil, Trash2, Send } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "./ui/Button";
 import { GroanBadge } from "./ui/GroanBadge";
+import { JudgeHint } from "./ui/JudgeHint";
 import { Logo } from "./ui/Logo";
 import { useLongPress } from "../hooks/useLongPress";
-import { formatFuzzyTime } from '../utils/time';
+import { formatFuzzyTime } from "../utils/time";
 import {
   ReactionPicker,
   ReactionSummary,
@@ -334,6 +335,12 @@ export function PunCard({
               <span className="text-sm font-bold text-accent-foreground">
                 AI Score: {pun.aiScore}/10
               </span>
+              <JudgeHint
+                judgeName={pun.aiJudgeName}
+                judgeVersion={pun.aiJudgeVersion}
+                className="inline-flex items-center text-accent-foreground/60 hover:text-accent-foreground"
+                iconClassName="h-3.5 w-3.5"
+              />
             </div>
             <p className="text-xs sm:text-sm text-accent italic">
               {pun.aiFeedback}

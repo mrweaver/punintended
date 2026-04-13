@@ -4,6 +4,7 @@ import { Share2, RotateCcw, LogOut, Trophy, BarChart2 } from "lucide-react";
 import type { GauntletRun, GauntletRoundPrompt } from "../api/client";
 import { ShareModal } from "./modals/ShareModal";
 import { Button } from "./ui/Button";
+import { JudgeHint } from "./ui/JudgeHint";
 
 interface GauntletReceiptProps {
   run: GauntletRun;
@@ -124,9 +125,17 @@ export function GauntletReceipt({
 
               {/* AI feedback */}
               {round.ai_feedback && (
-                <p className="text-sm text-gray-500 dark:text-zinc-400 italic">
-                  {round.ai_feedback}
-                </p>
+                <div>
+                  <p className="flex items-start gap-1.5 text-sm text-gray-500 dark:text-zinc-400 italic">
+                    {round.ai_feedback}
+                    <JudgeHint
+                      judgeName={round.ai_judge_name}
+                      judgeVersion={round.ai_judge_version}
+                      className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+                      iconClassName="h-3.5 w-3.5 shrink-0"
+                    />
+                  </p>
+                </div>
               )}
 
               {/* Score breakdown */}

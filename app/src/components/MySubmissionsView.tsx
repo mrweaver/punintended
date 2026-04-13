@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, Calendar, ChevronDown, Search } from "lucide-react";
 import {
-  ArrowLeft,
-  Calendar,
-  ChevronDown,
-  Search,
-} from "lucide-react";
-import { profileApi, commentsApi, type Pun, type PunComment } from "../api/client";
+  profileApi,
+  commentsApi,
+  type Pun,
+  type PunComment,
+} from "../api/client";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { GroanBadge } from "./ui/GroanBadge";
+import { JudgeHint } from "./ui/JudgeHint";
 import { formatFuzzyTime } from "../utils/time";
 
 type SortField = "date" | "score" | "groans";
@@ -459,17 +460,25 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
                                     )}
                                     {pun.aiScore !== null &&
                                       pun.aiScore !== undefined && (
-                                        <span
-                                          className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                            pun.aiScore >= 7
-                                              ? "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                                              : pun.aiScore >= 4
-                                                ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
-                                                : "bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
-                                          }`}
-                                        >
-                                          {pun.aiScore}/10
-                                        </span>
+                                        <>
+                                          <span
+                                            className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                              pun.aiScore >= 7
+                                                ? "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                                                : pun.aiScore >= 4
+                                                  ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
+                                                  : "bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
+                                            }`}
+                                          >
+                                            {pun.aiScore}/10
+                                          </span>
+                                          <JudgeHint
+                                            judgeName={pun.aiJudgeName}
+                                            judgeVersion={pun.aiJudgeVersion}
+                                            className="inline-flex items-center text-text-muted hover:text-text-secondary"
+                                            iconClassName="h-3.5 w-3.5"
+                                          />
+                                        </>
                                       )}
                                   </div>
 
@@ -489,12 +498,13 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
                                 {/* Footer */}
                                 <div className="flex items-center gap-3 px-4 pb-4 text-xs text-text-muted">
                                   <span>
-                                    {new Date(
-                                      pun.createdAt,
-                                    ).toLocaleTimeString([], {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    })}
+                                    {new Date(pun.createdAt).toLocaleTimeString(
+                                      [],
+                                      {
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                      },
+                                    )}
                                   </span>
                                   {pun.groanCount > 0 && (
                                     <GroanBadge
@@ -523,8 +533,14 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
                                       {/* AI Feedback */}
                                       {pun.aiFeedback && (
                                         <div className="p-3 bg-accent-subtle rounded-xl text-sm text-accent">
-                                          <span className="font-semibold text-xs uppercase tracking-wider text-accent-foreground/60 block mb-1">
-                                            AI Verdict
+                                          <span className="mb-1 flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider text-accent-foreground/60">
+                                            <span>AI Verdict</span>
+                                            <JudgeHint
+                                              judgeName={pun.aiJudgeName}
+                                              judgeVersion={pun.aiJudgeVersion}
+                                              className="inline-flex items-center text-accent-foreground/55 hover:text-accent-foreground"
+                                              iconClassName="h-3.5 w-3.5"
+                                            />
                                           </span>
                                           <span className="text-accent-foreground italic">
                                             {pun.aiFeedback}
@@ -556,9 +572,7 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
                                                 className="flex items-start gap-2"
                                               >
                                                 <img
-                                                  src={
-                                                    comment.userPhoto || ""
-                                                  }
+                                                  src={comment.userPhoto || ""}
                                                   alt={comment.userName}
                                                   className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
                                                 />

@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Calendar, ChevronDown, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+  Search,
+} from "lucide-react";
 import {
   profileApi,
+  punsApi,
   commentsApi,
   type Pun,
   type PunComment,
 } from "../api/client";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
-import { GroanBadge } from "./ui/GroanBadge";
-import { JudgeHint } from "./ui/JudgeHint";
-import { formatFuzzyTime } from "../utils/time";
+import { PunCard } from "./PunCard";
 
 type SortField = "date" | "score" | "groans";
 
@@ -92,11 +97,12 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<SortField>("date");
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
-  const [expandedPunId, setExpandedPunId] = useState<string | null>(null);
   const [punComments, setPunComments] = useState<Record<string, PunComment[]>>(
     {},
   );
-  const [loadingComments, setLoadingComments] = useState<string | null>(null);
+  const [loadingCommentIds, setLoadingCommentIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -227,23 +233,86 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
     });
   };
 
-  const handleToggleExpand = async (punId: string) => {
-    if (expandedPunId === punId) {
-      setExpandedPunId(null);
+  const loadCommentsForPun = async (punId: string) => {
+    if (Object.prototype.hasOwnProperty.call(punComments, punId)) {
       return;
     }
-    setExpandedPunId(punId);
-    if (!punComments[punId]) {
-      setLoadingComments(punId);
-      try {
-        const c = await commentsApi.list(punId);
-        setPunComments((prev) => ({ ...prev, [punId]: c }));
-      } catch {
-        setPunComments((prev) => ({ ...prev, [punId]: [] }));
-      } finally {
-        setLoadingComments(null);
-      }
+
+    setLoadingCommentIds((current) => new Set(current).add(punId));
+
+    try {
+      const comments = await commentsApi.list(punId);
+      setPunComments((prev) => ({ ...prev, [punId]: comments }));
+    } catch {
+      setPunComments((prev) => ({ ...prev, [punId]: [] }));
+    } finally {
+      setLoadingCommentIds((current) => {
+        const next = new Set(current);
+        next.delete(punId);
+        return next;
+      });
     }
+  };
+
+  const handleEditPun = async (punId: string, text: string) => {
+    await punsApi.edit(punId, text);
+    setPuns((current) =>
+      current.map((pun) =>
+        pun.id === punId ? { ...pun, text, updatedAt: new Date().toISOString() } : pun,
+      ),
+    );
+  };
+
+  const handleDeletePun = async (punId: string) => {
+    await punsApi.delete(punId);
+    setPuns((current) => current.filter((pun) => pun.id !== punId));
+    setPunComments((current) => {
+      const next = { ...current };
+      delete next[punId];
+      return next;
+    });
+  };
+
+  const handleReactPun = async (punId: string, reaction: Pun["myReaction"]) => {
+    await punsApi.react(punId, reaction);
+    setPuns((current) =>
+      current.map((pun) => {
+        if (pun.id !== punId) return pun;
+
+        const previousReaction = pun.myReaction;
+        let nextGroanCount = pun.groanCount;
+
+        if (previousReaction === "groan") {
+          nextGroanCount = Math.max(0, nextGroanCount - 1);
+        }
+
+        if (reaction === "groan") {
+          nextGroanCount += 1;
+        }
+
+        return {
+          ...pun,
+          myReaction: reaction,
+          groanCount: nextGroanCount,
+        };
+      }),
+    );
+  };
+
+  const handleAddComment = async (punId: string, text: string) => {
+    await commentsApi.add(punId, text);
+    const comments = await commentsApi.list(punId);
+    setPunComments((prev) => ({ ...prev, [punId]: comments }));
+  };
+
+  const handleCommentReact = async (
+    commentId: string,
+    punId: string,
+    reaction: string | null,
+  ) => {
+    await commentsApi.react(commentId, reaction);
+    const comments = await commentsApi.list(punId);
+    setPunComments((prev) => ({ ...prev, [punId]: comments }));
   };
 
   return (
@@ -368,63 +437,50 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
           </p>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {groupedPuns.map((group) => {
+        <div className="space-y-2">
+          {groupedPuns.map((group, groupIndex) => {
             const isExpanded = expandedDates.has(group.challengeId);
             const isToday =
               group.challengeId === new Date().toLocaleDateString("en-CA");
 
             return (
-              <Card key={group.challengeId} className="space-y-0 p-0">
-                {/* ── Date group header ── */}
+              <section key={group.challengeId} className="space-y-4">
+                <div className="relative flex items-center pt-1">
+                  <div className="flex-1 border-t border-border" />
+                  <div className="mx-4 flex-shrink-0">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-mono font-semibold text-text-muted shadow-sm">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+                      {formatChallengeDate(group.challengeId)}
+                    </span>
+                  </div>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+
                 <button
                   type="button"
                   onClick={() => toggleDate(group.challengeId)}
-                  className="flex w-full items-start justify-between gap-4 px-4 py-5 text-left sm:px-6"
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted/70 px-4 py-3 text-left text-sm text-text-secondary transition-colors hover:bg-surface-muted"
                 >
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-text-muted">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {formatChallengeDate(group.challengeId)}
-                      </span>
-                      {isToday && (
-                        <span className="rounded-full bg-accent-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-foreground">
-                          Today
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-text-secondary">
-                      {group.challengeTopic && (
-                        <span className="text-xs bg-accent-subtle text-accent-foreground px-2 py-0.5 rounded-full font-medium truncate">
-                          {group.challengeTopic}
-                          {group.challengeFocus
-                            ? ` \u00b7 ${group.challengeFocus}`
-                            : ""}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-4">
-                    <div className="hidden text-right text-xs text-text-secondary sm:block">
-                      <p>
-                        {group.puns.length} pun
-                        {group.puns.length === 1 ? "" : "s"}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <MessageSquare className="h-4 w-4 shrink-0 opacity-60" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-text">
+                        {group.puns.length} pun{group.puns.length === 1 ? "" : "s"}
+                        {isToday ? " today" : " archived"}
                       </p>
-                      <p>{group.avgScore}/10 avg</p>
-                      <p>
-                        {group.totalGroans} groan
+                      <p className="truncate text-xs text-text-muted">
+                        Avg {group.avgScore}/10 • {group.totalGroans} groan
                         {group.totalGroans === 1 ? "" : "s"}
                       </p>
                     </div>
-                    <ChevronDown
-                      className={`h-5 w-5 text-text-muted transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                    />
                   </div>
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 shrink-0 opacity-60" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
+                  )}
                 </button>
 
-                {/* ── Expanded pun list ── */}
                 <AnimatePresence initial={false}>
                   {isExpanded && (
                     <motion.div
@@ -434,180 +490,71 @@ export function MySubmissionsView({ onClose }: { onClose: () => void }) {
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <div className="space-y-2 border-t border-border px-4 py-4 sm:px-6 sm:py-5">
-                        {group.puns.map((pun) => {
-                          const isItemExpanded = expandedPunId === pun.id;
-                          const pComments = punComments[pun.id] ?? [];
-                          const isLoadingC = loadingComments === pun.id;
+                      <div className="space-y-4 pb-2">
+                        {(group.challengeTopic || group.challengeFocus) && (
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {group.challengeTopic && (
+                              <motion.div
+                                key={`archive-topic-${group.challengeId}`}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="rounded-2xl border border-transparent bg-text p-4 text-surface"
+                              >
+                                <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-accent/80">
+                                  Topic
+                                </p>
+                                <h3 className="text-lg font-serif italic sm:text-xl">
+                                  {group.challengeTopic}
+                                </h3>
+                              </motion.div>
+                            )}
+                            {group.challengeFocus && (
+                              <motion.div
+                                key={`archive-focus-${group.challengeId}`}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.2, delay: 0.04 }}
+                                className="rounded-2xl border border-transparent bg-accent p-4 text-accent-foreground"
+                              >
+                                <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-accent-foreground/70">
+                                  Focus
+                                </p>
+                                <h3 className="text-lg font-serif italic sm:text-xl">
+                                  {group.challengeFocus}
+                                </h3>
+                              </motion.div>
+                            )}
+                          </div>
+                        )}
 
-                          return (
-                            <div
+                        <div className="grid grid-cols-1 gap-4 sm:gap-6">
+                          {group.puns.map((pun, punIndex) => (
+                            <PunCard
                               key={pun.id}
-                              className="rounded-2xl border border-border overflow-hidden"
-                            >
-                              <div className="bg-surface-muted">
-                                <button
-                                  onClick={() => handleToggleExpand(pun.id)}
-                                  className="w-full text-left p-4 hover:bg-surface-muted/80 transition-colors"
-                                >
-                                  {/* Score badge row */}
-                                  <div className="flex items-center gap-2 mb-2">
-                                    {pun.responseTimeMs !== null && (
-                                      <span className="text-xs text-text-muted">
-                                        Answered in{" "}
-                                        {formatFuzzyTime(pun.responseTimeMs)}
-                                      </span>
-                                    )}
-                                    {pun.aiScore !== null &&
-                                      pun.aiScore !== undefined && (
-                                        <>
-                                          <span
-                                            className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                              pun.aiScore >= 7
-                                                ? "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                                                : pun.aiScore >= 4
-                                                  ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
-                                                  : "bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
-                                            }`}
-                                          >
-                                            {pun.aiScore}/10
-                                          </span>
-                                          <JudgeHint
-                                            judgeName={pun.aiJudgeName}
-                                            judgeVersion={pun.aiJudgeVersion}
-                                            className="inline-flex items-center text-text-muted hover:text-text-secondary"
-                                            iconClassName="h-3.5 w-3.5"
-                                          />
-                                        </>
-                                      )}
-                                  </div>
-
-                                  {/* Pun text + chevron */}
-                                  <div className="flex items-start gap-2">
-                                    <p className="flex-1 text-base font-serif italic text-text">
-                                      "{pun.text}"
-                                    </p>
-                                    <ChevronDown
-                                      className={`w-4 h-4 text-text-muted flex-shrink-0 mt-1 transition-transform duration-200 ${
-                                        isItemExpanded ? "rotate-180" : ""
-                                      }`}
-                                    />
-                                  </div>
-                                </button>
-
-                                {/* Footer */}
-                                <div className="flex items-center gap-3 px-4 pb-4 text-xs text-text-muted">
-                                  <span>
-                                    {new Date(pun.createdAt).toLocaleTimeString(
-                                      [],
-                                      {
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                      },
-                                    )}
-                                  </span>
-                                  {pun.groanCount > 0 && (
-                                    <GroanBadge
-                                      count={pun.groanCount}
-                                      groaners={pun.groaners}
-                                      triggerClassName="inline-flex items-center gap-1 rounded-md font-semibold text-accent-foreground transition-colors hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
-                                      onClick={(event) =>
-                                        event.stopPropagation()
-                                      }
-                                    />
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Expanded panel */}
-                              <AnimatePresence>
-                                {isItemExpanded && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: "auto", opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="px-4 pb-4 pt-3 bg-surface border-t border-border space-y-3">
-                                      {/* AI Feedback */}
-                                      {pun.aiFeedback && (
-                                        <div className="p-3 bg-accent-subtle rounded-xl text-sm text-accent">
-                                          <span className="mb-1 flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider text-accent-foreground/60">
-                                            <span>AI Verdict</span>
-                                            <JudgeHint
-                                              judgeName={pun.aiJudgeName}
-                                              judgeVersion={pun.aiJudgeVersion}
-                                              className="inline-flex items-center text-accent-foreground/55 hover:text-accent-foreground"
-                                              iconClassName="h-3.5 w-3.5"
-                                            />
-                                          </span>
-                                          <span className="text-accent-foreground italic">
-                                            {pun.aiFeedback}
-                                          </span>
-                                        </div>
-                                      )}
-
-                                      {/* Comments */}
-                                      <div>
-                                        <span className="font-semibold text-xs uppercase tracking-wider text-text-muted block mb-2">
-                                          Comments
-                                          {!isLoadingC && pComments.length > 0
-                                            ? ` (${pComments.length})`
-                                            : ""}
-                                        </span>
-                                        {isLoadingC ? (
-                                          <p className="text-xs text-text-muted italic py-1">
-                                            Loading...
-                                          </p>
-                                        ) : pComments.length === 0 ? (
-                                          <p className="text-xs text-text-muted italic py-1">
-                                            No comments yet
-                                          </p>
-                                        ) : (
-                                          <div className="space-y-2">
-                                            {pComments.map((comment) => (
-                                              <div
-                                                key={comment.id}
-                                                className="flex items-start gap-2"
-                                              >
-                                                <img
-                                                  src={comment.userPhoto || ""}
-                                                  alt={comment.userName}
-                                                  className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                  <div className="flex items-baseline gap-2">
-                                                    <span className="text-xs font-semibold text-text">
-                                                      {comment.userName}
-                                                    </span>
-                                                    <span className="text-xs text-text-muted">
-                                                      {new Date(
-                                                        comment.createdAt,
-                                                      ).toLocaleDateString()}
-                                                    </span>
-                                                  </div>
-                                                  <p className="text-sm text-text-secondary mt-0.5">
-                                                    {comment.text}
-                                                  </p>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </div>
-                          );
-                        })}
+                              pun={pun}
+                              index={groupIndex + punIndex * 0.1}
+                              comments={punComments[pun.id] ?? []}
+                              commentsLoading={loadingCommentIds.has(pun.id)}
+                              submitting={false}
+                              hideAuthor={true}
+                              onReact={handleReactPun}
+                              onViewed={() => {}}
+                              onEdit={handleEditPun}
+                              onDelete={handleDeletePun}
+                              onComment={handleAddComment}
+                              onCommentReact={(commentId, reaction) =>
+                                handleCommentReact(commentId, pun.id, reaction)
+                              }
+                              onLoadComments={loadCommentsForPun}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </Card>
+              </section>
             );
           })}
         </div>

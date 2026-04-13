@@ -26,6 +26,7 @@ interface PunCardProps {
   pun: Pun;
   index: number;
   comments: PunComment[];
+  commentsLoading?: boolean;
   submitting: boolean;
   hideAuthor?: boolean;
   disableComments?: boolean;
@@ -98,6 +99,7 @@ export function PunCard({
   pun,
   index,
   comments,
+  commentsLoading = false,
   submitting,
   hideAuthor = false,
   disableComments = false,
@@ -306,7 +308,7 @@ export function PunCard({
             <Button
               variant="ghost"
               onClick={(e) => {
-                e.stopPropagation();
+                e?.stopPropagation();
                 setIsEditing(false);
               }}
               className="px-3 py-1.5 text-sm"
@@ -317,7 +319,7 @@ export function PunCard({
             <Button
               variant="primary"
               onClick={(e) => {
-                e.stopPropagation();
+                e?.stopPropagation();
                 onEdit(pun.id, editText);
                 setIsEditing(false);
               }}
@@ -441,7 +443,11 @@ export function PunCard({
               className="overflow-hidden border-t border-border pt-3 mt-2"
             >
               <div className="space-y-3 mb-3">
-                {comments.length === 0 ? (
+                {commentsLoading ? (
+                  <p className="text-sm text-text-muted italic text-center py-2">
+                    Loading comments...
+                  </p>
+                ) : comments.length === 0 ? (
                   <p className="text-sm text-text-muted italic text-center py-2">
                     No comments yet. Be the first!
                   </p>

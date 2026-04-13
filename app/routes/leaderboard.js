@@ -54,7 +54,7 @@ router.get("/api/leaderboard/daily", ensureAuthenticated, async (req, res) => {
 router.get(
   "/api/leaderboard/alltime",
   ensureAuthenticated,
-  async (_req, res) => {
+  async (req, res) => {
     try {
       const groaners = await getGlobalAllTimeGroaners(req.user.id);
       res.json(groaners);

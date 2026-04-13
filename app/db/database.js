@@ -549,10 +549,9 @@ async function updatePunText(punId, text) {
 async function updatePunScore(punId, judgement, options = {}) {
   return withTransaction(async (client) => {
     const punResult = await client.query(
-      `SELECT p.id, p.challenge_id, p.text, gdc.topic AS challenge_topic, gdc.focus AS challenge_focus
-       FROM puns p
-       LEFT JOIN global_daily_challenges gdc ON gdc.challenge_id = p.challenge_id
-       WHERE p.id = $1
+      `SELECT id, challenge_id, text
+       FROM puns
+       WHERE id = $1
        FOR UPDATE`,
       [punId],
     );
@@ -560,6 +559,13 @@ async function updatePunScore(punId, judgement, options = {}) {
     if (!punResult.rows[0]) throw new Error("Pun not found");
 
     const pun = punResult.rows[0];
+    const challengeResult = await client.query(
+      `SELECT topic, focus
+       FROM global_daily_challenges
+       WHERE challenge_id = $1`,
+      [pun.challenge_id],
+    );
+    const challenge = challengeResult.rows[0] ?? null;
     const judge = await upsertAiJudgeDefinition(judgement, client);
     const judgedAt = judgement?.judgedAt ?? new Date().toISOString();
     const latestJudgement = await client.query(
@@ -593,8 +599,8 @@ async function updatePunScore(punId, judgement, options = {}) {
         judgement?.feedback ?? null,
         judgement?.reasoning ?? null,
         pun.text,
-        pun.challenge_topic ?? null,
-        pun.challenge_focus ?? null,
+        challenge?.topic ?? null,
+        challenge?.focus ?? null,
         latestJudgement.rows[0]?.id ?? null,
         judgedAt,
         judgement?.errorMessage ?? null,

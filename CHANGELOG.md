@@ -4,6 +4,18 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.22.0] - 2026-04-13
+
+### Added
+
+- **Chat Interface:** Added timestamps and day separators to chat interface.
+- **Historical Chat Responses:** Enabled submissions for past daily challenges in history.
+- **Global Groan Functionality:** Added global groan functionality to the leaderboard.
+
+### Fixed
+
+- **AI Scoring:** Adjusted AI scoring prompt and error fallback tone.
+
 ## [1.21.0] - 2026-04-06
 
 ### Added

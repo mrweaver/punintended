@@ -77,10 +77,10 @@ export const punsApi = {
     request<Pun[]>(
       `/api/daily/puns?challengeId=${challengeId}${groupId ? `&groupId=${groupId}` : ""}`,
     ),
-  submit: (text: string, responseTimeMs: number | null) =>
+  submit: (text: string, responseTimeMs: number | null, challengeId?: string) =>
     request<{ id: string }>(`/api/daily/puns`, {
       method: "POST",
-      body: JSON.stringify({ text, responseTimeMs }),
+      body: JSON.stringify({ text, responseTimeMs, challengeId }),
     }),
   edit: (id: string, text: string) =>
     request<{ success: boolean }>(`/api/puns/${id}`, {
@@ -397,6 +397,7 @@ export interface LeaderboardEntry {
   authorPhoto: string;
   groanCount: number;
   groaners?: Groaner[];
+  myReaction?: "groan" | null;
   createdAt: string;
 }
 

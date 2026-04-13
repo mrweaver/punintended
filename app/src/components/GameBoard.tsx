@@ -498,15 +498,17 @@ export function GameBoard({
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.15 }}
               >
-                <ChallengeHistoryPanel
-                  historyState={historyState}
-                  getCommentsForPun={getCommentsForPun}
-                  submitting={submitting}
-                  onReact={reactPun}
-                  onEdit={editPun}
-                  onDelete={deletePun}
-                  onComment={addComment}
-                />
+                  <ChallengeHistoryPanel
+                    historyState={historyState}
+                    getCommentsForPun={getCommentsForPun}
+                    submitting={submitting}
+                    onReact={reactPun}
+                    onEdit={editPun}
+                    onDelete={deletePun}
+                    onComment={addComment}
+                    submitPun={submitPun}
+                    groupCreatedAt={session.createdAt}
+                  />
               </motion.div>
             ) : (
               <motion.div

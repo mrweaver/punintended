@@ -161,40 +161,48 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
 
   try {
     const todayId = getAESTDateId();
-    const challenge = await getOrCreateGlobalChallenge(todayId);
-    const reveal = await getChallengeReveal(todayId, req.user.id);
+    const targetChallengeId =
+      req.body.challengeId && isPlausibleLocalDate(req.body.challengeId)
+        ? req.body.challengeId
+        : todayId;
 
-    if (!reveal) {
-      return res.status(403).json({
-        error: "Reveal today's challenge before submitting a pun.",
-      });
+    const challenge = await getOrCreateGlobalChallenge(targetChallengeId);
+    let canonicalResponseTimeMs = null;
+
+    if (targetChallengeId === todayId) {
+      const reveal = await getChallengeReveal(todayId, req.user.id);
+
+      if (!reveal) {
+        return res.status(403).json({
+          error: "Reveal today's challenge before submitting a pun.",
+        });
+      }
+      canonicalResponseTimeMs = getRevealElapsedMs(reveal.revealedAt);
     }
 
     // Hard cap: 3 submissions per player per day (global)
-    const myCount = await countPunsByAuthorForChallenge(todayId, req.user.id);
+    const myCount = await countPunsByAuthorForChallenge(targetChallengeId, req.user.id);
     if (myCount >= 3) {
       return res.status(429).json({
         error:
-          "You've used all 3 of your submissions for today. Come back tomorrow!",
+          "You've used all 3 of your submissions for this challenge.",
       });
     }
 
-    const canonicalResponseTimeMs = getRevealElapsedMs(reveal.revealedAt);
-
     const pun = await createPun(
-      todayId,
+      targetChallengeId,
       req.user.id,
       text.trim(),
       canonicalResponseTimeMs,
     );
-    broadcastPunsUpdate(todayId);
+    broadcastPunsUpdate(targetChallengeId);
 
     // Score asynchronously
     scorePunText(challenge.topic, challenge.focus, text.trim())
       .then(async (result) => {
         console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`);
         await updatePunScore(pun.id, result.score, result.feedback);
-        broadcastPunsUpdate(todayId);
+        broadcastPunsUpdate(targetChallengeId);
       })
       .catch(async (err) => {
         console.error("AI scoring failed:", err);
@@ -203,7 +211,7 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
           0,
           "The judge fell asleep at the bar. Please edit and resubmit!",
         );
-        broadcastPunsUpdate(todayId);
+        broadcastPunsUpdate(targetChallengeId);
       });
 
     res.json({ id: pun.id });

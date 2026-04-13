@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { punsApi, type Pun } from "../api/client";
+import { punsApi, dailyApi, type Pun } from "../api/client";
 
 /**
  * Simplified challenge history - loads puns for past dates.
@@ -9,6 +9,7 @@ import { punsApi, type Pun } from "../api/client";
 export function useChallengeHistory(groupId?: string | null) {
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [punsByDate, setPunsByDate] = useState<Record<string, Pun[]>>({});
+  const [challengesByDate, setChallengesByDate] = useState<Record<string, any>>({});
   const [loadingDate, setLoadingDate] = useState<string | null>(null);
 
   const toggleDate = useCallback(
@@ -22,14 +23,18 @@ export function useChallengeHistory(groupId?: string | null) {
       next.add(challengeId);
       setExpandedDates(next);
 
-      // Load puns for this date if not already loaded
+      // Load puns and challenge metadata for this date if not already loaded
       if (!punsByDate[challengeId]) {
         setLoadingDate(challengeId);
         try {
-          const result = await punsApi.list(challengeId, groupId || undefined);
-          setPunsByDate((prev) => ({ ...prev, [challengeId]: result }));
+          const [punsResult, challengeResult] = await Promise.all([
+            punsApi.list(challengeId, groupId || undefined),
+            dailyApi.getChallenge(challengeId)
+          ]);
+          setPunsByDate((prev) => ({ ...prev, [challengeId]: punsResult }));
+          setChallengesByDate((prev) => ({ ...prev, [challengeId]: challengeResult }));
         } catch (err) {
-          console.error("Failed to load history puns:", err);
+          console.error("Failed to load history puns or challenge:", err);
         } finally {
           setLoadingDate(null);
         }
@@ -48,6 +53,7 @@ export function useChallengeHistory(groupId?: string | null) {
   return {
     expandedDates,
     punsByDate,
+    challengesByDate,
     loadingDate,
     toggleDate,
     reactPun,

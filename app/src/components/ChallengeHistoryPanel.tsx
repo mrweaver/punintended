@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronUp, MessageSquare, Send } from "lucide-react";
 import { PunCard } from "./PunCard";
 import type { PunComment, PunReaction } from "../api/client";
 import type { useChallengeHistory } from "../hooks/useChallengeHistory";
+import { useAuth } from "../contexts/AuthContext";
+import { Button } from "./ui/Button";
 
 interface ChallengeHistoryPanelProps {
   historyState: ReturnType<typeof useChallengeHistory>;
@@ -13,6 +15,8 @@ interface ChallengeHistoryPanelProps {
   onEdit: (punId: string, text: string) => void;
   onDelete: (punId: string) => void;
   onComment: (punId: string, text: string) => void;
+  submitPun: (text: string, responseTimeMs?: number | null, overrideChallengeId?: string) => Promise<void>;
+  groupCreatedAt: string;
 }
 
 function formatDateLabel(challengeId: string): string {
@@ -26,14 +30,20 @@ function formatDateLabel(challengeId: string): string {
   });
 }
 
-/** Generate the last N days as YYYY-MM-DD strings, excluding today. */
-function pastDates(count: number): string[] {
+/** Generate past dates, ending at today, filtering those before group creation */
+function pastDatesValid(groupCreatedAt: string): string[] {
   const dates: string[] = [];
   const now = new Date();
-  for (let i = 1; i <= count; i++) {
+  
+  const createdDateStr = groupCreatedAt.split("T")[0]; // "YYYY-MM-DD"
+  
+  for (let i = 1; i <= 14; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    dates.push(d.toLocaleDateString("en-CA"));
+    const dateId = d.toLocaleDateString("en-CA");
+    if (dateId >= createdDateStr) {
+      dates.push(dateId);
+    }
   }
   return dates;
 }
@@ -46,9 +56,13 @@ export function ChallengeHistoryPanel({
   onEdit,
   onDelete,
   onComment,
+  submitPun,
+  groupCreatedAt,
 }: ChallengeHistoryPanelProps) {
-  const { expandedDates, punsByDate, loadingDate, toggleDate } = historyState;
-  const dates = useMemo(() => pastDates(14), []);
+  const { user } = useAuth();
+  const { expandedDates, punsByDate, challengesByDate, loadingDate, toggleDate } = historyState;
+  const dates = useMemo(() => pastDatesValid(groupCreatedAt), [groupCreatedAt]);
+  const [punTexts, setPunTexts] = useState<Record<string, string>>({});
 
   return (
     <div className="space-y-0">
@@ -103,27 +117,84 @@ export function ChallengeHistoryPanel({
                     <div className="py-6 text-center text-gray-400 dark:text-zinc-500 italic text-sm mb-4">
                       Loading puns...
                     </div>
-                  ) : puns.length === 0 ? (
-                    <div className="py-6 text-center text-gray-400 dark:text-zinc-500 italic text-sm mb-4">
-                      No puns for this day.
-                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-4">
-                      {puns.map((pun, punIdx) => (
-                        <PunCard
-                          key={pun.id}
-                          pun={pun}
-                          index={idx + punIdx * 0.1}
-                          comments={getCommentsForPun(pun.id)}
-                          submitting={submitting}
-                          onReact={onReact}
-                          onViewed={() => {}}
-                          onEdit={onEdit}
-                          onDelete={onDelete}
-                          onComment={onComment}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      {/* Submission Component if attemptsLeft > 0 */}
+                      {(() => {
+                        const myPuns = puns.filter((p) => p.authorId === user?.uid);
+                        const attemptsLeft = Math.max(0, 3 - myPuns.length);
+                        const challenge = challengesByDate[dateId];
+                        
+                        if (attemptsLeft > 0 && challenge) {
+                          return (
+                            <div className="mb-6 p-4 rounded-xl border-2 border-dashed border-orange-200 dark:border-violet-800/60 bg-white/50 dark:bg-zinc-900/50">
+                              <div className="mb-3">
+                                <h4 className="text-sm font-semibold text-gray-700 dark:text-zinc-300">Submit a Pun for this Day</h4>
+                                <p className="text-xs text-gray-500 dark:text-zinc-500 font-mono mt-1">Topic: <span className="text-orange-600 dark:text-violet-400">{challenge.topic}</span> | Focus: <span className="text-orange-600 dark:text-violet-400">{challenge.focus}</span></p>
+                              </div>
+                              <textarea
+                                placeholder="Type your late pun here..."
+                                value={punTexts[dateId] || ""}
+                                onChange={(e) => setPunTexts((prev) => ({ ...prev, [dateId]: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && e.ctrlKey) {
+                                    e.preventDefault();
+                                    if ((punTexts[dateId] || "").trim() && !submitting) {
+                                      submitPun(punTexts[dateId], null, dateId).then(() => {
+                                        setPunTexts((prev) => ({ ...prev, [dateId]: "" }));
+                                      });
+                                    }
+                                  }
+                                }}
+                                className="w-full p-3 text-sm font-serif italic bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-lg border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[60px] resize-none mb-3"
+                              />
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs text-gray-500 dark:text-zinc-500">{attemptsLeft} attempt{attemptsLeft !== 1 ? 's' : ''} remaining</p>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    if ((punTexts[dateId] || "").trim() && !submitting) {
+                                      submitPun(punTexts[dateId], null, dateId).then(() => {
+                                        setPunTexts((prev) => ({ ...prev, [dateId]: "" }));
+                                      });
+                                    }
+                                  }}
+                                  disabled={!(punTexts[dateId] || "").trim() || submitting}
+                                  loading={submitting}
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                  Submit
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {puns.length === 0 ? (
+                        <div className="py-6 text-center text-gray-400 dark:text-zinc-500 italic text-sm mb-4">
+                          No puns for this day.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-4">
+                          {puns.map((pun, punIdx) => (
+                            <PunCard
+                              key={pun.id}
+                              pun={pun}
+                              index={idx + punIdx * 0.1}
+                              comments={getCommentsForPun(pun.id)}
+                              submitting={submitting}
+                              onReact={onReact}
+                              onViewed={() => {}}
+                              onEdit={onEdit}
+                              onDelete={onDelete}
+                              onComment={onComment}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </motion.div>
               )}

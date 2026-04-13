@@ -2,6 +2,8 @@ import { useState } from "react";
 import { motion } from "motion/react";
 import { Swords } from "lucide-react";
 import { useGlobalLeaderboard } from "../hooks/useGlobalLeaderboard";
+import { useAuth } from "../contexts/AuthContext";
+import { punsApi } from "../api/client";
 import { Button } from "./ui/Button";
 import { GroanBadge } from "./ui/GroanBadge";
 import type { LeaderboardEntry, GauntletHistoryEntry } from "../api/client";
@@ -25,9 +27,11 @@ function scoreColor(score: number) {
 function LeaderboardRow({
   rank,
   entry,
+  onReact,
 }: {
   rank: number;
   entry: LeaderboardEntry;
+  onReact: (id: string, currentReaction: "groan" | null) => void;
 }) {
   return (
     <div className="flex items-start gap-3 p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800">
@@ -38,8 +42,17 @@ function LeaderboardRow({
         <GroanBadge
           count={entry.groanCount}
           groaners={entry.groaners}
-          triggerClassName="inline-flex items-center gap-1 rounded-md text-sm font-semibold text-gray-700 transition-colors hover:text-orange-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:text-zinc-200 dark:hover:text-violet-300 dark:focus-visible:ring-violet-500"
+          triggerClassName={`inline-flex items-center gap-1 rounded-md text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:focus-visible:ring-violet-500 ${
+            entry.myReaction
+              ? "text-orange-600 dark:text-violet-400 hover:text-orange-700 dark:hover:text-violet-300"
+              : "text-gray-700 dark:text-zinc-200 hover:text-orange-600 dark:hover:text-violet-300"
+          }`}
           countClassName="font-mono font-bold"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onReact(entry.id, entry.myReaction || null);
+          }}
         />
       </div>
       <div className="flex-1 min-w-0">
@@ -128,8 +141,19 @@ function GauntletLeaderboardRow({
 }
 
 export function GlobalLeaderboard({ onClose }: Props) {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("today");
-  const { daily, allTime, gauntlet, loading } = useGlobalLeaderboard();
+  const { daily, allTime, gauntlet, loading, refresh, optimisticUpdateReact } = useGlobalLeaderboard();
+
+  const handleReact = (punId: string, currentReaction: "groan" | null) => {
+    if (!user) return;
+    const nextReaction = currentReaction ? null : "groan";
+    optimisticUpdateReact(punId, nextReaction, user);
+    punsApi.react(punId, nextReaction).catch((err) => {
+      console.error("Failed to react:", err);
+      refresh(true); // revert optimistic change on failure
+    });
+  };
 
   const tabs: Array<{ key: Tab; label: string; emoji: string }> = [
     { key: "today", label: "Today", emoji: "📊" },
@@ -233,7 +257,7 @@ export function GlobalLeaderboard({ onClose }: Props) {
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {punEntries.map((entry, i) => (
-            <LeaderboardRow key={entry.id} rank={i + 1} entry={entry} />
+            <LeaderboardRow key={entry.id} rank={i + 1} entry={entry} onReact={handleReact} />
           ))}
         </div>
       )}

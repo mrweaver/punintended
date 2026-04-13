@@ -43,7 +43,7 @@ router.get(
 router.get("/api/leaderboard/daily", ensureAuthenticated, async (req, res) => {
   try {
     const date = req.query.date || getAESTDateId();
-    const puns = await getGlobalDailyRanking(date);
+    const puns = await getGlobalDailyRanking(date, req.user.id);
     res.json({ date, puns });
   } catch (error) {
     console.error("Failed to get daily leaderboard:", error);
@@ -56,7 +56,7 @@ router.get(
   ensureAuthenticated,
   async (_req, res) => {
     try {
-      const groaners = await getGlobalAllTimeGroaners();
+      const groaners = await getGlobalAllTimeGroaners(req.user.id);
       res.json(groaners);
     } catch (error) {
       console.error("Failed to get all-time leaderboard:", error);

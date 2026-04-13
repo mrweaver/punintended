@@ -613,7 +613,7 @@ async function getWeeklyBestScores(groupId, weekStart, weekEnd) {
 }
 
 // Global daily ranking
-async function getGlobalDailyRanking(challengeId) {
+async function getGlobalDailyRanking(challengeId, viewerId) {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.created_at,
        gdc.topic AS challenge_topic, gdc.focus AS challenge_focus,
@@ -626,7 +626,8 @@ async function getGlobalDailyRanking(challengeId) {
          ) FILTER (WHERE ru.id IS NOT NULL),
          '[]'::json
        ) AS groaners,
-       COUNT(pr.pun_id) AS groan_count
+       COUNT(pr.pun_id) AS groan_count,
+       COUNT(pr.pun_id) FILTER (WHERE pr.user_id = $2) > 0 AS my_groan
      FROM puns p
      JOIN users u ON u.id = p.author_id
      LEFT JOIN global_daily_challenges gdc ON gdc.challenge_id = p.challenge_id
@@ -636,13 +637,13 @@ async function getGlobalDailyRanking(challengeId) {
      GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, u.anonymous_in_leaderboards, gdc.topic, gdc.focus
      ORDER BY p.ai_score DESC, groan_count DESC, p.created_at ASC
      LIMIT 50`,
-    [challengeId],
+    [challengeId, viewerId],
   );
   return result.rows.map(formatLeaderboardRow);
 }
 
 // All-time top groaners
-async function getGlobalAllTimeGroaners() {
+async function getGlobalAllTimeGroaners(viewerId) {
   const result = await query(
     `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
        gdc.topic AS challenge_topic, gdc.focus AS challenge_focus,
@@ -655,7 +656,8 @@ async function getGlobalAllTimeGroaners() {
          ) FILTER (WHERE ru.id IS NOT NULL),
          '[]'::json
        ) AS groaners,
-       COUNT(pr.pun_id) AS groan_count
+       COUNT(pr.pun_id) AS groan_count,
+       COUNT(pr.pun_id) FILTER (WHERE pr.user_id = $1) > 0 AS my_groan
      FROM puns p
      JOIN users u ON u.id = p.author_id
      LEFT JOIN global_daily_challenges gdc ON gdc.challenge_id = p.challenge_id
@@ -665,6 +667,7 @@ async function getGlobalAllTimeGroaners() {
      GROUP BY p.id, ${displayNameSql("u")}, u.photo_url, u.anonymous_in_leaderboards, gdc.topic, gdc.focus
      ORDER BY groan_count DESC, p.created_at ASC
      LIMIT 50`,
+    [viewerId],
   );
   return result.rows.map(formatLeaderboardRow);
 }
@@ -682,6 +685,7 @@ function formatLeaderboardRow(row) {
     authorPhoto: anonymous ? "" : row.author_photo,
     groanCount: Number(row.groan_count || 0),
     groaners: formatGroaners(row.groaners),
+    myReaction: row.my_groan ? "groan" : null,
     createdAt: row.created_at,
   };
 }

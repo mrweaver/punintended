@@ -208,10 +208,10 @@ router.get(
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
+      "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
     });
+    res.flushHeaders?.();
     res.write(":connected\n\n");
 
     const runId = req.params.runId;

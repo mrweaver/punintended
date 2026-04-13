@@ -12,6 +12,28 @@ export function useChallengeHistory(groupId?: string | null) {
   const [challengesByDate, setChallengesByDate] = useState<Record<string, any>>({});
   const [loadingDate, setLoadingDate] = useState<string | null>(null);
 
+  const loadDate = useCallback(
+    async (challengeId: string) => {
+      setLoadingDate(challengeId);
+      try {
+        const [punsResult, challengeResult] = await Promise.all([
+          punsApi.list(challengeId, groupId || undefined),
+          dailyApi.getChallenge(challengeId),
+        ]);
+        setPunsByDate((prev) => ({ ...prev, [challengeId]: punsResult }));
+        setChallengesByDate((prev) => ({
+          ...prev,
+          [challengeId]: challengeResult,
+        }));
+      } catch (err) {
+        console.error("Failed to load history puns or challenge:", err);
+      } finally {
+        setLoadingDate(null);
+      }
+    },
+    [groupId],
+  );
+
   const toggleDate = useCallback(
     async (challengeId: string) => {
       const next = new Set(expandedDates);
@@ -25,22 +47,10 @@ export function useChallengeHistory(groupId?: string | null) {
 
       // Load puns and challenge metadata for this date if not already loaded
       if (!punsByDate[challengeId]) {
-        setLoadingDate(challengeId);
-        try {
-          const [punsResult, challengeResult] = await Promise.all([
-            punsApi.list(challengeId, groupId || undefined),
-            dailyApi.getChallenge(challengeId)
-          ]);
-          setPunsByDate((prev) => ({ ...prev, [challengeId]: punsResult }));
-          setChallengesByDate((prev) => ({ ...prev, [challengeId]: challengeResult }));
-        } catch (err) {
-          console.error("Failed to load history puns or challenge:", err);
-        } finally {
-          setLoadingDate(null);
-        }
+        await loadDate(challengeId);
       }
     },
-    [expandedDates, punsByDate, groupId],
+    [expandedDates, punsByDate, loadDate],
   );
 
   const reactPun = useCallback(
@@ -56,6 +66,7 @@ export function useChallengeHistory(groupId?: string | null) {
     challengesByDate,
     loadingDate,
     toggleDate,
+    refreshDate: loadDate,
     reactPun,
   };
 }

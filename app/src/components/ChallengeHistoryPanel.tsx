@@ -60,9 +60,25 @@ export function ChallengeHistoryPanel({
   groupCreatedAt,
 }: ChallengeHistoryPanelProps) {
   const { user } = useAuth();
-  const { expandedDates, punsByDate, challengesByDate, loadingDate, toggleDate } = historyState;
+  const {
+    expandedDates,
+    punsByDate,
+    challengesByDate,
+    loadingDate,
+    toggleDate,
+    refreshDate,
+  } = historyState;
   const dates = useMemo(() => pastDatesValid(groupCreatedAt), [groupCreatedAt]);
   const [punTexts, setPunTexts] = useState<Record<string, string>>({});
+
+  const handleSubmitForDate = async (dateId: string) => {
+    const text = (punTexts[dateId] || "").trim();
+    if (!text || submitting) return;
+
+    await submitPun(text, null, dateId);
+    await refreshDate(dateId);
+    setPunTexts((prev) => ({ ...prev, [dateId]: "" }));
+  };
 
   return (
     <div className="space-y-0">
@@ -119,6 +135,47 @@ export function ChallengeHistoryPanel({
                     </div>
                   ) : (
                     <>
+                      {(() => {
+                        const challenge = challengesByDate[dateId];
+
+                        if (!challenge) {
+                          return null;
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-2">
+                            <motion.div
+                              key={`history-topic-${dateId}`}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="rounded-2xl border border-transparent bg-zinc-900 p-4 text-white dark:border-zinc-700 dark:bg-zinc-800"
+                            >
+                              <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-orange-500 dark:text-violet-400">
+                                Topic
+                              </p>
+                              <h3 className="text-lg font-serif italic sm:text-xl">
+                                {challenge.topic}
+                              </h3>
+                            </motion.div>
+                            <motion.div
+                              key={`history-focus-${dateId}`}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.2, delay: 0.04 }}
+                              className="rounded-2xl border border-transparent bg-orange-500 p-4 text-white dark:border-violet-500 dark:bg-violet-600"
+                            >
+                              <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-white/70">
+                                Focus
+                              </p>
+                              <h3 className="text-lg font-serif italic sm:text-xl">
+                                {challenge.focus}
+                              </h3>
+                            </motion.div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Submission Component if attemptsLeft > 0 */}
                       {(() => {
                         const myPuns = puns.filter((p) => p.authorId === user?.uid);
@@ -139,11 +196,7 @@ export function ChallengeHistoryPanel({
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter" && e.ctrlKey) {
                                     e.preventDefault();
-                                    if ((punTexts[dateId] || "").trim() && !submitting) {
-                                      submitPun(punTexts[dateId], null, dateId).then(() => {
-                                        setPunTexts((prev) => ({ ...prev, [dateId]: "" }));
-                                      });
-                                    }
+                                    handleSubmitForDate(dateId).catch(console.error);
                                   }
                                 }}
                                 className="w-full p-3 text-sm font-serif italic bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-lg border-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 min-h-[60px] resize-none mb-3"
@@ -153,11 +206,7 @@ export function ChallengeHistoryPanel({
                                 <Button
                                   size="sm"
                                   onClick={() => {
-                                    if ((punTexts[dateId] || "").trim() && !submitting) {
-                                      submitPun(punTexts[dateId], null, dateId).then(() => {
-                                        setPunTexts((prev) => ({ ...prev, [dateId]: "" }));
-                                      });
-                                    }
+                                    handleSubmitForDate(dateId).catch(console.error);
                                   }}
                                   disabled={!(punTexts[dateId] || "").trim() || submitting}
                                   loading={submitting}

@@ -12,9 +12,22 @@ export function getAESTDateId() {
   });
 }
 
+export function isValidDateId(dateId) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateId)) return false;
+
+  const [year, month, day] = dateId.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 // Returns true if dateId is within 1 day of the current AEST date.
 export function isPlausibleLocalDate(dateId) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateId)) return false;
+  if (!isValidDateId(dateId)) return false;
   const serverDate = getAESTDateId();
   const serverMs = new Date(serverDate + "T00:00:00Z").getTime();
   const claimedMs = new Date(dateId + "T00:00:00Z").getTime();

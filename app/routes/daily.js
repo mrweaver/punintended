@@ -29,6 +29,7 @@ import {
 import {
   getAESTDateId,
   isPlausibleLocalDate,
+  isValidDateId,
   getRevealElapsedMs,
 } from "../lib/date.js";
 import { getActivePunJudgeDefinition } from "../lib/aiJudges.js";
@@ -88,7 +89,7 @@ router.get("/api/daily/challenge", ensureAuthenticated, async (req, res) => {
   try {
     const { localDateId } = req.query;
     const dateId =
-      localDateId && isPlausibleLocalDate(localDateId)
+      typeof localDateId === "string" && isValidDateId(localDateId)
         ? localDateId
         : getAESTDateId();
     const challenge = await getOrCreateGlobalChallenge(dateId);
@@ -186,7 +187,8 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
   try {
     const todayId = getAESTDateId();
     const targetChallengeId =
-      req.body.challengeId && isPlausibleLocalDate(req.body.challengeId)
+      typeof req.body?.challengeId === "string" &&
+      isValidDateId(req.body.challengeId)
         ? req.body.challengeId
         : todayId;
 

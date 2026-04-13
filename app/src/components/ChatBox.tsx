@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,16 +41,25 @@ function ChatBubble({
       <div className={`max-w-[75%] relative ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
         <div
           {...longPressHandlers}
-          className={`rounded-2xl px-4 py-2 select-none ${
+          className={`rounded-2xl px-4 py-2 pb-1.5 select-none flex flex-col ${
             isMe
               ? 'bg-orange-500 dark:bg-violet-600 text-white rounded-tr-sm'
               : 'bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 rounded-tl-sm'
           }`}
         >
           {!isMe && (
-            <p className="text-[10px] font-bold opacity-50 mb-1">{msg.userName}</p>
+            <p className="text-[10px] font-bold opacity-50 mb-0.5">{msg.userName}</p>
           )}
-          <p className="text-sm">{msg.text}</p>
+          <div className="flex items-end gap-3 justify-between">
+            <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+            <span
+              className={`text-[10px] -mb-0.5 shrink-0 whitespace-nowrap ${
+                isMe ? 'text-white/70' : 'text-gray-500/70 dark:text-zinc-400/70'
+              }`}
+            >
+              {new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(msg.createdAt))}
+            </span>
+          </div>
         </div>
         <ReactionSummary reactions={msg.reactions ?? {}} />
         <AnimatePresence>
@@ -69,6 +78,23 @@ function ChatBubble({
     </div>
   );
 }
+
+const formatDateSeparator = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (date.toDateString() === now.toDateString()) {
+    return 'Today';
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  } else if (now.getTime() - date.getTime() < 7 * 24 * 60 * 60 * 1000) {
+    return new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date);
+  } else {
+    return new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+  }
+};
 
 export function ChatBox({ messages, onSendMessage, onReactToMessage, onClose, isMobileModal }: ChatBoxProps) {
   const { user } = useAuth();
@@ -109,14 +135,31 @@ export function ChatBox({ messages, onSendMessage, onReactToMessage, onClose, is
               No messages yet. Start the conversation!
             </div>
           ) : (
-            messages.map((msg) => (
-              <ChatBubble
-                key={msg.id}
-                msg={msg}
-                isMe={msg.userId === user?.uid}
-                onReact={onReactToMessage}
-              />
-            ))
+            messages.map((msg, index) => {
+              const prevMsg = index > 0 ? messages[index - 1] : null;
+              const msgDate = new Date(msg.createdAt);
+              const prevDate = prevMsg ? new Date(prevMsg.createdAt) : null;
+              const showDateSeparator = !prevDate || msgDate.toDateString() !== prevDate.toDateString();
+
+              return (
+                <Fragment key={msg.id}>
+                  {showDateSeparator && (
+                    <div className="flex items-center gap-4 my-6">
+                      <div className="flex-1 border-t border-gray-200 dark:border-zinc-800"></div>
+                      <span className="text-xs font-medium text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
+                        {formatDateSeparator(msg.createdAt)}
+                      </span>
+                      <div className="flex-1 border-t border-gray-200 dark:border-zinc-800"></div>
+                    </div>
+                  )}
+                  <ChatBubble
+                    msg={msg}
+                    isMe={msg.userId === user?.uid}
+                    onReact={onReactToMessage}
+                  />
+                </Fragment>
+              );
+            })
           )}
           <div ref={chatEndRef} />
         </div>

@@ -24,6 +24,7 @@ import {
   getGauntletMessages,
   createGauntletMessage,
 } from "../db/database.js";
+import { getActivePunJudgeDefinition } from "../lib/aiJudges.js";
 import { generateGauntletPrompts, scorePunText } from "../services/ai.js";
 import {
   addGauntletClient,
@@ -33,6 +34,25 @@ import {
 } from "../services/sse.js";
 
 const router = Router();
+
+function buildRouteFallbackJudgement(feedback, reasoning) {
+  const judge = getActivePunJudgeDefinition();
+
+  return {
+    score: 0,
+    feedback,
+    reasoning,
+    judgeKey: judge.key,
+    judgeName: judge.name,
+    judgeVersion: judge.version,
+    judgeModel: judge.model,
+    judgePromptHash: judge.promptHash,
+    judgeStatus: judge.status,
+    isActive: judge.isActive,
+    status: "completed",
+    errorMessage: reasoning,
+  };
+}
 
 async function maybeFinalize(runId) {
   const run = await getGauntletRunById(runId);
@@ -131,9 +151,13 @@ router.post(
       if (cleanText) {
         const { topic, focus } = gauntlet.rounds[roundIndex];
         scorePunText(topic, focus, cleanText)
-          .then(async ({ score, feedback, reasoning }) => {
-            console.log(`[Gauntlet ${runId} R${roundIndex}] ${reasoning}`);
-            await updateGauntletRoundScore(runId, roundIndex, score, feedback);
+          .then(async (result) => {
+            console.log(
+              `[Gauntlet ${runId} R${roundIndex}] ${result.reasoning}`,
+            );
+            await updateGauntletRoundScore(runId, roundIndex, result, {
+              triggerType: "initial",
+            });
             await maybeFinalize(runId);
           })
           .catch(async (err) => {
@@ -144,8 +168,11 @@ router.post(
             await updateGauntletRoundScore(
               runId,
               roundIndex,
-              0,
-              "The judge fell asleep at the bar. No score for this round.",
+              buildRouteFallbackJudgement(
+                "The judge fell asleep at the bar. No score for this round.",
+                `Route-level gauntlet scoring failure for round ${roundIndex}.`,
+              ),
+              { triggerType: "initial" },
             );
             await maybeFinalize(runId);
           });
@@ -154,8 +181,11 @@ router.post(
         await updateGauntletRoundScore(
           runId,
           roundIndex,
-          0,
-          "Time's up - no pun submitted.",
+          buildRouteFallbackJudgement(
+            "Time's up - no pun submitted.",
+            "Timer expired before a gauntlet submission was recorded.",
+          ),
+          { triggerType: "initial" },
         );
         await maybeFinalize(runId);
       }

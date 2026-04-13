@@ -1,4 +1,10 @@
 import pg from "pg";
+import {
+  getActivePunJudgeDefinition,
+  getBuiltInAiJudges,
+  getUnknownAiJudgeDefinition,
+} from "../lib/aiJudges.js";
+
 const { Pool } = pg;
 
 const poolConfig = {
@@ -102,6 +108,79 @@ function getEffectiveDisplayName(user) {
     normalizeDisplayNameInput(user?.display_name) ??
     "Unknown"
   );
+}
+
+function getDbRunner(executor = query) {
+  return executor?.query ? executor.query.bind(executor) : query;
+}
+
+function normalizeJudgeVersion(version) {
+  if (version === undefined || version === null) return null;
+  return String(version).trim().replace(/^v/i, "");
+}
+
+function hasRecordedJudgeResult(score, feedback) {
+  return (
+    (score !== null && score !== undefined) ||
+    (typeof feedback === "string" && feedback !== "Re-evaluating...")
+  );
+}
+
+async function upsertAiJudgeDefinition(definition, executor = query) {
+  const run = getDbRunner(executor);
+  const key = definition?.judgeKey ?? definition?.key;
+  const version = normalizeJudgeVersion(
+    definition?.judgeVersion ?? definition?.version,
+  );
+  const judgeConfig = definition?.judgeConfig ?? definition?.config ?? null;
+
+  if (!key || !version) {
+    throw new Error("AI judge definitions require both key and version.");
+  }
+
+  const result = await run(
+    `INSERT INTO ai_judges (
+       key,
+       name,
+       version,
+       model,
+       system_prompt,
+       prompt_hash,
+       judge_config,
+       status,
+       is_active,
+       retired_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
+     ON CONFLICT (key, version)
+     DO UPDATE SET
+       name = COALESCE(EXCLUDED.name, ai_judges.name),
+       model = COALESCE(EXCLUDED.model, ai_judges.model),
+       system_prompt = COALESCE(EXCLUDED.system_prompt, ai_judges.system_prompt),
+       prompt_hash = COALESCE(EXCLUDED.prompt_hash, ai_judges.prompt_hash),
+       judge_config = COALESCE(EXCLUDED.judge_config, ai_judges.judge_config),
+       status = COALESCE(EXCLUDED.status, ai_judges.status),
+       is_active = COALESCE(EXCLUDED.is_active, ai_judges.is_active),
+       retired_at = CASE
+         WHEN COALESCE(EXCLUDED.is_active, ai_judges.is_active) THEN NULL
+         ELSE COALESCE(ai_judges.retired_at, EXCLUDED.retired_at, NOW())
+       END
+     RETURNING *`,
+    [
+      key,
+      definition?.judgeName ?? definition?.name ?? key,
+      version,
+      definition?.judgeModel ?? definition?.model ?? null,
+      definition?.systemPrompt ?? null,
+      definition?.judgePromptHash ?? definition?.promptHash ?? null,
+      judgeConfig ? JSON.stringify(judgeConfig) : null,
+      definition?.judgeStatus ?? definition?.status ?? "active",
+      definition?.isActive ?? false,
+      definition?.retiredAt ?? null,
+    ],
+  );
+
+  return result.rows[0];
 }
 
 // --- User functions ---
@@ -453,17 +532,97 @@ async function createPun(challengeId, authorId, text, responseTimeMs) {
 
 async function updatePunText(punId, text) {
   await query(
-    `UPDATE puns SET text = $1, ai_score = NULL, ai_feedback = 'Re-evaluating...' WHERE id = $2`,
+    `UPDATE puns
+     SET text = $1,
+         ai_score = NULL,
+         ai_feedback = 'Re-evaluating...',
+         ai_judge_id = NULL,
+         ai_judge_key = NULL,
+         ai_judge_name = NULL,
+         ai_judge_version = NULL,
+         ai_judged_at = NULL
+     WHERE id = $2`,
     [text, punId],
   );
 }
 
-async function updatePunScore(punId, score, feedback) {
-  await query(`UPDATE puns SET ai_score = $1, ai_feedback = $2 WHERE id = $3`, [
-    score,
-    feedback,
-    punId,
-  ]);
+async function updatePunScore(punId, judgement, options = {}) {
+  return withTransaction(async (client) => {
+    const punResult = await client.query(
+      `SELECT p.id, p.challenge_id, p.text, gdc.topic AS challenge_topic, gdc.focus AS challenge_focus
+       FROM puns p
+       LEFT JOIN global_daily_challenges gdc ON gdc.challenge_id = p.challenge_id
+       WHERE p.id = $1
+       FOR UPDATE`,
+      [punId],
+    );
+
+    if (!punResult.rows[0]) throw new Error("Pun not found");
+
+    const pun = punResult.rows[0];
+    const judge = await upsertAiJudgeDefinition(judgement, client);
+    const judgedAt = judgement?.judgedAt ?? new Date().toISOString();
+    const latestJudgement = await client.query(
+      `SELECT id FROM pun_judgements WHERE pun_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [punId],
+    );
+
+    await client.query(
+      `INSERT INTO pun_judgements (
+         pun_id,
+         judge_id,
+         status,
+         trigger_type,
+         score,
+         feedback,
+         reasoning,
+         pun_text_snapshot,
+         challenge_topic_snapshot,
+         challenge_focus_snapshot,
+         supersedes_judgement_id,
+         created_at,
+         error_message
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        punId,
+        judge.id,
+        judgement?.status ?? "completed",
+        options?.triggerType ?? "initial",
+        judgement?.score ?? null,
+        judgement?.feedback ?? null,
+        judgement?.reasoning ?? null,
+        pun.text,
+        pun.challenge_topic ?? null,
+        pun.challenge_focus ?? null,
+        latestJudgement.rows[0]?.id ?? null,
+        judgedAt,
+        judgement?.errorMessage ?? null,
+      ],
+    );
+
+    await client.query(
+      `UPDATE puns
+       SET ai_score = $1,
+           ai_feedback = $2,
+           ai_judge_id = $3,
+           ai_judge_key = $4,
+           ai_judge_name = $5,
+           ai_judge_version = $6,
+           ai_judged_at = $7
+       WHERE id = $8`,
+      [
+        judgement?.score ?? null,
+        judgement?.feedback ?? null,
+        judge.id,
+        judge.key,
+        judge.name,
+        judge.version,
+        judgedAt,
+        punId,
+      ],
+    );
+  });
 }
 
 async function deletePun(punId) {
@@ -547,9 +706,19 @@ function formatPun(row) {
     authorName: row.author_name,
     authorPhoto: row.author_photo,
     text: row.text,
-    aiScore: row.ai_score ? parseFloat(row.ai_score) : null,
+    aiScore:
+      row.ai_score === null || row.ai_score === undefined
+        ? null
+        : parseFloat(row.ai_score),
     aiFeedback: row.ai_feedback,
-    responseTimeMs: row.response_time_ms ? Number(row.response_time_ms) : null,
+    aiJudgeKey: row.ai_judge_key || null,
+    aiJudgeName: row.ai_judge_name || null,
+    aiJudgeVersion: row.ai_judge_version || null,
+    aiJudgedAt: row.ai_judged_at || null,
+    responseTimeMs:
+      row.response_time_ms === null || row.response_time_ms === undefined
+        ? null
+        : Number(row.response_time_ms),
     groanCount: Number(row.groan_count || 0),
     groaners: formatGroaners(row.groaners),
     myReaction: row.my_groan ? "groan" : null,
@@ -615,7 +784,7 @@ async function getWeeklyBestScores(groupId, weekStart, weekEnd) {
 // Global daily ranking
 async function getGlobalDailyRanking(challengeId, viewerId) {
   const result = await query(
-    `SELECT p.id, p.text, p.ai_score, p.created_at,
+    `SELECT p.id, p.text, p.ai_score, p.ai_judge_name, p.ai_judge_version, p.created_at,
        gdc.topic AS challenge_topic, gdc.focus AS challenge_focus,
        ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
        u.anonymous_in_leaderboards,
@@ -645,7 +814,7 @@ async function getGlobalDailyRanking(challengeId, viewerId) {
 // All-time top groaners
 async function getGlobalAllTimeGroaners(viewerId) {
   const result = await query(
-    `SELECT p.id, p.text, p.ai_score, p.challenge_id, p.created_at,
+    `SELECT p.id, p.text, p.ai_score, p.ai_judge_name, p.ai_judge_version, p.challenge_id, p.created_at,
        gdc.topic AS challenge_topic, gdc.focus AS challenge_focus,
        ${displayNameSql("u")} AS author_name, u.photo_url AS author_photo,
        u.anonymous_in_leaderboards,
@@ -678,6 +847,8 @@ function formatLeaderboardRow(row) {
     id: row.id,
     text: row.text,
     aiScore: parseFloat(row.ai_score),
+    aiJudgeName: row.ai_judge_name || null,
+    aiJudgeVersion: row.ai_judge_version || null,
     challengeId: row.challenge_id || null,
     challengeTopic: row.challenge_topic || null,
     challengeFocus: row.challenge_focus || null,
@@ -854,6 +1025,11 @@ async function submitGauntletRound(
     pun_text: punText,
     ai_score: null,
     ai_feedback: null,
+    ai_judge_id: null,
+    ai_judge_key: null,
+    ai_judge_name: null,
+    ai_judge_version: null,
+    ai_judged_at: null,
     seconds_remaining: secondsRemaining,
     round_score: null,
   };
@@ -871,23 +1047,85 @@ async function submitGauntletRound(
 async function updateGauntletRoundScore(
   runId,
   roundIndex,
-  aiScore,
-  aiFeedback,
+  judgement,
+  options = {},
 ) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `SELECT rounds FROM gauntlet_runs WHERE id = $1 FOR UPDATE`,
+      `SELECT gr.rounds, g.rounds AS prompts
+       FROM gauntlet_runs gr
+       JOIN gauntlets g ON g.id = gr.gauntlet_id
+       WHERE gr.id = $1
+       FOR UPDATE`,
       [runId],
     );
     if (!rows[0]) throw new Error("Run not found");
     const rounds = rows[0].rounds;
     const round = rounds[roundIndex];
-    const baseScore = aiScore * 100;
-    const timeBonus = aiScore >= 5 ? (round.seconds_remaining || 0) * 10 : 0;
+    const judge = await upsertAiJudgeDefinition(judgement, client);
+    const judgedAt = judgement?.judgedAt ?? new Date().toISOString();
+    const aiScore = judgement?.score ?? null;
+    const aiFeedback = judgement?.feedback ?? null;
+    const baseScore = (aiScore ?? 0) * 100;
+    const timeBonus =
+      (aiScore ?? 0) >= 5 ? (round.seconds_remaining || 0) * 10 : 0;
+    const latestJudgement = await client.query(
+      `SELECT id
+       FROM gauntlet_round_judgements
+       WHERE run_id = $1 AND round_index = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [runId, roundIndex],
+    );
+    const prompt = rows[0].prompts?.[roundIndex] ?? {};
+
+    await client.query(
+      `INSERT INTO gauntlet_round_judgements (
+         run_id,
+         round_index,
+         judge_id,
+         status,
+         trigger_type,
+         score,
+         feedback,
+         reasoning,
+         pun_text_snapshot,
+         challenge_topic_snapshot,
+         challenge_focus_snapshot,
+         seconds_remaining,
+         supersedes_judgement_id,
+         created_at,
+         error_message
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [
+        runId,
+        roundIndex,
+        judge.id,
+        judgement?.status ?? "completed",
+        options?.triggerType ?? "initial",
+        aiScore,
+        aiFeedback,
+        judgement?.reasoning ?? null,
+        round?.pun_text ?? null,
+        prompt.topic ?? null,
+        prompt.focus ?? null,
+        round?.seconds_remaining ?? null,
+        latestJudgement.rows[0]?.id ?? null,
+        judgedAt,
+        judgement?.errorMessage ?? null,
+      ],
+    );
+
     rounds[roundIndex] = {
       ...round,
       ai_score: aiScore,
       ai_feedback: aiFeedback,
+      ai_judge_id: judge.id,
+      ai_judge_key: judge.key,
+      ai_judge_name: judge.name,
+      ai_judge_version: judge.version,
+      ai_judged_at: judgedAt,
       round_score: baseScore + timeBonus,
     };
     const result = await client.query(
@@ -1268,6 +1506,62 @@ async function runMigrations() {
   await query(
     `ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`,
   );
+  await query(`
+    CREATE TABLE IF NOT EXISTS ai_judges (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      key VARCHAR(100) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      version VARCHAR(50) NOT NULL,
+      model VARCHAR(255),
+      system_prompt TEXT,
+      prompt_hash VARCHAR(64),
+      judge_config JSONB,
+      status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired', 'legacy')),
+      is_active BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      retired_at TIMESTAMP WITH TIME ZONE,
+      UNIQUE (key, version)
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_ai_judges_active ON ai_judges(is_active)`,
+  );
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS ai_judge_id UUID REFERENCES ai_judges(id) ON DELETE SET NULL`,
+  );
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS ai_judge_key VARCHAR(100)`,
+  );
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS ai_judge_name VARCHAR(255)`,
+  );
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS ai_judge_version VARCHAR(50)`,
+  );
+  await query(
+    `ALTER TABLE puns ADD COLUMN IF NOT EXISTS ai_judged_at TIMESTAMP WITH TIME ZONE`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS pun_judgements (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      pun_id UUID NOT NULL REFERENCES puns(id) ON DELETE CASCADE,
+      judge_id UUID REFERENCES ai_judges(id) ON DELETE SET NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed')),
+      trigger_type VARCHAR(32) NOT NULL DEFAULT 'initial',
+      score NUMERIC(3,1),
+      feedback TEXT,
+      reasoning TEXT,
+      pun_text_snapshot TEXT,
+      challenge_topic_snapshot VARCHAR(500),
+      challenge_focus_snapshot VARCHAR(500),
+      supersedes_judgement_id UUID REFERENCES pun_judgements(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      error_message TEXT
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_pun_judgements_pun ON pun_judgements(pun_id, created_at DESC)`,
+  );
   await query(
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_display_name VARCHAR(255)`,
   );
@@ -1330,6 +1624,29 @@ async function runMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_gauntlet_runs_player ON gauntlet_runs(player_id)`,
   );
   await query(`
+    CREATE TABLE IF NOT EXISTS gauntlet_round_judgements (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      run_id UUID NOT NULL REFERENCES gauntlet_runs(id) ON DELETE CASCADE,
+      round_index INTEGER NOT NULL CHECK (round_index >= 0 AND round_index <= 4),
+      judge_id UUID REFERENCES ai_judges(id) ON DELETE SET NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed')),
+      trigger_type VARCHAR(32) NOT NULL DEFAULT 'initial',
+      score NUMERIC(3,1),
+      feedback TEXT,
+      reasoning TEXT,
+      pun_text_snapshot TEXT,
+      challenge_topic_snapshot VARCHAR(500),
+      challenge_focus_snapshot VARCHAR(500),
+      seconds_remaining INTEGER,
+      supersedes_judgement_id UUID REFERENCES gauntlet_round_judgements(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      error_message TEXT
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_gauntlet_round_judgements_run ON gauntlet_round_judgements(run_id, round_index, created_at DESC)`,
+  );
+  await query(`
     CREATE TABLE IF NOT EXISTS gauntlet_comments (
       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
       gauntlet_id UUID NOT NULL REFERENCES gauntlets(id) ON DELETE CASCADE,
@@ -1349,6 +1666,78 @@ async function runMigrations() {
   await query(
     `ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN ('reaction', 'vote', 'system'))`,
   );
+  for (const judge of getBuiltInAiJudges()) {
+    await upsertAiJudgeDefinition(judge);
+  }
+
+  const activeJudge = await upsertAiJudgeDefinition(
+    getActivePunJudgeDefinition(),
+  );
+  const unknownJudge = await upsertAiJudgeDefinition(
+    getUnknownAiJudgeDefinition(),
+  );
+
+  await query(
+    `UPDATE ai_judges
+     SET is_active = CASE WHEN id = $1 THEN TRUE ELSE FALSE END,
+         retired_at = CASE
+           WHEN id = $1 THEN NULL
+           WHEN status = 'legacy' THEN retired_at
+           ELSE COALESCE(retired_at, NOW())
+         END`,
+    [activeJudge.id],
+  );
+
+  await query(
+    `UPDATE puns
+     SET ai_judge_id = $1,
+         ai_judge_key = $2,
+         ai_judge_name = $3,
+         ai_judge_version = $4,
+         ai_judged_at = COALESCE(ai_judged_at, updated_at, created_at)
+     WHERE ai_judge_id IS NULL
+       AND (ai_score IS NOT NULL OR (ai_feedback IS NOT NULL AND ai_feedback != 'Re-evaluating...'))`,
+    [
+      unknownJudge.id,
+      unknownJudge.key,
+      unknownJudge.name,
+      unknownJudge.version,
+    ],
+  );
+
+  const gauntletRunsToBackfill = await query(
+    `SELECT id, rounds, created_at, updated_at FROM gauntlet_runs WHERE jsonb_array_length(rounds) > 0`,
+  );
+
+  for (const row of gauntletRunsToBackfill.rows) {
+    let changed = false;
+    const nextRounds = (row.rounds || []).map((round) => {
+      if (!round || round.ai_judge_key) return round;
+      if (!hasRecordedJudgeResult(round.ai_score, round.ai_feedback)) {
+        return round;
+      }
+
+      changed = true;
+
+      return {
+        ...round,
+        ai_judge_id: unknownJudge.id,
+        ai_judge_key: unknownJudge.key,
+        ai_judge_name: unknownJudge.name,
+        ai_judge_version: unknownJudge.version,
+        ai_judged_at:
+          round.ai_judged_at || row.updated_at || row.created_at || null,
+      };
+    });
+
+    if (!changed) continue;
+
+    await query(`UPDATE gauntlet_runs SET rounds = $1::jsonb WHERE id = $2`, [
+      JSON.stringify(nextRounds),
+      row.id,
+    ]);
+  }
+
   await query(`
     CREATE TABLE IF NOT EXISTS global_daily_challenges (
       challenge_id VARCHAR(10) PRIMARY KEY,
@@ -1375,6 +1764,7 @@ async function runMigrations() {
   await alterToTz("group_members", "joined_at");
   await alterToTz("puns", "created_at");
   await alterToTz("puns", "updated_at");
+  await alterToTz("puns", "ai_judged_at");
   await alterToTz("pun_reactions", "created_at");
   await alterToTz("pun_reactions", "updated_at");
   await alterToTz("messages", "created_at");
@@ -1385,6 +1775,10 @@ async function runMigrations() {
   await alterToTz("gauntlet_runs", "updated_at");
   await alterToTz("challenge_reveals", "revealed_at");
   await alterToTz("challenge_reveals", "created_at");
+  await alterToTz("ai_judges", "created_at");
+  await alterToTz("ai_judges", "retired_at");
+  await alterToTz("pun_judgements", "created_at");
+  await alterToTz("gauntlet_round_judgements", "created_at");
 
   await query(`DELETE FROM pun_reactions WHERE reaction != 'groan'`);
   await query(`

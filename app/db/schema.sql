@@ -46,9 +46,57 @@ CREATE TABLE IF NOT EXISTS puns (
     text TEXT NOT NULL CHECK (char_length(text) BETWEEN 1 AND 500),
     ai_score NUMERIC(3,1),
     ai_feedback TEXT,
+    ai_judge_id UUID,
+    ai_judge_key VARCHAR(100),
+    ai_judge_name VARCHAR(255),
+    ai_judge_version VARCHAR(50),
+    ai_judged_at TIMESTAMP WITH TIME ZONE,
     response_time_ms INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_judges (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    key VARCHAR(100) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    version VARCHAR(50) NOT NULL,
+    model VARCHAR(255),
+    system_prompt TEXT,
+    prompt_hash VARCHAR(64),
+    judge_config JSONB,
+    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired', 'legacy')),
+    is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    retired_at TIMESTAMP WITH TIME ZONE,
+    UNIQUE (key, version)
+);
+
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'puns_ai_judge_id_fkey'
+    ) THEN
+        ALTER TABLE puns
+            ADD CONSTRAINT puns_ai_judge_id_fkey
+            FOREIGN KEY (ai_judge_id) REFERENCES ai_judges(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS pun_judgements (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    pun_id UUID NOT NULL REFERENCES puns(id) ON DELETE CASCADE,
+    judge_id UUID REFERENCES ai_judges(id) ON DELETE SET NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed')),
+    trigger_type VARCHAR(32) NOT NULL DEFAULT 'initial',
+    score NUMERIC(3,1),
+    feedback TEXT,
+    reasoning TEXT,
+    pun_text_snapshot TEXT,
+    challenge_topic_snapshot VARCHAR(500),
+    challenge_focus_snapshot VARCHAR(500),
+    supersedes_judgement_id UUID REFERENCES pun_judgements(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    error_message TEXT
 );
 
 -- Challenge reveals (server-backed per-user reveal state)
@@ -105,6 +153,8 @@ CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id);
 CREATE INDEX IF NOT EXISTS idx_puns_challenge ON puns(challenge_id);
 CREATE INDEX IF NOT EXISTS idx_puns_author ON puns(author_id);
 CREATE INDEX IF NOT EXISTS idx_puns_author_challenge ON puns(author_id, challenge_id);
+CREATE INDEX IF NOT EXISTS idx_ai_judges_active ON ai_judges(is_active);
+CREATE INDEX IF NOT EXISTS idx_pun_judgements_pun ON pun_judgements(pun_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_challenge_reveals_user ON challenge_reveals(user_id);
 CREATE INDEX IF NOT EXISTS idx_pun_reactions_pun ON pun_reactions(pun_id);
 CREATE INDEX IF NOT EXISTS idx_pun_reactions_user ON pun_reactions(user_id);

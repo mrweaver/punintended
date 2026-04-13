@@ -26,7 +26,12 @@ import {
   createComment,
   createNotification,
 } from "../db/database.js";
-import { getAESTDateId, isPlausibleLocalDate, getRevealElapsedMs } from "../lib/date.js";
+import {
+  getAESTDateId,
+  isPlausibleLocalDate,
+  getRevealElapsedMs,
+} from "../lib/date.js";
+import { getActivePunJudgeDefinition } from "../lib/aiJudges.js";
 import { getOrCreateGlobalChallenge, scorePunText } from "../services/ai.js";
 import { maybeRefillBuffer } from "../services/buffer.js";
 import {
@@ -40,6 +45,25 @@ import {
 } from "../services/sse.js";
 
 const router = Router();
+
+function buildRouteFallbackJudgement(feedback, reasoning) {
+  const judge = getActivePunJudgeDefinition();
+
+  return {
+    score: 0,
+    feedback,
+    reasoning,
+    judgeKey: judge.key,
+    judgeName: judge.name,
+    judgeVersion: judge.version,
+    judgeModel: judge.model,
+    judgePromptHash: judge.promptHash,
+    judgeStatus: judge.status,
+    isActive: judge.isActive,
+    status: "completed",
+    errorMessage: reasoning,
+  };
+}
 
 // SSE stream
 router.get("/api/daily/stream", ensureAuthenticated, (req, res) => {
@@ -181,11 +205,13 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
     }
 
     // Hard cap: 3 submissions per player per day (global)
-    const myCount = await countPunsByAuthorForChallenge(targetChallengeId, req.user.id);
+    const myCount = await countPunsByAuthorForChallenge(
+      targetChallengeId,
+      req.user.id,
+    );
     if (myCount >= 3) {
       return res.status(429).json({
-        error:
-          "You've used all 3 of your submissions for this challenge.",
+        error: "You've used all 3 of your submissions for this challenge.",
       });
     }
 
@@ -201,15 +227,18 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
     scorePunText(challenge.topic, challenge.focus, text.trim())
       .then(async (result) => {
         console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`);
-        await updatePunScore(pun.id, result.score, result.feedback);
+        await updatePunScore(pun.id, result, { triggerType: "initial" });
         broadcastPunsUpdate(targetChallengeId);
       })
       .catch(async (err) => {
         console.error("AI scoring failed:", err);
         await updatePunScore(
           pun.id,
-          0,
-          "The judge fell asleep at the bar. Please edit and resubmit!",
+          buildRouteFallbackJudgement(
+            "The judge fell asleep at the bar. Please edit and resubmit!",
+            "Route-level scoring failure during initial pun submission.",
+          ),
+          { triggerType: "initial" },
         );
         broadcastPunsUpdate(targetChallengeId);
       });
@@ -240,10 +269,23 @@ router.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
     if (challenge) {
       scorePunText(challenge.topic, challenge.focus, text.trim())
         .then(async (result) => {
-          await updatePunScore(req.params.id, result.score, result.feedback);
+          await updatePunScore(req.params.id, result, {
+            triggerType: "edit_rescore",
+          });
           broadcastPunsUpdate(pun.challenge_id);
         })
-        .catch((err) => console.error("AI re-scoring failed:", err));
+        .catch(async (err) => {
+          console.error("AI re-scoring failed:", err);
+          await updatePunScore(
+            req.params.id,
+            buildRouteFallbackJudgement(
+              "The judge nodded off mid-revision. Try editing again shortly.",
+              "Route-level scoring failure during pun re-score.",
+            ),
+            { triggerType: "edit_rescore" },
+          );
+          broadcastPunsUpdate(pun.challenge_id);
+        });
     }
 
     res.json({ success: true });
@@ -325,26 +367,22 @@ router.get("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
   }
 });
 
-router.post(
-  "/api/puns/:id/comments",
-  ensureAuthenticated,
-  async (req, res) => {
-    const { text } = req.body;
-    if (!text || !text.trim())
-      return res.status(400).json({ error: "Comment text required" });
-    if (text.length > 500)
-      return res.status(400).json({ error: "Comment too long" });
+router.post("/api/puns/:id/comments", ensureAuthenticated, async (req, res) => {
+  const { text } = req.body;
+  if (!text || !text.trim())
+    return res.status(400).json({ error: "Comment text required" });
+  if (text.length > 500)
+    return res.status(400).json({ error: "Comment too long" });
 
-    try {
-      await createComment(req.params.id, req.user.id, text.trim());
-      const pun = await getPunById(req.params.id);
-      if (pun) broadcastCommentsUpdate(pun.challenge_id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Failed to add comment:", error);
-      res.status(500).json({ error: "Failed to add comment" });
-    }
-  },
-);
+  try {
+    await createComment(req.params.id, req.user.id, text.trim());
+    const pun = await getPunById(req.params.id);
+    if (pun) broadcastCommentsUpdate(pun.challenge_id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to add comment:", error);
+    res.status(500).json({ error: "Failed to add comment" });
+  }
+});
 
 export default router;

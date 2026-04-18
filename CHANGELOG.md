@@ -4,6 +4,13 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.25.0] - 2026-04-18
+
+### Added
+
+- **Backwords Backend Game Flow:** Added the Backwords server-side game model, AI clue scoring and semantic guess judging, SSE delivery, and dedicated routes for creator and guesser flows.
+- **Backwords Frontend Mode and Navigation:** Added the Backwords mode UI, history and comparison views, frontend API contracts, state hook, deep-link handling, and top-level app/header navigation.
+
 ## [1.24.0] - 2026-04-14
 
 ### Added

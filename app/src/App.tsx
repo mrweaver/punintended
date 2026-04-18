@@ -8,6 +8,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Header } from "./components/Header";
 import { SessionLobby } from "./components/SessionLobby";
 import { GameBoard } from "./components/GameBoard";
+import { BackwordsMode } from "./components/BackwordsMode";
 import { GauntletMode } from "./components/GauntletMode";
 import { GlobalLeaderboard } from "./components/GlobalLeaderboard";
 import { MySubmissionsView } from "./components/MySubmissionsView";
@@ -113,6 +114,8 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+  const [backwordsMode, setBackwordsMode] = useState(false);
+  const [sharedBackwordsId, setSharedBackwordsId] = useState<string | null>(null);
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -134,15 +137,24 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(window.location.search);
+    const backwordsId = params.get("backwords");
     const gauntletId = params.get("gauntlet");
-    if (gauntletId) {
+    if (backwordsId) {
+      setSharedBackwordsId(backwordsId);
+      setBackwordsMode(true);
+      setGauntletMode(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (gauntletId) {
       setSharedGauntletId(gauntletId);
       setGauntletMode(true);
+      setBackwordsMode(false);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [user]);
 
   const closeOverlayScreens = () => {
+    setBackwordsMode(false);
+    setSharedBackwordsId(null);
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowLeaderboard(false);
@@ -150,19 +162,33 @@ export default function App() {
   };
 
   const handleOpenLeaderboard = () => {
+    setBackwordsMode(false);
+    setSharedBackwordsId(null);
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowSubmissions(false);
     setShowLeaderboard(true);
   };
 
+  const handleOpenBackwords = () => {
+    setShowLeaderboard(false);
+    setShowSubmissions(false);
+    setGauntletMode(false);
+    setSharedGauntletId(null);
+    setBackwordsMode(true);
+  };
+
   const handleOpenGauntlet = () => {
+    setBackwordsMode(false);
+    setSharedBackwordsId(null);
     setShowLeaderboard(false);
     setShowSubmissions(false);
     setGauntletMode(true);
   };
 
   const handleOpenSubmissions = () => {
+    setBackwordsMode(false);
+    setSharedBackwordsId(null);
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowLeaderboard(false);
@@ -226,9 +252,14 @@ export default function App() {
           onOpenAbout={() => setShowAbout(true)}
           onOpenChangelog={() => setShowChangelog(true)}
           onOpenLeaderboard={handleOpenLeaderboard}
+          onOpenBackwords={handleOpenBackwords}
           onOpenGauntlet={handleOpenGauntlet}
           onLogoClick={
-            gauntletMode || showLeaderboard || showSubmissions || !!currentGroup
+            backwordsMode ||
+            gauntletMode ||
+            showLeaderboard ||
+            showSubmissions ||
+            !!currentGroup
               ? handleLogoClick
               : undefined
           }
@@ -242,7 +273,16 @@ export default function App() {
 
         <main className="max-w-6xl mx-auto p-4 sm:p-6">
           <AnimatePresence mode="wait">
-            {gauntletMode ? (
+            {backwordsMode ? (
+              <BackwordsMode
+                key="backwords"
+                initialBackwordsId={sharedBackwordsId ?? undefined}
+                onExit={() => {
+                  setBackwordsMode(false);
+                  setSharedBackwordsId(null);
+                }}
+              />
+            ) : gauntletMode ? (
               <GauntletMode
                 key="gauntlet"
                 initialGauntletId={sharedGauntletId ?? undefined}

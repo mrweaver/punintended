@@ -320,6 +320,146 @@ export const gauntletApi = {
     ),
 };
 
+export interface BackwordsClue {
+  pun_text: string;
+  ai_score: number | null;
+  ai_feedback: string | null;
+  ai_judge_key: string | null;
+  ai_judge_name: string | null;
+  ai_judge_version: string | null;
+  ai_judge_model: string | null;
+  ai_judged_at: string | null;
+  clue_score: number | null;
+}
+
+export interface BackwordsAttempt {
+  guess_a: string;
+  guess_b: string;
+  matched: boolean | null;
+  overall_similarity: number | null;
+  topic_similarity: number | null;
+  focus_similarity: number | null;
+  mapped_topic_guess: "guessA" | "guessB" | null;
+  mapped_focus_guess: "guessA" | "guessB" | null;
+  topic_guess_text: string | null;
+  focus_guess_text: string | null;
+  feedback: string | null;
+  ai_judge_key: string | null;
+  ai_judge_name: string | null;
+  ai_judge_version: string | null;
+  ai_judge_model: string | null;
+  ai_judged_at: string | null;
+  submitted_at: string;
+}
+
+export interface BackwordsGame {
+  id: string;
+  creatorId: number;
+  creatorName: string | null;
+  creatorPhoto: string;
+  topic: string | null;
+  focus: string | null;
+  clues: BackwordsClue[];
+  creatorScore: number | null;
+  status: "draft" | "published";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackwordsRun {
+  id: string;
+  gameId: string;
+  guesserId: number;
+  guesserName: string | null;
+  guesserPhoto: string;
+  attempts: BackwordsAttempt[];
+  status: "in_progress" | "judging" | "solved" | "failed";
+  attemptsUsed: number;
+  bestSimilarity: number | null;
+  matchedOnAttempt: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BackwordsStartResponse =
+  | {
+      role: "creator";
+      game: BackwordsGame;
+      run: null;
+    }
+  | {
+      role: "guesser";
+      game: BackwordsGame;
+      run: BackwordsRun;
+    };
+
+export interface BackwordsAuthoredHistoryEntry {
+  gameId: string;
+  topic: string;
+  focus: string;
+  clues: BackwordsClue[];
+  creatorScore: number | null;
+  createdAt: string;
+  totalGuessers: number;
+  solvedCount: number;
+}
+
+export interface BackwordsGuessedHistoryEntry {
+  gameId: string;
+  runId: string;
+  clues: BackwordsClue[];
+  topic: string;
+  focus: string;
+  creatorScore: number | null;
+  creatorName: string;
+  creatorPhoto: string;
+  status: "solved" | "failed";
+  attemptsUsed: number;
+  bestSimilarity: number | null;
+  matchedOnAttempt: number | null;
+  createdAt: string;
+}
+
+export interface BackwordsHistory {
+  authored: BackwordsAuthoredHistoryEntry[];
+  guessed: BackwordsGuessedHistoryEntry[];
+}
+
+export interface BackwordsComparisonRun extends BackwordsRun {}
+
+export interface BackwordsComparison {
+  game: BackwordsGame;
+  runs: BackwordsComparisonRun[];
+  totalGuessers: number;
+  solvedCount: number;
+  viewerRole: "creator" | "guesser";
+}
+
+export const backwordsApi = {
+  generate: () =>
+    request<BackwordsStartResponse>("/api/backwords/generate", {
+      method: "POST",
+    }),
+  start: (gameId: string) =>
+    request<BackwordsStartResponse>(`/api/backwords/${gameId}`),
+  publish: (gameId: string, clues: string[]) =>
+    request<BackwordsStartResponse>(`/api/backwords/${gameId}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ clues }),
+    }),
+  submitGuess: (gameId: string, runId: string, guessA: string, guessB: string) =>
+    request<{ success: boolean; run: BackwordsRun }>(
+      `/api/backwords/${gameId}/guess`,
+      {
+        method: "POST",
+        body: JSON.stringify({ runId, guessA, guessB }),
+      },
+    ),
+  history: () => request<BackwordsHistory>("/api/backwords/history"),
+  comparison: (gameId: string) =>
+    request<BackwordsComparison>(`/api/backwords/${gameId}/comparison`),
+};
+
 // Types used by the API client
 export interface AuthUser {
   uid: number;

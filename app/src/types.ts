@@ -9,4 +9,8 @@ export type {
   PunComment,
   AppNotification,
   DailyChallenge,
+  BackwordsGame,
+  BackwordsRun,
+  BackwordsHistory,
+  BackwordsComparison,
 } from "./api/client";

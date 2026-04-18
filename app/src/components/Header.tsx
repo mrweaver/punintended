@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bell,
+  Brain,
   Calendar,
   ChevronDown,
   FileText,
@@ -79,6 +80,7 @@ interface HeaderProps {
   onOpenAbout: () => void;
   onOpenChangelog: () => void;
   onOpenLeaderboard: () => void;
+  onOpenBackwords: () => void;
   onOpenGauntlet: () => void;
   onNotificationClick: (link: string | null) => void;
   onLogoClick?: () => void;
@@ -90,6 +92,7 @@ export function Header({
   onOpenAbout,
   onOpenChangelog,
   onOpenLeaderboard,
+  onOpenBackwords,
   onOpenGauntlet,
   onNotificationClick,
   onLogoClick,
@@ -186,6 +189,13 @@ export function Header({
           aria-label="Leaderboards"
         >
           <Trophy className="w-5 h-5" />
+        </button>
+        <button
+          onClick={handleHeaderAction(onOpenBackwords)}
+          className="p-2 rounded-full hover:bg-surface-muted text-text-secondary transition-colors"
+          aria-label="Backwords"
+        >
+          <Brain className="w-5 h-5" />
         </button>
         <button
           onClick={handleHeaderAction(onOpenGauntlet)}

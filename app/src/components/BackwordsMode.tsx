@@ -354,10 +354,12 @@ export function BackwordsMode({
   const [localError, setLocalError] = useState<string | null>(null);
   const clueRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const guessARef = useRef<HTMLInputElement>(null);
+  const shouldAutoFocusClueRef = useRef(false);
 
   useEffect(() => {
     if (role === "creator" && phase === "crafting") {
       const nextClues = game?.clues?.map((clue) => clue.pun_text) ?? [];
+      shouldAutoFocusClueRef.current = true;
       setClues([nextClues[0] ?? "", nextClues[1] ?? "", nextClues[2] ?? ""]);
       setLocalError(null);
     }
@@ -372,11 +374,13 @@ export function BackwordsMode({
   }, [phase, role, run?.attemptsUsed]);
 
   useEffect(() => {
-    if (phase === "crafting") {
-      const firstEmptyIndex = clues.findIndex((clue) => !clue.trim());
-      const targetIndex = firstEmptyIndex === -1 ? 0 : firstEmptyIndex;
-      clueRefs.current[targetIndex]?.focus();
-    }
+    if (phase !== "crafting" || !shouldAutoFocusClueRef.current) return;
+
+    const firstEmptyIndex = clues.findIndex((clue) => !clue.trim());
+    const targetIndex = firstEmptyIndex === -1 ? 0 : firstEmptyIndex;
+
+    clueRefs.current[targetIndex]?.focus();
+    shouldAutoFocusClueRef.current = false;
   }, [clues, phase]);
 
   useEffect(() => {

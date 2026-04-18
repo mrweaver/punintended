@@ -4,6 +4,12 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.26.0] - 2026-04-18
+
+### Changed
+
+- **Top App Bar Navigation:** Reworked the header into grouped app-bar controls with labeled mobile mode buttons, compact hover and focus hints for icon-only actions, clearer notification and theme affordances, and a reversal-oriented Backwords icon.
+
 ## [1.25.0] - 2026-04-18
 
 ### Added

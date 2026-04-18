@@ -33,7 +33,10 @@ interface BackwordsModeProps {
 }
 
 function normalizePhrase(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function escapeRegExp(value: string) {
@@ -285,13 +288,17 @@ function GuesserReceipt({
             <p className="text-3xl font-mono font-bold text-zinc-900 dark:text-zinc-100">
               {run.bestSimilarity ?? 0}%
             </p>
-            <p className="text-xs text-gray-400 dark:text-zinc-500">best similarity</p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">
+              best similarity
+            </p>
           </div>
           <div>
             <p className="text-3xl font-mono font-bold text-zinc-900 dark:text-zinc-100">
               {run.attemptsUsed}
             </p>
-            <p className="text-xs text-gray-400 dark:text-zinc-500">attempts used</p>
+            <p className="text-xs text-gray-400 dark:text-zinc-500">
+              attempts used
+            </p>
           </div>
         </div>
       </Card>
@@ -351,11 +358,7 @@ export function BackwordsMode({
   useEffect(() => {
     if (role === "creator" && phase === "crafting") {
       const nextClues = game?.clues?.map((clue) => clue.pun_text) ?? [];
-      setClues([
-        nextClues[0] ?? "",
-        nextClues[1] ?? "",
-        nextClues[2] ?? "",
-      ]);
+      setClues([nextClues[0] ?? "", nextClues[1] ?? "", nextClues[2] ?? ""]);
       setLocalError(null);
     }
   }, [game?.id, game?.clues, phase, role]);
@@ -418,7 +421,9 @@ export function BackwordsMode({
     for (const clue of cleanedClues) {
       const leak = findTargetLeak(clue, [game.topic, game.focus]);
       if (leak) {
-        setLocalError(`Clues cannot include the hidden answer terms. Remove '${leak}'.`);
+        setLocalError(
+          `Clues cannot include the hidden answer terms. Remove '${leak}'.`,
+        );
         return;
       }
     }
@@ -530,7 +535,8 @@ export function BackwordsMode({
                   Backwords
                 </h2>
                 <p className="mx-auto max-w-md text-gray-500 dark:text-zinc-400">
-                  Craft three clue puns from a hidden Topic and Focus, then let other players reverse-engineer the pair in three guesses.
+                  Craft three clue puns from a hidden Topic and Focus, then let
+                  other players reverse-engineer the pair in three guesses.
                 </p>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
@@ -601,7 +607,8 @@ export function BackwordsMode({
                   Craft Three Clues
                 </p>
                 <p className="text-sm text-gray-500 dark:text-zinc-400">
-                  Each clue must bridge both concepts without explicitly saying the hidden answer words.
+                  Each clue must bridge both concepts without explicitly saying
+                  the hidden answer words.
                 </p>
               </div>
 
@@ -660,7 +667,11 @@ export function BackwordsMode({
             <Card className="space-y-6 py-12 text-center">
               <motion.div
                 animate={{ scale: [1, 1.08, 1] }}
-                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 1.8,
+                  ease: "easeInOut",
+                }}
                 className="inline-flex rounded-2xl bg-orange-100 p-4 dark:bg-violet-900/30"
               >
                 <Sparkles className="h-10 w-10 text-orange-600 dark:text-violet-400" />
@@ -670,7 +681,8 @@ export function BackwordsMode({
                   Scoring your clue set...
                 </h2>
                 <p className="mt-2 text-sm text-gray-500 dark:text-zinc-400">
-                  Share the puzzle now if you like. The AI is grading how well your clues bridge the hidden pair.
+                  Share the puzzle now if you like. The AI is grading how well
+                  your clues bridge the hidden pair.
                 </p>
               </div>
               <div className="flex flex-col justify-center gap-3 sm:flex-row">
@@ -720,7 +732,8 @@ export function BackwordsMode({
                   </h2>
                 </div>
                 <div className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                  {attemptsRemaining} guess{attemptsRemaining === 1 ? "" : "es"} left
+                  {attemptsRemaining} guess{attemptsRemaining === 1 ? "" : "es"}{" "}
+                  left
                 </div>
               </div>
 
@@ -770,7 +783,8 @@ export function BackwordsMode({
                   Submit Two Concepts
                 </p>
                 <p className="text-sm text-gray-500 dark:text-zinc-400">
-                  Order does not matter. The AI will map your two concepts to Topic and Focus automatically.
+                  Order does not matter. The AI will map your two concepts to
+                  Topic and Focus automatically.
                 </p>
               </div>
 
@@ -823,7 +837,11 @@ export function BackwordsMode({
             <Card className="space-y-6 py-16 text-center">
               <motion.div
                 animate={{ scale: [1, 1.08, 1] }}
-                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 1.8,
+                  ease: "easeInOut",
+                }}
                 className="inline-flex rounded-2xl bg-orange-100 p-4 dark:bg-violet-900/30"
               >
                 <Search className="h-10 w-10 text-orange-600 dark:text-violet-400" />
@@ -833,7 +851,8 @@ export function BackwordsMode({
                   Comparing your guess...
                 </h2>
                 <p className="mt-2 text-sm text-gray-500 dark:text-zinc-400">
-                  The AI is testing both concept mappings against the hidden pair.
+                  The AI is testing both concept mappings against the hidden
+                  pair.
                 </p>
               </div>
               {lastAttempt && (

@@ -200,7 +200,9 @@ router.post(
     }
 
     if (clues.some((clue) => clue.length > 500)) {
-      return res.status(400).json({ error: "Clues must be 500 characters or fewer." });
+      return res
+        .status(400)
+        .json({ error: "Clues must be 500 characters or fewer." });
     }
 
     const normalizedClues = clues.map(normalizePhrase);
@@ -342,7 +344,9 @@ router.post(
       }
 
       if (run.status === "judging") {
-        return res.status(409).json({ error: "This guess is still being judged." });
+        return res
+          .status(409)
+          .json({ error: "This guess is still being judged." });
       }
 
       if (run.status === "solved" || run.status === "failed") {

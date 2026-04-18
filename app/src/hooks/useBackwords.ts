@@ -120,7 +120,11 @@ export function useBackwords(initialGameId?: string) {
   }, [state.game?.id, state.phase]);
 
   useEffect(() => {
-    if (state.role !== "creator" || state.phase !== "publishing" || !state.game) {
+    if (
+      state.role !== "creator" ||
+      state.phase !== "publishing" ||
+      !state.game
+    ) {
       return;
     }
 

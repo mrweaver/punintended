@@ -447,7 +447,12 @@ export const backwordsApi = {
       method: "POST",
       body: JSON.stringify({ clues }),
     }),
-  submitGuess: (gameId: string, runId: string, guessA: string, guessB: string) =>
+  submitGuess: (
+    gameId: string,
+    runId: string,
+    guessA: string,
+    guessB: string,
+  ) =>
     request<{ success: boolean; run: BackwordsRun }>(
       `/api/backwords/${gameId}/guess`,
       {

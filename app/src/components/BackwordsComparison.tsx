@@ -115,7 +115,10 @@ export function BackwordsComparison({
       .finally(() => setLoading(false));
 
     const onFocus = () => {
-      backwordsApi.comparison(gameId).then(setData).catch(() => {});
+      backwordsApi
+        .comparison(gameId)
+        .then(setData)
+        .catch(() => {});
     };
 
     window.addEventListener("focus", onFocus);
@@ -123,7 +126,11 @@ export function BackwordsComparison({
   }, [gameId]);
 
   if (loading) {
-    return <Card className="py-16 text-center text-gray-400 dark:text-zinc-500">Loading results...</Card>;
+    return (
+      <Card className="py-16 text-center text-gray-400 dark:text-zinc-500">
+        Loading results...
+      </Card>
+    );
   }
 
   if (error || !data) {
@@ -203,7 +210,8 @@ export function BackwordsComparison({
                   “{clue.pun_text}”
                 </p>
                 <p className="mt-3 text-sm font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                  {clue.ai_score ?? 0}/10 · {(clue.clue_score ?? 0).toLocaleString()} pts
+                  {clue.ai_score ?? 0}/10 ·{" "}
+                  {(clue.clue_score ?? 0).toLocaleString()} pts
                 </p>
                 {clue.ai_feedback && (
                   <p className="mt-2 flex items-start gap-1.5 text-sm italic text-gray-500 dark:text-zinc-400">
@@ -232,7 +240,9 @@ export function BackwordsComparison({
               </h3>
             </div>
             <div className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-              {data.viewerRole === "creator" ? "Creator view" : "Resolved guesser view"}
+              {data.viewerRole === "creator"
+                ? "Creator view"
+                : "Resolved guesser view"}
             </div>
           </div>
 
@@ -261,7 +271,9 @@ export function BackwordsComparison({
                             {title}
                           </p>
                           <p className="text-xs text-gray-400 dark:text-zinc-500">
-                            {run.attemptsUsed} attempt{run.attemptsUsed === 1 ? "" : "s"} · best {run.bestSimilarity ?? 0}%
+                            {run.attemptsUsed} attempt
+                            {run.attemptsUsed === 1 ? "" : "s"} · best{" "}
+                            {run.bestSimilarity ?? 0}%
                           </p>
                         </div>
                       </div>
@@ -277,7 +289,9 @@ export function BackwordsComparison({
                           <>
                             <XCircle className="h-4 w-4 text-orange-500" />
                             <span className="text-orange-600 dark:text-orange-400">
-                              {run.status === "failed" ? "Failed" : "In progress"}
+                              {run.status === "failed"
+                                ? "Failed"
+                                : "In progress"}
                             </span>
                           </>
                         )}
@@ -310,7 +324,10 @@ export function BackwordsComparison({
           <BookOpenText className="h-4 w-4 shrink-0 text-orange-500 dark:text-violet-400" />
           <span>Creator clue quality is AI-scored.</span>
           <Target className="h-4 w-4 shrink-0 text-orange-500 dark:text-violet-400" />
-          <span>Guesser ranking is determined by solve state, attempts used, and semantic proximity.</span>
+          <span>
+            Guesser ranking is determined by solve state, attempts used, and
+            semantic proximity.
+          </span>
         </Card>
       </motion.div>
 

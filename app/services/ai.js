@@ -108,9 +108,7 @@ function normalizeConceptText(value) {
 }
 
 function tokenizeConcept(value) {
-  return normalizeConceptText(value)
-    .split(" ")
-    .filter(Boolean);
+  return normalizeConceptText(value).split(" ").filter(Boolean);
 }
 
 function clampPercentage(value) {
@@ -172,8 +170,7 @@ export function buildBackwordsGuessFallback(
     return rightTotal - leftTotal;
   })[0];
 
-  const matched =
-    best.topicSimilarity === 100 && best.focusSimilarity === 100;
+  const matched = best.topicSimilarity === 100 && best.focusSimilarity === 100;
   const overallSimilarity = Math.round(
     (best.topicSimilarity + best.focusSimilarity) / 2,
   );

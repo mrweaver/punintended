@@ -115,7 +115,9 @@ export default function App() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
   const [backwordsMode, setBackwordsMode] = useState(false);
-  const [sharedBackwordsId, setSharedBackwordsId] = useState<string | null>(null);
+  const [sharedBackwordsId, setSharedBackwordsId] = useState<string | null>(
+    null,
+  );
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);

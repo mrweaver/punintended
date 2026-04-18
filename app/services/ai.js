@@ -348,7 +348,14 @@ export async function scorePunText(topic, focus, punText) {
   }
 }
 
-export async function generateGauntletPrompts() {
+export async function generateGauntletPrompts(pastChallenges = []) {
+  const avoidClause =
+    pastChallenges.length > 0
+      ? `\n\n    AVOID repeating these past combinations:\n${pastChallenges
+          .slice(0, 25)
+          .map((c) => `    - Topic: "${c.topic}", Focus: "${c.focus}"`)
+          .join("\n")}`
+      : "";
   const response = await ai.models.generateContent({
     model: DEFAULT_MODEL,
     contents: `Generate 5 completely unique 'Topic' and 'Focus' pairs for a rapid-fire pun-making game.
@@ -360,7 +367,7 @@ export async function generateGauntletPrompts() {
     4. Topics: broad categories (e.g., "Human Body", "Medieval History", "Power Tools").
     5. Focuses: specific, unrelated objects or situations (e.g., "A Parking Ticket", "Sourdough Bread").
 
-    Use Australian English spelling throughout. Return as JSON with a 'rounds' array of exactly 5 objects.`,
+    Use Australian English spelling throughout. Return as JSON with a 'rounds' array of exactly 5 objects.${avoidClause}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -385,7 +392,14 @@ export async function generateGauntletPrompts() {
   return JSON.parse(response.text);
 }
 
-export async function generateBackwordsAssignment() {
+export async function generateBackwordsAssignment(pastChallenges = []) {
+  const avoidClause =
+    pastChallenges.length > 0
+      ? `\n\n    AVOID repeating these past combinations:\n${pastChallenges
+          .slice(0, 20)
+          .map((c) => `    - Topic: "${c.topic}", Focus: "${c.focus}"`)
+          .join("\n")}`
+      : "";
   const response = await ai.models.generateContent({
     model: DEFAULT_MODEL,
     contents: `Generate one hidden Topic and one hidden Focus for a reverse-engineering pun game called Backwords.
@@ -397,7 +411,7 @@ export async function generateBackwordsAssignment() {
     4. The pair should be fertile enough that a clever player could write three clue-puns that bridge both concepts.
     5. Use Australian English spelling.
 
-    Return as JSON with keys 'topic' and 'focus'.`,
+    Return as JSON with keys 'topic' and 'focus'.${avoidClause}`,
     config: {
       temperature: 0.85,
       topK: 48,

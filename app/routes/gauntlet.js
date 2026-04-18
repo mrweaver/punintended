@@ -19,6 +19,7 @@ import {
   setGauntletRunScoring,
   getGauntletComparison,
   getUserGauntletHistory,
+  getRecentGauntletTopics,
   addGauntletComment,
   getGauntletComments,
   getGauntletMessages,
@@ -73,7 +74,8 @@ async function maybeFinalize(runId) {
 
 router.post("/api/gauntlet/generate", ensureAuthenticated, async (req, res) => {
   try {
-    const { rounds } = await generateGauntletPrompts();
+    const past = await getRecentGauntletTopics();
+    const { rounds } = await generateGauntletPrompts(past);
     const gauntlet = await createGauntlet(req.user.id, rounds);
     const run = await createGauntletRun(gauntlet.id, req.user.id);
     res.json({

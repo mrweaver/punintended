@@ -132,7 +132,7 @@ export function BackwordsComparison({
 
   const viewerRun =
     data?.viewerRole === "guesser" && user
-      ? data.runs.find((run) => run.guesserId === user.uid) ?? null
+      ? (data.runs.find((run) => run.guesserId === user.uid) ?? null)
       : null;
   const activeHighlightRunId = highlightRunId ?? viewerRun?.id ?? null;
 

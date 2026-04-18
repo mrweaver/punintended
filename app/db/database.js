@@ -369,6 +369,22 @@ async function getPastGlobalChallengeTopics() {
   return result.rows;
 }
 
+async function getRecentBackwordsTopics(limit = 20) {
+  const result = await query(
+    `SELECT topic, focus FROM backwords_games ORDER BY created_at DESC LIMIT $1`,
+    [limit],
+  );
+  return result.rows;
+}
+
+async function getRecentGauntletTopics(limit = 5) {
+  const result = await query(
+    `SELECT rounds FROM gauntlets ORDER BY created_at DESC LIMIT $1`,
+    [limit],
+  );
+  return result.rows.flatMap((r) => r.rounds ?? []);
+}
+
 // --- Buffer queue queries ---
 
 async function getPendingChallengeCount() {
@@ -2463,6 +2479,8 @@ export {
   getGlobalChallengeForDate,
   saveGlobalChallenge,
   getPastGlobalChallengeTopics,
+  getRecentBackwordsTopics,
+  getRecentGauntletTopics,
   getPendingChallengeCount,
   popOldestPendingChallenge,
   insertPendingChallenge,

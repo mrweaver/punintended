@@ -23,9 +23,7 @@ export function ShareModal({
   const [sharing, setSharing] = useState(false);
   const canNativeShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
-  const sharePayload = shareMessage
-    ? `${shareMessage}\n${shareUrl}`
-    : shareUrl;
+  const sharePayload = shareMessage ? `${shareMessage}\n${shareUrl}` : shareUrl;
   const copyLabel = shareMessage ? "Copy Share" : "Copy";
 
   useEffect(() => {

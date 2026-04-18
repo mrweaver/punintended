@@ -394,10 +394,13 @@ export function Header({
                                 {notif.message}
                               </p>
                               <p className="mt-1 text-xs text-text-muted">
-                                {new Date(notif.createdAt).toLocaleString(undefined, {
-                                  dateStyle: "short",
-                                  timeStyle: "short",
-                                })}
+                                {new Date(notif.createdAt).toLocaleString(
+                                  undefined,
+                                  {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  },
+                                )}
                               </p>
                             </motion.div>
                           ))
@@ -450,9 +453,7 @@ export function Header({
                   <span className="block text-sm font-medium text-text">
                     {user.displayName}
                   </span>
-                  <span className="block text-xs text-text-muted">
-                    Account
-                  </span>
+                  <span className="block text-xs text-text-muted">Account</span>
                 </span>
                 <ChevronDown className="hidden h-4 w-4 text-text-muted sm:block" />
               </button>
@@ -487,7 +488,9 @@ export function Header({
                       <HeaderMenuItem
                         icon={Bell}
                         label="Notifications"
-                        meta={unreadCount > 0 ? `${unreadCount} new` : undefined}
+                        meta={
+                          unreadCount > 0 ? `${unreadCount} new` : undefined
+                        }
                         sublabel={
                           latestNotification
                             ? latestNotification.message

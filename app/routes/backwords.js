@@ -12,6 +12,7 @@ import {
   updateBackwordsGuessResult,
   getBackwordsHistory,
   getBackwordsComparison,
+  getRecentBackwordsTopics,
 } from "../db/database.js";
 import {
   getActiveBackwordsJudgeDefinition,
@@ -141,7 +142,8 @@ router.post(
   ensureAuthenticated,
   async (req, res) => {
     try {
-      const { topic, focus } = await generateBackwordsAssignment();
+      const past = await getRecentBackwordsTopics();
+      const { topic, focus } = await generateBackwordsAssignment(past);
       const game = await createBackwordsGame(req.user.id, topic, focus);
       res.json(toCreatorResponse(game));
     } catch (err) {

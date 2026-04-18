@@ -118,6 +118,11 @@ export default function App() {
   const [sharedBackwordsId, setSharedBackwordsId] = useState<string | null>(
     null,
   );
+  const [sharedBackwordsComparisonId, setSharedBackwordsComparisonId] =
+    useState<string | null>(null);
+  const [sharedBackwordsRunId, setSharedBackwordsRunId] = useState<
+    string | null
+  >(null);
   const [gauntletMode, setGauntletMode] = useState(false);
   const [sharedGauntletId, setSharedGauntletId] = useState<string | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -135,21 +140,44 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [loginNotice]);
 
-  // Auto-enter gauntlet from a shared ?gauntlet= URL (mirrors ?session= handling)
+  // Auto-enter shared Backwords and gauntlet links from URL params.
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(window.location.search);
     const backwordsId = params.get("backwords");
+    const backwordsComparisonId = params.get("backwordsComparison");
+    const backwordsRunId = params.get("backwordsRun");
     const gauntletId = params.get("gauntlet");
-    if (backwordsId) {
-      setSharedBackwordsId(backwordsId);
+
+    if (backwordsComparisonId) {
+      setSharedBackwordsComparisonId(backwordsComparisonId);
+      setSharedBackwordsRunId(backwordsRunId);
+      setSharedBackwordsId(null);
       setBackwordsMode(true);
       setGauntletMode(false);
+      setSharedGauntletId(null);
+      setShowLeaderboard(false);
+      setShowSubmissions(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (backwordsId) {
+      setSharedBackwordsId(backwordsId);
+      setSharedBackwordsComparisonId(null);
+      setSharedBackwordsRunId(null);
+      setBackwordsMode(true);
+      setGauntletMode(false);
+      setSharedGauntletId(null);
+      setShowLeaderboard(false);
+      setShowSubmissions(false);
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (gauntletId) {
       setSharedGauntletId(gauntletId);
       setGauntletMode(true);
       setBackwordsMode(false);
+      setSharedBackwordsId(null);
+      setSharedBackwordsComparisonId(null);
+      setSharedBackwordsRunId(null);
+      setShowLeaderboard(false);
+      setShowSubmissions(false);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [user]);
@@ -157,6 +185,8 @@ export default function App() {
   const closeOverlayScreens = () => {
     setBackwordsMode(false);
     setSharedBackwordsId(null);
+    setSharedBackwordsComparisonId(null);
+    setSharedBackwordsRunId(null);
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowLeaderboard(false);
@@ -166,6 +196,8 @@ export default function App() {
   const handleOpenLeaderboard = () => {
     setBackwordsMode(false);
     setSharedBackwordsId(null);
+    setSharedBackwordsComparisonId(null);
+    setSharedBackwordsRunId(null);
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowSubmissions(false);
@@ -177,12 +209,16 @@ export default function App() {
     setShowSubmissions(false);
     setGauntletMode(false);
     setSharedGauntletId(null);
+    setSharedBackwordsComparisonId(null);
+    setSharedBackwordsRunId(null);
     setBackwordsMode(true);
   };
 
   const handleOpenGauntlet = () => {
     setBackwordsMode(false);
     setSharedBackwordsId(null);
+    setSharedBackwordsComparisonId(null);
+    setSharedBackwordsRunId(null);
     setShowLeaderboard(false);
     setShowSubmissions(false);
     setGauntletMode(true);
@@ -191,6 +227,8 @@ export default function App() {
   const handleOpenSubmissions = () => {
     setBackwordsMode(false);
     setSharedBackwordsId(null);
+    setSharedBackwordsComparisonId(null);
+    setSharedBackwordsRunId(null);
     setGauntletMode(false);
     setSharedGauntletId(null);
     setShowLeaderboard(false);
@@ -279,9 +317,15 @@ export default function App() {
               <BackwordsMode
                 key="backwords"
                 initialBackwordsId={sharedBackwordsId ?? undefined}
+                initialComparisonGameId={
+                  sharedBackwordsComparisonId ?? undefined
+                }
+                initialHighlightedRunId={sharedBackwordsRunId ?? undefined}
                 onExit={() => {
                   setBackwordsMode(false);
                   setSharedBackwordsId(null);
+                  setSharedBackwordsComparisonId(null);
+                  setSharedBackwordsRunId(null);
                 }}
               />
             ) : gauntletMode ? (

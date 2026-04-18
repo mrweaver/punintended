@@ -26,9 +26,12 @@ import { ShareModal } from "./modals/ShareModal";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { JudgeHint } from "./ui/JudgeHint";
+import { buildBackwordsResultsShareMessage } from "../utils/backwordsShare";
 
 interface BackwordsModeProps {
   initialBackwordsId?: string;
+  initialComparisonGameId?: string;
+  initialHighlightedRunId?: string;
   onExit: () => void;
 }
 
@@ -219,7 +222,7 @@ function CreatorReceipt({
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button onClick={onShare} variant="secondary" className="flex-1">
-          <Share2 className="h-4 w-4" /> Share Puzzle
+          <Share2 className="h-4 w-4" /> Share Results
         </Button>
         <Button onClick={onViewComparison} variant="outline" className="flex-1">
           <Search className="h-4 w-4" /> View Results
@@ -331,6 +334,8 @@ function GuesserReceipt({
 
 export function BackwordsMode({
   initialBackwordsId,
+  initialComparisonGameId,
+  initialHighlightedRunId,
   onExit,
 }: BackwordsModeProps) {
   const {
@@ -346,7 +351,12 @@ export function BackwordsMode({
     reset,
   } = useBackwords(initialBackwordsId);
 
-  const [comparisonGameId, setComparisonGameId] = useState<string | null>(null);
+  const [comparisonGameId, setComparisonGameId] = useState<string | null>(
+    initialComparisonGameId ?? null,
+  );
+  const [comparisonHighlightRunId, setComparisonHighlightRunId] = useState<
+    string | null
+  >(initialHighlightedRunId ?? null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [clues, setClues] = useState(["", "", ""]);
   const [guessA, setGuessA] = useState("");
@@ -389,7 +399,20 @@ export function BackwordsMode({
     }
   }, [phase]);
 
+  useEffect(() => {
+    if (!initialComparisonGameId) return;
+
+    setComparisonGameId(initialComparisonGameId);
+    setComparisonHighlightRunId(initialHighlightedRunId ?? null);
+  }, [initialComparisonGameId, initialHighlightedRunId]);
+
   const shareUrl = game ? `${window.location.origin}?backwords=${game.id}` : "";
+  const resultsShareUrl =
+    game && run
+      ? `${window.location.origin}?backwordsComparison=${game.id}&backwordsRun=${run.id}`
+      : "";
+  const resultsShareMessage =
+    game && run ? buildBackwordsResultsShareMessage(run) : undefined;
   const lastAttempt = run?.attempts[run.attempts.length - 1] ?? null;
   const attemptsRemaining = run ? Math.max(0, 3 - run.attemptsUsed) : 3;
 
@@ -458,7 +481,13 @@ export function BackwordsMode({
     return (
       <BackwordsComparison
         gameId={comparisonGameId}
-        onBack={() => setComparisonGameId(null)}
+        highlightRunId={
+          comparisonHighlightRunId ?? (role === "guesser" ? run?.id : undefined)
+        }
+        onBack={() => {
+          setComparisonGameId(null);
+          setComparisonHighlightRunId(null);
+        }}
       />
     );
   }
@@ -471,7 +500,10 @@ export function BackwordsMode({
           onCreateAnother={handleCreateAnother}
           onExit={handleExit}
           onShare={handleShare}
-          onViewComparison={() => setComparisonGameId(game.id)}
+          onViewComparison={() => {
+            setComparisonGameId(game.id);
+            setComparisonHighlightRunId(null);
+          }}
         />
         {showShareModal && (
           <ShareModal
@@ -495,14 +527,17 @@ export function BackwordsMode({
           onCreateAnother={handleCreateAnother}
           onExit={handleExit}
           onShare={handleShare}
-          onViewComparison={() => setComparisonGameId(game.id)}
+          onViewComparison={() => {
+            setComparisonGameId(game.id);
+            setComparisonHighlightRunId(run.id);
+          }}
         />
-        {showShareModal && (
+        {showShareModal && resultsShareUrl && (
           <ShareModal
-            title="Share This Backwords Puzzle"
-            description="Send this link to challenge someone else to infer the hidden Topic and Focus from the clue puns."
-            shareUrl={shareUrl}
-            shareMessage="Try to crack this Backwords puzzle on PunIntended."
+            title="Share Your Backwords Results"
+            description="Send this link to open the comparison view with your completed run highlighted, so the creator can see exactly how you did."
+            shareUrl={resultsShareUrl}
+            shareMessage={resultsShareMessage}
             onClose={() => setShowShareModal(false)}
           />
         )}

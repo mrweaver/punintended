@@ -13,6 +13,8 @@ import {
   type BackwordsAttempt,
   type BackwordsComparison,
 } from "../api/client";
+import { useAuth } from "../contexts/AuthContext";
+import { buildBackwordsResultsShareMessage } from "../utils/backwordsShare";
 import { ShareModal } from "./modals/ShareModal";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -20,6 +22,7 @@ import { JudgeHint } from "./ui/JudgeHint";
 
 interface BackwordsComparisonProps {
   gameId: string;
+  highlightRunId?: string;
   onBack: () => void;
 }
 
@@ -100,8 +103,10 @@ function AttemptRow({
 
 export function BackwordsComparison({
   gameId,
+  highlightRunId,
   onBack,
 }: BackwordsComparisonProps) {
+  const { user } = useAuth();
   const [data, setData] = useState<BackwordsComparison | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +130,24 @@ export function BackwordsComparison({
     return () => window.removeEventListener("focus", onFocus);
   }, [gameId]);
 
+  const viewerRun =
+    data?.viewerRole === "guesser" && user
+      ? data.runs.find((run) => run.guesserId === user.uid) ?? null
+      : null;
+  const activeHighlightRunId = highlightRunId ?? viewerRun?.id ?? null;
+
+  useEffect(() => {
+    if (!data || !activeHighlightRunId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`backwords-run-${activeHighlightRunId}`)
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeHighlightRunId, data]);
+
   if (loading) {
     return (
       <Card className="py-16 text-center text-gray-400 dark:text-zinc-500">
@@ -143,6 +166,25 @@ export function BackwordsComparison({
       </Card>
     );
   }
+
+  const shareTitle =
+    data.viewerRole === "guesser"
+      ? "Share Your Backwords Results"
+      : "Share This Backwords Puzzle";
+  const shareButtonLabel =
+    data.viewerRole === "guesser" ? "Share Results" : "Share Puzzle";
+  const shareDescription =
+    data.viewerRole === "guesser"
+      ? "Send this link to open the comparison view with your completed run highlighted, so the creator can see exactly how you did."
+      : "Send this link to challenge someone else to reverse-engineer the hidden Topic and Focus from the clue puns.";
+  const shareUrl =
+    data.viewerRole === "guesser" && activeHighlightRunId
+      ? `${window.location.origin}?backwordsComparison=${gameId}&backwordsRun=${activeHighlightRunId}`
+      : `${window.location.origin}?backwords=${gameId}`;
+  const shareMessage =
+    data.viewerRole === "guesser" && viewerRun
+      ? buildBackwordsResultsShareMessage(viewerRun)
+      : "Try to crack my Backwords puzzle on PunIntended.";
 
   return (
     <>
@@ -170,7 +212,7 @@ export function BackwordsComparison({
             size="sm"
             onClick={() => setShowShareModal(true)}
           >
-            <Share2 className="h-4 w-4" /> Share Puzzle
+            <Share2 className="h-4 w-4" /> {shareButtonLabel}
           </Button>
         </div>
 
@@ -255,13 +297,25 @@ export function BackwordsComparison({
               {data.runs.map((run) => {
                 const isSolved = run.status === "solved";
                 const title = run.guesserName ?? "Player";
+                const isHighlighted = run.id === activeHighlightRunId;
+                const isViewerRun = run.id === viewerRun?.id;
+                const runBadgeLabel = isViewerRun
+                  ? "Your run"
+                  : isHighlighted
+                    ? "Shared result"
+                    : null;
 
                 return (
                   <motion.div
                     key={run.id}
+                    id={`backwords-run-${run.id}`}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="space-y-3 rounded-2xl border border-zinc-100 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+                    className={`space-y-3 rounded-2xl border p-4 ${
+                      isHighlighted
+                        ? "border-orange-200 bg-orange-50/70 shadow-sm dark:border-violet-700/60 dark:bg-violet-950/25"
+                        : "border-zinc-100 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center gap-3">
@@ -277,7 +331,12 @@ export function BackwordsComparison({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-sm font-medium">
+                      <div className="flex flex-wrap items-center justify-end gap-2 text-sm font-medium">
+                        {runBadgeLabel && (
+                          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:bg-zinc-900 dark:text-violet-300">
+                            {runBadgeLabel}
+                          </span>
+                        )}
                         {isSolved ? (
                           <>
                             <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -333,10 +392,10 @@ export function BackwordsComparison({
 
       {showShareModal && (
         <ShareModal
-          title="Share This Backwords Puzzle"
-          description="Send this link to challenge someone else to reverse-engineer the hidden Topic and Focus from the clue puns."
-          shareUrl={`${window.location.origin}?backwords=${gameId}`}
-          shareMessage="Try to crack my Backwords puzzle on PunIntended."
+          title={shareTitle}
+          description={shareDescription}
+          shareUrl={shareUrl}
+          shareMessage={shareMessage}
           onClose={() => setShowShareModal(false)}
         />
       )}

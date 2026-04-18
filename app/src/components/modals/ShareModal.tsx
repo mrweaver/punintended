@@ -23,6 +23,10 @@ export function ShareModal({
   const [sharing, setSharing] = useState(false);
   const canNativeShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const sharePayload = shareMessage
+    ? `${shareMessage}\n${shareUrl}`
+    : shareUrl;
+  const copyLabel = shareMessage ? "Copy Share" : "Copy";
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -38,8 +42,8 @@ export function ShareModal({
     };
   }, [onClose]);
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(shareUrl).catch(() => {});
+  const copySharePayload = () => {
+    navigator.clipboard.writeText(sharePayload).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -93,6 +97,11 @@ export function ShareModal({
         <p className="text-sm text-gray-500 dark:text-zinc-400 mb-4">
           {description}
         </p>
+        {shareMessage && (
+          <div className="mb-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left text-sm text-gray-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+            {shareMessage}
+          </div>
+        )}
         {canNativeShare && (
           <Button
             onClick={shareNatively}
@@ -112,7 +121,7 @@ export function ShareModal({
             className="bg-transparent flex-1 outline-none text-sm px-2 text-gray-600 dark:text-zinc-300"
           />
           <Button
-            onClick={copyLink}
+            onClick={copySharePayload}
             className="px-4 py-2 text-sm whitespace-nowrap"
           >
             {copied ? (
@@ -120,7 +129,7 @@ export function ShareModal({
             ) : (
               <Copy className="w-4 h-4" />
             )}
-            {copied ? "Copied!" : "Copy"}
+            {copied ? "Copied!" : copyLabel}
           </Button>
         </div>
       </motion.div>

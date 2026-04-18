@@ -14,6 +14,7 @@ import {
   popOldestPendingChallenge,
 } from "../db/database.js";
 import {
+  getActiveBackwordsJudgeDefinition,
   getActivePunJudgeDefinition,
   getJudgeSnapshot,
 } from "../lib/aiJudges.js";
@@ -42,6 +43,158 @@ const PUN_SCORE_RESPONSE_SCHEMA = {
   },
   required: ["reasoning", "score", "feedback"],
 };
+
+const BACKWORDS_GUESS_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    reasoning: {
+      type: Type.STRING,
+      description:
+        "Internal logic. Compare both possible mappings between Guess A / Guess B and the hidden Topic / Focus before deciding.",
+    },
+    matched: {
+      type: Type.BOOLEAN,
+      description:
+        "True only if both hidden targets are semantically matched by the submitted guesses.",
+    },
+    overallSimilarity: {
+      type: Type.INTEGER,
+      description:
+        "An integer from 0 to 100 representing the overall quality of the best order-independent mapping.",
+    },
+    topicSimilarity: {
+      type: Type.INTEGER,
+      description:
+        "An integer from 0 to 100 for how closely the mapped guess matches the hidden Topic.",
+    },
+    focusSimilarity: {
+      type: Type.INTEGER,
+      description:
+        "An integer from 0 to 100 for how closely the mapped guess matches the hidden Focus.",
+    },
+    topicGuessSlot: {
+      type: Type.STRING,
+      description:
+        "Which submitted concept best maps to the Topic: either 'guessA' or 'guessB'.",
+    },
+    focusGuessSlot: {
+      type: Type.STRING,
+      description:
+        "Which submitted concept best maps to the Focus: either 'guessA' or 'guessB'.",
+    },
+    feedback: {
+      type: Type.STRING,
+      description:
+        "One or two sentences for the player explaining how close the guess was without revealing the hidden answer.",
+    },
+  },
+  required: [
+    "reasoning",
+    "matched",
+    "overallSimilarity",
+    "topicSimilarity",
+    "focusSimilarity",
+    "topicGuessSlot",
+    "focusGuessSlot",
+    "feedback",
+  ],
+};
+
+function normalizeConceptText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function tokenizeConcept(value) {
+  return normalizeConceptText(value)
+    .split(" ")
+    .filter(Boolean);
+}
+
+function clampPercentage(value) {
+  const parsed = Number.parseInt(String(value ?? "0"), 10);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function scoreFallbackSimilarity(guess, target) {
+  const normalizedGuess = normalizeConceptText(guess);
+  const normalizedTarget = normalizeConceptText(target);
+
+  if (!normalizedGuess || !normalizedTarget) return 0;
+  if (normalizedGuess === normalizedTarget) return 100;
+  if (
+    normalizedGuess.includes(normalizedTarget) ||
+    normalizedTarget.includes(normalizedGuess)
+  ) {
+    return 85;
+  }
+
+  const guessTokens = new Set(tokenizeConcept(guess));
+  const targetTokens = new Set(tokenizeConcept(target));
+  const overlap = [...guessTokens].filter((token) => targetTokens.has(token));
+  const union = new Set([...guessTokens, ...targetTokens]);
+
+  if (union.size === 0) return 0;
+  return Math.round((overlap.length / union.size) * 100);
+}
+
+export function buildBackwordsGuessFallback(
+  topic,
+  focus,
+  guessA,
+  guessB,
+  reasoning = "Semantic adjudication was unavailable.",
+) {
+  const judge = getActiveBackwordsJudgeDefinition();
+  const judgeSnapshot = getJudgeSnapshot(judge);
+
+  const options = [
+    {
+      topicGuessSlot: "guessA",
+      focusGuessSlot: "guessB",
+      topicSimilarity: scoreFallbackSimilarity(guessA, topic),
+      focusSimilarity: scoreFallbackSimilarity(guessB, focus),
+    },
+    {
+      topicGuessSlot: "guessB",
+      focusGuessSlot: "guessA",
+      topicSimilarity: scoreFallbackSimilarity(guessB, topic),
+      focusSimilarity: scoreFallbackSimilarity(guessA, focus),
+    },
+  ];
+
+  const best = options.sort((left, right) => {
+    const leftTotal = left.topicSimilarity + left.focusSimilarity;
+    const rightTotal = right.topicSimilarity + right.focusSimilarity;
+    return rightTotal - leftTotal;
+  })[0];
+
+  const matched =
+    best.topicSimilarity === 100 && best.focusSimilarity === 100;
+  const overallSimilarity = Math.round(
+    (best.topicSimilarity + best.focusSimilarity) / 2,
+  );
+  const feedback = matched
+    ? "The semantic judge dropped out, but the fallback check still recognised both concepts as exact matches."
+    : "The semantic judge dropped out, so this guess was checked with a stricter fallback and did not fully match both hidden concepts.";
+
+  return {
+    reasoning,
+    matched,
+    overallSimilarity,
+    topicSimilarity: best.topicSimilarity,
+    focusSimilarity: best.focusSimilarity,
+    topicGuessSlot: best.topicGuessSlot,
+    focusGuessSlot: best.focusGuessSlot,
+    feedback,
+    ...judgeSnapshot,
+    status: "completed",
+    errorMessage: reasoning,
+  };
+}
 
 export async function generateDailyChallenge(pastChallenges = []) {
   const avoidClause =
@@ -233,4 +386,85 @@ export async function generateGauntletPrompts() {
     },
   });
   return JSON.parse(response.text);
+}
+
+export async function generateBackwordsAssignment() {
+  const response = await ai.models.generateContent({
+    model: DEFAULT_MODEL,
+    contents: `Generate one hidden Topic and one hidden Focus for a reverse-engineering pun game called Backwords.
+
+    CRITICAL RULES:
+    1. Topic and Focus must be clearly distinct concepts.
+    2. Topic should be a broad category or domain.
+    3. Focus should be a more specific object, situation, or place.
+    4. The pair should be fertile enough that a clever player could write three clue-puns that bridge both concepts.
+    5. Use Australian English spelling.
+
+    Return as JSON with keys 'topic' and 'focus'.`,
+    config: {
+      temperature: 0.85,
+      topK: 48,
+      topP: 0.9,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING },
+          focus: { type: Type.STRING },
+        },
+        required: ["topic", "focus"],
+      },
+    },
+  });
+
+  return JSON.parse(response.text);
+}
+
+export async function judgeBackwordsGuess(topic, focus, guessA, guessB) {
+  const judge = getActiveBackwordsJudgeDefinition();
+  const judgeSnapshot = getJudgeSnapshot(judge);
+
+  try {
+    const response = await ai.models.generateContent({
+      model: judge.model,
+      systemInstruction: judge.systemPrompt,
+      contents: `Evaluate the following Backwords guess.
+
+      [TOPIC]: ${topic}
+      [FOCUS]: ${focus}
+      [GUESS_A]: """${guessA}"""
+      [GUESS_B]: """${guessB}"""`,
+      config: {
+        temperature: judge.config.temperature,
+        thinkingConfig: {
+          thinkingLevel: judge.config.thinkingLevel,
+        },
+        responseMimeType: "application/json",
+        responseSchema: BACKWORDS_GUESS_RESPONSE_SCHEMA,
+      },
+    });
+
+    const parsed = JSON.parse(response.text);
+
+    return {
+      reasoning: parsed.reasoning,
+      matched: Boolean(parsed.matched),
+      overallSimilarity: clampPercentage(parsed.overallSimilarity),
+      topicSimilarity: clampPercentage(parsed.topicSimilarity),
+      focusSimilarity: clampPercentage(parsed.focusSimilarity),
+      topicGuessSlot: parsed.topicGuessSlot === "guessB" ? "guessB" : "guessA",
+      focusGuessSlot: parsed.focusGuessSlot === "guessA" ? "guessA" : "guessB",
+      feedback: parsed.feedback,
+      ...judgeSnapshot,
+    };
+  } catch (error) {
+    console.error("Backwords judging failed:", error);
+    return buildBackwordsGuessFallback(
+      topic,
+      focus,
+      guessA,
+      guessB,
+      "Backwords semantic adjudication failed due to an API error or timeout.",
+    );
+  }
 }

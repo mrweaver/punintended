@@ -22,6 +22,8 @@ const groupClients = new Map(); // groupId -> Set<res>
 const dailyClients = new Set(); // global daily challenge subscribers
 const notificationClients = new Map(); // userId -> Set<res>
 const gauntletClients = new Map(); // runId -> Set<res>
+const backwordsGameClients = new Map(); // gameId -> Set<res>
+const backwordsRunClients = new Map(); // runId -> Set<res>
 
 // Ephemeral typing presence store: groupId -> Map<userId, {name, photoURL, status, updatedAt}>
 const typingStatus = new Map();
@@ -76,6 +78,36 @@ export function removeGauntletClient(runId, res) {
   }
 }
 
+export function addBackwordsGameClient(gameId, res) {
+  if (!backwordsGameClients.has(gameId)) {
+    backwordsGameClients.set(gameId, new Set());
+  }
+  backwordsGameClients.get(gameId).add(res);
+}
+
+export function removeBackwordsGameClient(gameId, res) {
+  const clients = backwordsGameClients.get(gameId);
+  if (clients) {
+    clients.delete(res);
+    if (clients.size === 0) backwordsGameClients.delete(gameId);
+  }
+}
+
+export function addBackwordsRunClient(runId, res) {
+  if (!backwordsRunClients.has(runId)) {
+    backwordsRunClients.set(runId, new Set());
+  }
+  backwordsRunClients.get(runId).add(res);
+}
+
+export function removeBackwordsRunClient(runId, res) {
+  const clients = backwordsRunClients.get(runId);
+  if (clients) {
+    clients.delete(res);
+    if (clients.size === 0) backwordsRunClients.delete(runId);
+  }
+}
+
 // --- Low-level Broadcast ---
 
 export function broadcastToGroup(groupId, event, data) {
@@ -111,6 +143,32 @@ export function broadcastToGauntletRun(runId, event, data) {
       client.write(payload);
     } catch {
       removeGauntletClient(runId, client);
+    }
+  }
+}
+
+export function broadcastToBackwordsGame(gameId, event, data) {
+  const clients = backwordsGameClients.get(gameId);
+  if (!clients) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of clients) {
+    try {
+      client.write(payload);
+    } catch {
+      removeBackwordsGameClient(gameId, client);
+    }
+  }
+}
+
+export function broadcastToBackwordsRun(runId, event, data) {
+  const clients = backwordsRunClients.get(runId);
+  if (!clients) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of clients) {
+    try {
+      client.write(payload);
+    } catch {
+      removeBackwordsRunClient(runId, client);
     }
   }
 }
@@ -256,6 +314,24 @@ export function startHeartbeat() {
       }
     }
     for (const [, clients] of gauntletClients) {
+      for (const client of clients) {
+        try {
+          client.write(":heartbeat\n\n");
+        } catch {
+          // Will be cleaned up on close
+        }
+      }
+    }
+    for (const [, clients] of backwordsGameClients) {
+      for (const client of clients) {
+        try {
+          client.write(":heartbeat\n\n");
+        } catch {
+          // Will be cleaned up on close
+        }
+      }
+    }
+    for (const [, clients] of backwordsRunClients) {
       for (const client of clients) {
         try {
           client.write(":heartbeat\n\n");

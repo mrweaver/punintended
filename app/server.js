@@ -19,6 +19,7 @@ import {
 } from "./services/buffer.js";
 import analyticsRoutes from "./routes/analytics.js";
 import authRoutes from "./routes/auth.js";
+import backwordsRoutes from "./routes/backwords.js";
 import dailyRoutes from "./routes/daily.js";
 import gauntletRoutes from "./routes/gauntlet.js";
 import groupsRoutes from "./routes/groups.js";
@@ -39,6 +40,7 @@ applyMiddleware(app);
 // --- Routes ---
 app.use(analyticsRoutes);
 app.use(authRoutes);
+app.use(backwordsRoutes);
 app.use(dailyRoutes);
 app.use(groupsRoutes);
 app.use(gauntletRoutes);

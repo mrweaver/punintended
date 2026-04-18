@@ -126,6 +126,17 @@ function hasRecordedJudgeResult(score, feedback) {
   );
 }
 
+function clampPercentage(value) {
+  const parsed = Number.parseInt(String(value ?? "0"), 10);
+  if (Number.isNaN(parsed)) return 0;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function normalizeBackwordsGuessSlot(value, fallback = "guessA") {
+  if (value === "guessA" || value === "guessB") return value;
+  return fallback;
+}
+
 async function upsertAiJudgeDefinition(definition, executor = query) {
   const run = getDbRunner(executor);
   const key = definition?.judgeKey ?? definition?.key;
@@ -1365,6 +1376,443 @@ async function createGauntletMessage(gauntletId, userId, text) {
   };
 }
 
+// --- Backwords functions ---
+
+async function createBackwordsGame(creatorId, topic, focus) {
+  const result = await query(
+    `INSERT INTO backwords_games (creator_id, topic, focus)
+     VALUES ($1, $2, $3)
+     RETURNING id`,
+    [creatorId, topic, focus],
+  );
+
+  return getBackwordsGameById(result.rows[0].id);
+}
+
+async function getBackwordsGameById(gameId) {
+  const result = await query(
+    `SELECT bg.*, ${displayNameSql("u")} AS creator_name, u.photo_url
+     FROM backwords_games bg
+     JOIN users u ON u.id = bg.creator_id
+     WHERE bg.id = $1`,
+    [gameId],
+  );
+
+  return result.rows[0] ? formatBackwordsGame(result.rows[0]) : null;
+}
+
+async function publishBackwordsGame(gameId, creatorId, clues) {
+  const result = await query(
+    `UPDATE backwords_games
+     SET clues = $1::jsonb,
+         status = 'published',
+         updated_at = NOW()
+     WHERE id = $2 AND creator_id = $3 AND status = 'draft'
+     RETURNING id`,
+    [JSON.stringify(clues), gameId, creatorId],
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Backwords game not found or already published");
+  }
+
+  return getBackwordsGameById(result.rows[0].id);
+}
+
+async function updateBackwordsGameScores(gameId, judgements) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT bg.*, ${displayNameSql("u")} AS creator_name, u.photo_url
+       FROM backwords_games bg
+       JOIN users u ON u.id = bg.creator_id
+       WHERE bg.id = $1
+       FOR UPDATE`,
+      [gameId],
+    );
+
+    if (!rows[0]) throw new Error("Backwords game not found");
+
+    const clues = rows[0].clues || [];
+    let creatorScore = 0;
+    const nextClues = [];
+
+    for (let index = 0; index < clues.length; index++) {
+      const clue = clues[index];
+      const judgement = judgements[index] ?? {};
+      const judge = await upsertAiJudgeDefinition(judgement, client);
+      const judgedAt = judgement?.judgedAt ?? new Date().toISOString();
+      const aiScore = judgement?.score ?? 0;
+      const clueScore = aiScore * 100;
+      creatorScore += clueScore;
+
+      nextClues.push({
+        ...clue,
+        ai_score: aiScore,
+        ai_feedback: judgement?.feedback ?? null,
+        ai_judge_id: judge.id,
+        ai_judge_key: judge.key,
+        ai_judge_name: judge.name,
+        ai_judge_version: judge.version,
+        ai_judge_model: judge.model,
+        ai_judged_at: judgedAt,
+        clue_score: clueScore,
+      });
+    }
+
+    const updated = await client.query(
+      `UPDATE backwords_games
+       SET clues = $1::jsonb,
+           creator_score = $2,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [JSON.stringify(nextClues), creatorScore, gameId],
+    );
+
+    return formatBackwordsGame({
+      ...updated.rows[0],
+      creator_name: rows[0].creator_name,
+      photo_url: rows[0].photo_url,
+    });
+  });
+}
+
+async function getBackwordsRunById(runId) {
+  const result = await query(
+    `SELECT br.*, ${displayNameSql("u")} AS guesser_name, u.photo_url
+     FROM backwords_runs br
+     JOIN users u ON u.id = br.guesser_id
+     WHERE br.id = $1`,
+    [runId],
+  );
+
+  return result.rows[0] ? formatBackwordsRun(result.rows[0]) : null;
+}
+
+async function getBackwordsRunByGameAndGuesser(gameId, guesserId) {
+  const result = await query(
+    `SELECT br.*, ${displayNameSql("u")} AS guesser_name, u.photo_url
+     FROM backwords_runs br
+     JOIN users u ON u.id = br.guesser_id
+     WHERE br.game_id = $1 AND br.guesser_id = $2`,
+    [gameId, guesserId],
+  );
+
+  return result.rows[0] ? formatBackwordsRun(result.rows[0]) : null;
+}
+
+async function createOrGetBackwordsRun(gameId, guesserId) {
+  await query(
+    `INSERT INTO backwords_runs (game_id, guesser_id)
+     VALUES ($1, $2)
+     ON CONFLICT (game_id, guesser_id) DO NOTHING`,
+    [gameId, guesserId],
+  );
+
+  return getBackwordsRunByGameAndGuesser(gameId, guesserId);
+}
+
+async function submitBackwordsGuess(runId, guessA, guessB, attemptIndex) {
+  const newEntry = {
+    guess_a: guessA,
+    guess_b: guessB,
+    matched: null,
+    overall_similarity: null,
+    topic_similarity: null,
+    focus_similarity: null,
+    mapped_topic_guess: null,
+    mapped_focus_guess: null,
+    topic_guess_text: null,
+    focus_guess_text: null,
+    feedback: null,
+    ai_judge_id: null,
+    ai_judge_key: null,
+    ai_judge_name: null,
+    ai_judge_version: null,
+    ai_judge_model: null,
+    ai_judged_at: null,
+    submitted_at: new Date().toISOString(),
+  };
+
+  const result = await query(
+    `UPDATE backwords_runs
+     SET attempts = attempts || $1::jsonb,
+         status = 'judging',
+         attempts_used = attempts_used + 1,
+         updated_at = NOW()
+     WHERE id = $2
+       AND status = 'in_progress'
+       AND attempts_used < 3
+       AND jsonb_array_length(attempts) = $3
+     RETURNING *`,
+    [JSON.stringify([newEntry]), runId, attemptIndex],
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Backwords guess could not be recorded");
+  }
+
+  return getBackwordsRunById(result.rows[0].id);
+}
+
+async function updateBackwordsGuessResult(
+  runId,
+  attemptIndex,
+  judgement,
+  options = {},
+) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT br.*, bg.topic, bg.focus,
+              ${displayNameSql("u")} AS guesser_name, u.photo_url
+       FROM backwords_runs br
+       JOIN backwords_games bg ON bg.id = br.game_id
+       JOIN users u ON u.id = br.guesser_id
+       WHERE br.id = $1
+       FOR UPDATE`,
+      [runId],
+    );
+
+    if (!rows[0]) throw new Error("Backwords run not found");
+
+    const attempts = rows[0].attempts || [];
+    const attempt = attempts[attemptIndex];
+
+    if (!attempt) throw new Error("Backwords attempt not found");
+
+    const judge = await upsertAiJudgeDefinition(judgement, client);
+    const judgedAt = judgement?.judgedAt ?? new Date().toISOString();
+    const matched = Boolean(judgement?.matched);
+    const topicSimilarity = clampPercentage(judgement?.topicSimilarity);
+    const focusSimilarity = clampPercentage(judgement?.focusSimilarity);
+    const overallSimilarity = clampPercentage(
+      judgement?.overallSimilarity ??
+        Math.round((topicSimilarity + focusSimilarity) / 2),
+    );
+    const topicGuessSlot = normalizeBackwordsGuessSlot(
+      judgement?.topicGuessSlot,
+      "guessA",
+    );
+    let focusGuessSlot = normalizeBackwordsGuessSlot(
+      judgement?.focusGuessSlot,
+      topicGuessSlot === "guessA" ? "guessB" : "guessA",
+    );
+
+    if (focusGuessSlot === topicGuessSlot) {
+      focusGuessSlot = topicGuessSlot === "guessA" ? "guessB" : "guessA";
+    }
+
+    const topicGuessText =
+      topicGuessSlot === "guessA" ? attempt.guess_a : attempt.guess_b;
+    const focusGuessText =
+      focusGuessSlot === "guessA" ? attempt.guess_a : attempt.guess_b;
+
+    const latestJudgement = await client.query(
+      `SELECT id
+       FROM backwords_guess_judgements
+       WHERE run_id = $1 AND attempt_index = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [runId, attemptIndex],
+    );
+
+    await client.query(
+      `INSERT INTO backwords_guess_judgements (
+         run_id,
+         attempt_index,
+         judge_id,
+         status,
+         trigger_type,
+         matched,
+         overall_similarity,
+         topic_similarity,
+         focus_similarity,
+         guess_a_snapshot,
+         guess_b_snapshot,
+         mapped_topic_guess,
+         mapped_focus_guess,
+         challenge_topic_snapshot,
+         challenge_focus_snapshot,
+         feedback,
+         reasoning,
+         supersedes_judgement_id,
+         created_at,
+         error_message
+       )
+       VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+         $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+       )`,
+      [
+        runId,
+        attemptIndex,
+        judge.id,
+        judgement?.status ?? "completed",
+        options?.triggerType ?? "initial",
+        matched,
+        overallSimilarity,
+        topicSimilarity,
+        focusSimilarity,
+        attempt.guess_a,
+        attempt.guess_b,
+        topicGuessSlot,
+        focusGuessSlot,
+        rows[0].topic,
+        rows[0].focus,
+        judgement?.feedback ?? null,
+        judgement?.reasoning ?? null,
+        latestJudgement.rows[0]?.id ?? null,
+        judgedAt,
+        judgement?.errorMessage ?? null,
+      ],
+    );
+
+    attempts[attemptIndex] = {
+      ...attempt,
+      matched,
+      overall_similarity: overallSimilarity,
+      topic_similarity: topicSimilarity,
+      focus_similarity: focusSimilarity,
+      mapped_topic_guess: topicGuessSlot,
+      mapped_focus_guess: focusGuessSlot,
+      topic_guess_text: topicGuessText,
+      focus_guess_text: focusGuessText,
+      feedback: judgement?.feedback ?? null,
+      ai_judge_id: judge.id,
+      ai_judge_key: judge.key,
+      ai_judge_name: judge.name,
+      ai_judge_version: judge.version,
+      ai_judge_model: judge.model,
+      ai_judged_at: judgedAt,
+    };
+
+    const bestSimilarity = attempts.reduce((best, currentAttempt) => {
+      return Math.max(best, currentAttempt?.overall_similarity ?? 0);
+    }, 0);
+    const nextStatus = matched
+      ? "solved"
+      : attemptIndex >= 2
+        ? "failed"
+        : "in_progress";
+    const matchedOnAttempt = matched
+      ? attemptIndex + 1
+      : rows[0].matched_on_attempt;
+
+    const updated = await client.query(
+      `UPDATE backwords_runs
+       SET attempts = $1::jsonb,
+           status = $2,
+           best_similarity = $3,
+           matched_on_attempt = $4,
+           updated_at = NOW()
+       WHERE id = $5
+       RETURNING *`,
+      [
+        JSON.stringify(attempts),
+        nextStatus,
+        bestSimilarity || null,
+        matchedOnAttempt,
+        runId,
+      ],
+    );
+
+    return formatBackwordsRun({
+      ...updated.rows[0],
+      guesser_name: rows[0].guesser_name,
+      photo_url: rows[0].photo_url,
+    });
+  });
+}
+
+async function getBackwordsHistory(userId, limit = 20) {
+  const authoredResult = await query(
+    `SELECT bg.id, bg.topic, bg.focus, bg.clues, bg.creator_score,
+            bg.created_at,
+            COUNT(br.id)::int AS total_guessers,
+            COUNT(*) FILTER (WHERE br.status = 'solved')::int AS solved_count
+     FROM backwords_games bg
+     LEFT JOIN backwords_runs br ON br.game_id = bg.id
+     WHERE bg.creator_id = $1 AND bg.status = 'published'
+     GROUP BY bg.id
+     ORDER BY bg.created_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+
+  const guessedResult = await query(
+    `SELECT br.id AS run_id, br.game_id, br.status, br.attempts_used,
+            br.best_similarity, br.matched_on_attempt,
+            br.created_at AS run_created_at,
+            bg.clues, bg.topic, bg.focus, bg.creator_score,
+            ${displayNameSql("u")} AS creator_name, u.photo_url
+     FROM backwords_runs br
+     JOIN backwords_games bg ON bg.id = br.game_id
+     JOIN users u ON u.id = bg.creator_id
+     WHERE br.guesser_id = $1 AND br.status IN ('solved', 'failed')
+     ORDER BY br.updated_at DESC
+     LIMIT $2`,
+    [userId, limit],
+  );
+
+  return {
+    authored: authoredResult.rows.map((row) => ({
+      gameId: row.id,
+      topic: row.topic,
+      focus: row.focus,
+      clues: row.clues,
+      creatorScore: row.creator_score,
+      createdAt: row.created_at,
+      totalGuessers: row.total_guessers,
+      solvedCount: row.solved_count,
+    })),
+    guessed: guessedResult.rows.map((row) => ({
+      gameId: row.game_id,
+      runId: row.run_id,
+      clues: row.clues,
+      topic: row.topic,
+      focus: row.focus,
+      creatorScore: row.creator_score,
+      creatorName: row.creator_name,
+      creatorPhoto: row.photo_url,
+      status: row.status,
+      attemptsUsed: row.attempts_used,
+      bestSimilarity: row.best_similarity,
+      matchedOnAttempt: row.matched_on_attempt,
+      createdAt: row.run_created_at,
+    })),
+  };
+}
+
+async function getBackwordsComparison(gameId) {
+  const game = await getBackwordsGameById(gameId);
+  if (!game || game.status !== "published") return null;
+
+  const runsResult = await query(
+    `SELECT br.*, ${displayNameSql("u")} AS guesser_name, u.photo_url
+     FROM backwords_runs br
+     JOIN users u ON u.id = br.guesser_id
+     WHERE br.game_id = $1
+     ORDER BY CASE br.status
+       WHEN 'solved' THEN 0
+       WHEN 'failed' THEN 1
+       WHEN 'judging' THEN 2
+       ELSE 3
+     END,
+     br.matched_on_attempt ASC NULLS LAST,
+     br.best_similarity DESC NULLS LAST,
+     br.updated_at DESC`,
+    [gameId],
+  );
+
+  return {
+    game,
+    runs: runsResult.rows.map((row) => formatBackwordsRun(row)),
+    totalGuessers: runsResult.rows.length,
+    solvedCount: runsResult.rows.filter((row) => row.status === "solved")
+      .length,
+  };
+}
+
 async function getMessageReactions(messageIds, messageType) {
   if (!messageIds.length) return {};
   const result = await query(
@@ -1423,6 +1871,41 @@ function formatGauntletRun(row) {
     rounds: row.rounds,
     status: row.status,
     totalScore: row.total_score,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function formatBackwordsGame(row, options = {}) {
+  const includeTargets = options.includeTargets ?? true;
+
+  return {
+    id: row.id,
+    creatorId: row.creator_id,
+    creatorName: row.creator_name ?? null,
+    creatorPhoto: row.photo_url ?? "",
+    topic: includeTargets ? row.topic : null,
+    focus: includeTargets ? row.focus : null,
+    clues: row.clues,
+    creatorScore: row.creator_score,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function formatBackwordsRun(row) {
+  return {
+    id: row.id,
+    gameId: row.game_id,
+    guesserId: row.guesser_id,
+    guesserName: row.guesser_name ?? null,
+    guesserPhoto: row.photo_url ?? "",
+    attempts: row.attempts,
+    status: row.status,
+    attemptsUsed: row.attempts_used,
+    bestSimilarity: row.best_similarity,
+    matchedOnAttempt: row.matched_on_attempt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1804,12 +2287,17 @@ async function runMigrations() {
   await alterToTz("gauntlets", "created_at");
   await alterToTz("gauntlet_runs", "created_at");
   await alterToTz("gauntlet_runs", "updated_at");
+  await alterToTz("backwords_games", "created_at");
+  await alterToTz("backwords_games", "updated_at");
+  await alterToTz("backwords_runs", "created_at");
+  await alterToTz("backwords_runs", "updated_at");
   await alterToTz("challenge_reveals", "revealed_at");
   await alterToTz("challenge_reveals", "created_at");
   await alterToTz("ai_judges", "created_at");
   await alterToTz("ai_judges", "retired_at");
   await alterToTz("pun_judgements", "created_at");
   await alterToTz("gauntlet_round_judgements", "created_at");
+  await alterToTz("backwords_guess_judgements", "created_at");
 
   await query(`DELETE FROM pun_reactions WHERE reaction != 'groan'`);
   await query(`
@@ -1829,6 +2317,71 @@ async function runMigrations() {
   `);
   await query(
     `CREATE INDEX IF NOT EXISTS idx_gauntlet_messages_gauntlet ON gauntlet_messages(gauntlet_id)`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS backwords_games (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      creator_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      topic VARCHAR(500) NOT NULL,
+      focus VARCHAR(500) NOT NULL,
+      clues JSONB NOT NULL DEFAULT '[]',
+      creator_score INTEGER,
+      status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_backwords_games_creator ON backwords_games(creator_id)`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS backwords_runs (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      game_id UUID NOT NULL REFERENCES backwords_games(id) ON DELETE CASCADE,
+      guesser_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      attempts JSONB NOT NULL DEFAULT '[]',
+      status VARCHAR(20) NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'judging', 'solved', 'failed')),
+      attempts_used INTEGER NOT NULL DEFAULT 0,
+      best_similarity INTEGER,
+      matched_on_attempt INTEGER,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE (game_id, guesser_id)
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_backwords_runs_game ON backwords_runs(game_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_backwords_runs_guesser ON backwords_runs(guesser_id)`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS backwords_guess_judgements (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      run_id UUID NOT NULL REFERENCES backwords_runs(id) ON DELETE CASCADE,
+      attempt_index INTEGER NOT NULL CHECK (attempt_index >= 0 AND attempt_index <= 2),
+      judge_id UUID REFERENCES ai_judges(id) ON DELETE SET NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed')),
+      trigger_type VARCHAR(32) NOT NULL DEFAULT 'initial',
+      matched BOOLEAN NOT NULL DEFAULT FALSE,
+      overall_similarity INTEGER,
+      topic_similarity INTEGER,
+      focus_similarity INTEGER,
+      guess_a_snapshot TEXT,
+      guess_b_snapshot TEXT,
+      mapped_topic_guess VARCHAR(20),
+      mapped_focus_guess VARCHAR(20),
+      challenge_topic_snapshot VARCHAR(500),
+      challenge_focus_snapshot VARCHAR(500),
+      feedback TEXT,
+      reasoning TEXT,
+      supersedes_judgement_id UUID REFERENCES backwords_guess_judgements(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      error_message TEXT
+    )
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_backwords_guess_judgements_run ON backwords_guess_judgements(run_id, attempt_index, created_at DESC)`,
   );
   await query(`
     CREATE TABLE IF NOT EXISTS message_reactions (
@@ -1957,6 +2510,17 @@ export {
   getGauntletComments,
   getGauntletMessages,
   createGauntletMessage,
+  createBackwordsGame,
+  getBackwordsGameById,
+  publishBackwordsGame,
+  updateBackwordsGameScores,
+  createOrGetBackwordsRun,
+  getBackwordsRunById,
+  getBackwordsRunByGameAndGuesser,
+  submitBackwordsGuess,
+  updateBackwordsGuessResult,
+  getBackwordsHistory,
+  getBackwordsComparison,
   getMessageReactions,
   setMessageReaction,
 };

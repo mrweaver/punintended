@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -6,6 +14,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   FileText,
   Search,
   Sparkles,
@@ -324,14 +333,63 @@ function parseChangelog(raw: string): Release[] {
     });
 }
 
-function MarkdownBlock({ content }: { content: string }) {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightText(children: ReactNode, query: string): ReactNode {
+  if (!query) return children;
+
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return children;
+
+  const queryPattern = new RegExp(`(${escapeRegExp(normalizedQuery)})`, "gi");
+
+  return Children.map(children, (child): ReactNode => {
+    if (typeof child === "string") {
+      if (!child.toLowerCase().includes(normalizedQuery.toLowerCase())) {
+        return child;
+      }
+
+      const parts = child.split(queryPattern);
+      return parts.map((part, index) =>
+        part.toLowerCase() === normalizedQuery.toLowerCase() ? (
+          <mark
+            key={`${part}-${index}`}
+            className="rounded-sm bg-accent-subtle text-accent-foreground"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      );
+    }
+
+    if (isValidElement<{ children?: ReactNode }>(child) && child.props.children) {
+      return cloneElement(child, {
+        children: highlightText(child.props.children, normalizedQuery),
+      });
+    }
+
+    return child;
+  });
+}
+
+function MarkdownBlock({
+  content,
+  searchQuery,
+}: {
+  content: string;
+  searchQuery: string;
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
         p: ({ children, ...props }) => (
           <p className="text-sm leading-6 text-text-secondary" {...props}>
-            {children}
+            {highlightText(children, searchQuery)}
           </p>
         ),
         ul: ({ children, ...props }) => (
@@ -352,7 +410,7 @@ function MarkdownBlock({ content }: { content: string }) {
         ),
         li: ({ children, ...props }) => (
           <li className="pl-1 leading-relaxed" {...props}>
-            {children}
+            {highlightText(children, searchQuery)}
           </li>
         ),
         a: ({ children, ...props }) => (
@@ -418,11 +476,13 @@ function ReleaseEntry({
   isCurrent,
   isExpanded,
   onToggle,
+  searchQuery,
 }: {
   release: Release;
   isCurrent: boolean;
   isExpanded: boolean;
   onToggle: () => void;
+  searchQuery: string;
 }) {
   return (
     <div className="rounded-[1.5rem] border border-border bg-surface shadow-sm transition-colors hover:border-accent-border">
@@ -494,7 +554,10 @@ function ReleaseEntry({
             <div className="border-t border-border px-5 pb-5 pt-4">
               {release.overview && (
                 <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3">
-                  <MarkdownBlock content={release.overview} />
+                  <MarkdownBlock
+                    content={release.overview}
+                    searchQuery={searchQuery}
+                  />
                 </div>
               )}
 
@@ -521,7 +584,10 @@ function ReleaseEntry({
                     </div>
 
                     <div className="mt-3">
-                      <MarkdownBlock content={section.content} />
+                      <MarkdownBlock
+                        content={section.content}
+                        searchQuery={searchQuery}
+                      />
                     </div>
                   </section>
                 ))}
@@ -609,6 +675,8 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
       release.searchText.includes(normalizedQuery),
     );
   }, [releases, searchQuery]);
+
+  const isSearching = searchQuery.trim().length > 0;
 
   useEffect(() => {
     if (!releases.length) {
@@ -715,14 +783,23 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
               />
             </label>
 
-            <button
-              type="button"
-              onClick={toggleFilteredReleases}
-              disabled={filteredReleases.length === 0}
-              className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium text-text-secondary transition-colors hover:border-accent-border hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {allFilteredExpanded ? "Collapse matches" : "Expand matches"}
-            </button>
+            {!isSearching && (
+              <button
+                type="button"
+                onClick={toggleFilteredReleases}
+                disabled={filteredReleases.length === 0}
+                aria-label={allFilteredExpanded ? "Collapse all visible releases" : "Expand all visible releases"}
+                title={allFilteredExpanded ? "Collapse all visible releases" : "Expand all visible releases"}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-surface text-text-secondary transition-colors hover:border-accent-border hover:bg-accent-subtle hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronsUpDown className="h-4 w-4" />
+                <span className="sr-only">
+                  {allFilteredExpanded
+                    ? "Collapse all visible releases"
+                    : "Expand all visible releases"}
+                </span>
+              </button>
+            )}
           </div>
 
           {status === "ready" && releases.length > 0 && currentRelease && (
@@ -774,8 +851,9 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
                   isCurrent={
                     normalizeVersion(release.version) === currentVersion
                   }
-                  isExpanded={Boolean(expanded[release.id])}
+                  isExpanded={isSearching || Boolean(expanded[release.id])}
                   onToggle={() => toggleRelease(release.id)}
+                  searchQuery={searchQuery}
                 />
               ))}
             </div>

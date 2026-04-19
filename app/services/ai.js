@@ -19,6 +19,7 @@ import {
   getActivePunJudgeDefinition,
   getJudgeSnapshot,
 } from "../lib/aiJudges.js";
+import { generateEmbedding, cosineSimilarity } from "./embeddings.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const DEFAULT_MODEL = "gemini-3.1-flash-lite-preview";
@@ -140,7 +141,88 @@ function scoreFallbackSimilarity(guess, target) {
   return Math.round((overlap.length / union.size) * 100);
 }
 
-export function buildBackwordsGuessFallback(
+const BACKWORDS_EMBEDDING_MATCH_THRESHOLD = 65;
+
+function pickBestMapping(topicA, focusB, topicB, focusA) {
+  const optionAB = {
+    topicGuessSlot: "guessA",
+    focusGuessSlot: "guessB",
+    topicSimilarity: topicA,
+    focusSimilarity: focusB,
+  };
+  const optionBA = {
+    topicGuessSlot: "guessB",
+    focusGuessSlot: "guessA",
+    topicSimilarity: topicB,
+    focusSimilarity: focusA,
+  };
+  return optionAB.topicSimilarity + optionAB.focusSimilarity >=
+    optionBA.topicSimilarity + optionBA.focusSimilarity
+    ? optionAB
+    : optionBA;
+}
+
+async function buildEmbeddingFallback(topic, focus, guessA, guessB, reasoning) {
+  const [topicVec, focusVec, guessAVec, guessBVec] = await Promise.all([
+    generateEmbedding(topic),
+    generateEmbedding(focus),
+    generateEmbedding(guessA),
+    generateEmbedding(guessB),
+  ]);
+
+  const toPct = (cos) => Math.max(0, Math.min(100, Math.round(cos * 100)));
+  const best = pickBestMapping(
+    toPct(cosineSimilarity(guessAVec, topicVec)),
+    toPct(cosineSimilarity(guessBVec, focusVec)),
+    toPct(cosineSimilarity(guessBVec, topicVec)),
+    toPct(cosineSimilarity(guessAVec, focusVec)),
+  );
+  const matched =
+    best.topicSimilarity >= BACKWORDS_EMBEDDING_MATCH_THRESHOLD &&
+    best.focusSimilarity >= BACKWORDS_EMBEDDING_MATCH_THRESHOLD;
+  const overallSimilarity = Math.round(
+    (best.topicSimilarity + best.focusSimilarity) / 2,
+  );
+  const feedback = matched
+    ? "The primary judge was unavailable; a semantic similarity check recognised both concepts."
+    : "The primary judge was unavailable; a semantic similarity check could not confirm both hidden concepts.";
+
+  return {
+    best,
+    matched,
+    overallSimilarity,
+    feedback,
+    reasoning: `${reasoning} Scored via local embedding fallback.`,
+    mode: "embedding",
+  };
+}
+
+function buildJaccardFallback(topic, focus, guessA, guessB, reasoning) {
+  const best = pickBestMapping(
+    scoreFallbackSimilarity(guessA, topic),
+    scoreFallbackSimilarity(guessB, focus),
+    scoreFallbackSimilarity(guessB, topic),
+    scoreFallbackSimilarity(guessA, focus),
+  );
+  const matched = best.topicSimilarity === 100 && best.focusSimilarity === 100;
+  const overallSimilarity = Math.round(
+    (best.topicSimilarity + best.focusSimilarity) / 2,
+  );
+  const feedback = matched
+    ? "Both the primary judge and the semantic fallback were unavailable, but the strict token check recognised both concepts as exact matches."
+    : "Both the primary judge and the semantic fallback were unavailable, so a strict token-based check was used and it did not fully match both hidden concepts.";
+
+  return {
+    best,
+    matched,
+    overallSimilarity,
+    feedback,
+    reasoning: `${reasoning} Scored via token-Jaccard tertiary fallback.`,
+    mode: "jaccard",
+  };
+}
+
+export async function buildBackwordsGuessFallback(
   topic,
   focus,
   guessA,
@@ -150,47 +232,43 @@ export function buildBackwordsGuessFallback(
   const judge = getActiveBackwordsJudgeDefinition();
   const judgeSnapshot = getJudgeSnapshot(judge);
 
-  const options = [
-    {
-      topicGuessSlot: "guessA",
-      focusGuessSlot: "guessB",
-      topicSimilarity: scoreFallbackSimilarity(guessA, topic),
-      focusSimilarity: scoreFallbackSimilarity(guessB, focus),
-    },
-    {
-      topicGuessSlot: "guessB",
-      focusGuessSlot: "guessA",
-      topicSimilarity: scoreFallbackSimilarity(guessB, topic),
-      focusSimilarity: scoreFallbackSimilarity(guessA, focus),
-    },
-  ];
-
-  const best = options.sort((left, right) => {
-    const leftTotal = left.topicSimilarity + left.focusSimilarity;
-    const rightTotal = right.topicSimilarity + right.focusSimilarity;
-    return rightTotal - leftTotal;
-  })[0];
-
-  const matched = best.topicSimilarity === 100 && best.focusSimilarity === 100;
-  const overallSimilarity = Math.round(
-    (best.topicSimilarity + best.focusSimilarity) / 2,
-  );
-  const feedback = matched
-    ? "The semantic judge dropped out, but the fallback check still recognised both concepts as exact matches."
-    : "The semantic judge dropped out, so this guess was checked with a stricter fallback and did not fully match both hidden concepts.";
+  let result;
+  try {
+    result = await buildEmbeddingFallback(
+      topic,
+      focus,
+      guessA,
+      guessB,
+      reasoning,
+    );
+  } catch (embedError) {
+    console.error(
+      "[Backwords] Embedding fallback failed, using Jaccard tertiary fallback",
+      {
+        errorName: embedError?.name,
+        errorMessage: embedError?.message,
+        topic,
+        focus,
+        guessA,
+        guessB,
+      },
+    );
+    result = buildJaccardFallback(topic, focus, guessA, guessB, reasoning);
+  }
 
   return {
-    reasoning,
-    matched,
-    overallSimilarity,
-    topicSimilarity: best.topicSimilarity,
-    focusSimilarity: best.focusSimilarity,
-    topicGuessSlot: best.topicGuessSlot,
-    focusGuessSlot: best.focusGuessSlot,
-    feedback,
+    reasoning: result.reasoning,
+    matched: result.matched,
+    overallSimilarity: result.overallSimilarity,
+    topicSimilarity: result.best.topicSimilarity,
+    focusSimilarity: result.best.focusSimilarity,
+    topicGuessSlot: result.best.topicGuessSlot,
+    focusGuessSlot: result.best.focusGuessSlot,
+    feedback: result.feedback,
     ...judgeSnapshot,
     status: "completed",
     errorMessage: reasoning,
+    fallbackMode: result.mode,
   };
 }
 
@@ -544,51 +622,79 @@ export async function generateClueCandidates(topic, focus, humanClues, count) {
   }
 }
 
+const BACKWORDS_RETRY_DELAYS_MS = [400, 1200];
+
 export async function judgeBackwordsGuess(topic, focus, guessA, guessB) {
   const judge = getActiveBackwordsJudgeDefinition();
   const judgeSnapshot = getJudgeSnapshot(judge);
+  const attempts = BACKWORDS_RETRY_DELAYS_MS.length + 1;
+  let lastError = null;
+  let lastRawResponse = null;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: judge.model,
-      systemInstruction: judge.systemPrompt,
-      contents: `Evaluate the following Backwords guess.
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: judge.model,
+        systemInstruction: judge.systemPrompt,
+        contents: `Evaluate the following Backwords guess.
 
       [TOPIC]: ${topic}
       [FOCUS]: ${focus}
       [GUESS_A]: """${guessA}"""
       [GUESS_B]: """${guessB}"""`,
-      config: {
-        temperature: judge.config.temperature,
-        thinkingConfig: {
-          thinkingLevel: judge.config.thinkingLevel,
+        config: {
+          temperature: judge.config.temperature,
+          thinkingConfig: {
+            thinkingLevel: judge.config.thinkingLevel,
+          },
+          responseMimeType: "application/json",
+          responseSchema: BACKWORDS_GUESS_RESPONSE_SCHEMA,
         },
-        responseMimeType: "application/json",
-        responseSchema: BACKWORDS_GUESS_RESPONSE_SCHEMA,
-      },
-    });
-
-    const parsed = JSON.parse(response.text);
-
-    return {
-      reasoning: parsed.reasoning,
-      matched: Boolean(parsed.matched),
-      overallSimilarity: clampPercentage(parsed.overallSimilarity),
-      topicSimilarity: clampPercentage(parsed.topicSimilarity),
-      focusSimilarity: clampPercentage(parsed.focusSimilarity),
-      topicGuessSlot: parsed.topicGuessSlot === "guessB" ? "guessB" : "guessA",
-      focusGuessSlot: parsed.focusGuessSlot === "guessA" ? "guessA" : "guessB",
-      feedback: parsed.feedback,
-      ...judgeSnapshot,
-    };
-  } catch (error) {
-    console.error("Backwords judging failed:", error);
-    return buildBackwordsGuessFallback(
-      topic,
-      focus,
-      guessA,
-      guessB,
-      "Backwords semantic adjudication failed due to an API error or timeout.",
-    );
+      });
+      lastRawResponse = response?.text ?? null;
+      const parsed = JSON.parse(lastRawResponse);
+      return {
+        reasoning: parsed.reasoning,
+        matched: Boolean(parsed.matched),
+        overallSimilarity: clampPercentage(parsed.overallSimilarity),
+        topicSimilarity: clampPercentage(parsed.topicSimilarity),
+        focusSimilarity: clampPercentage(parsed.focusSimilarity),
+        topicGuessSlot: parsed.topicGuessSlot === "guessB" ? "guessB" : "guessA",
+        focusGuessSlot: parsed.focusGuessSlot === "guessA" ? "guessA" : "guessB",
+        feedback: parsed.feedback,
+        ...judgeSnapshot,
+      };
+    } catch (error) {
+      lastError = error;
+      const delayMs = BACKWORDS_RETRY_DELAYS_MS[attempt];
+      if (delayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
   }
+
+  console.error("[Backwords] judgeBackwordsGuess failed after retries", {
+    errorName: lastError?.name,
+    errorMessage: lastError?.message,
+    errorStatus: lastError?.status ?? lastError?.code ?? null,
+    errorStack: lastError?.stack,
+    rawResponse: lastRawResponse,
+    attempts,
+    input: { topic, focus, guessA, guessB },
+    judge: {
+      key: judge.key,
+      version: judge.version,
+      model: judge.model,
+      promptHash: judge.promptHash,
+    },
+  });
+
+  return await buildBackwordsGuessFallback(
+    topic,
+    focus,
+    guessA,
+    guessB,
+    "Backwords semantic adjudication failed due to an API error or timeout.",
+  );
 }

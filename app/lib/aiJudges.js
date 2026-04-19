@@ -48,7 +48,7 @@ const CURRENT_BACKWORDS_JUDGE = createJudgeDefinition({
     responseSchemaVersion: "backwords-guess-v1",
   },
   status: "active",
-  isActive: false,
+  isActive: true,
 });
 
 const CURRENT_CLUE_GENERATOR_JUDGE = createJudgeDefinition({

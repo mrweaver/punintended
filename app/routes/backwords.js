@@ -105,11 +105,23 @@ function buildCreatorFallbackJudgement(feedback, reasoning) {
   };
 }
 
-function buildGuessFallbackJudgement(topic, focus, guessA, guessB, reasoning) {
+async function buildGuessFallbackJudgement(
+  topic,
+  focus,
+  guessA,
+  guessB,
+  reasoning,
+) {
   const judge = getActiveBackwordsJudgeDefinition();
 
   return {
-    ...buildBackwordsGuessFallback(topic, focus, guessA, guessB, reasoning),
+    ...(await buildBackwordsGuessFallback(
+      topic,
+      focus,
+      guessA,
+      guessB,
+      reasoning,
+    )),
     judgeKey: judge.key,
     judgeName: judge.name,
     judgeVersion: judge.version,
@@ -469,7 +481,7 @@ router.post(
         })
         .catch(async (err) => {
           console.error("Backwords guess judging failed:", err);
-          const fallback = buildGuessFallbackJudgement(
+          const fallback = await buildGuessFallbackJudgement(
             game.topic,
             game.focus,
             cleanGuessA,

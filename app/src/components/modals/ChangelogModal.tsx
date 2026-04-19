@@ -366,7 +366,10 @@ function highlightText(children: ReactNode, query: string): ReactNode {
       );
     }
 
-    if (isValidElement<{ children?: ReactNode }>(child) && child.props.children) {
+    if (
+      isValidElement<{ children?: ReactNode }>(child) &&
+      child.props.children
+    ) {
       return cloneElement(child, {
         children: highlightText(child.props.children, normalizedQuery),
       });
@@ -788,8 +791,16 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
                 type="button"
                 onClick={toggleFilteredReleases}
                 disabled={filteredReleases.length === 0}
-                aria-label={allFilteredExpanded ? "Collapse all visible releases" : "Expand all visible releases"}
-                title={allFilteredExpanded ? "Collapse all visible releases" : "Expand all visible releases"}
+                aria-label={
+                  allFilteredExpanded
+                    ? "Collapse all visible releases"
+                    : "Expand all visible releases"
+                }
+                title={
+                  allFilteredExpanded
+                    ? "Collapse all visible releases"
+                    : "Expand all visible releases"
+                }
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-surface text-text-secondary transition-colors hover:border-accent-border hover:bg-accent-subtle hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronsUpDown className="h-4 w-4" />

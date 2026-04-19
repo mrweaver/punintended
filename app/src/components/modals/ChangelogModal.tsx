@@ -671,13 +671,7 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
           <X className="h-4 w-4" />
         </button>
 
-        <div
-          className="shrink-0 border-b border-border px-6 pb-5 pt-6"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, var(--color-accent-subtle) 0%, transparent 72%)",
-          }}
-        >
+        <div className="shrink-0 border-b border-border px-6 pb-5 pt-6">
           <div className="pr-12">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
               Release Notes
@@ -685,13 +679,13 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
             <h3 className="mt-2 text-3xl font-serif italic text-foreground">
               What&apos;s New
             </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+            <p className="mt-2 hidden max-w-2xl text-sm leading-6 text-text-secondary sm:block">
               Search PunIntended&apos;s release history, compare feature drops
               and fixes, and jump straight to the current build notes.
             </p>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 hidden gap-3 sm:grid sm:grid-cols-3">
             <SummaryChip
               icon={Sparkles}
               label="Current Build"

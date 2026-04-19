@@ -4,6 +4,21 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.28.0] - 2026-04-19
+
+### Added
+
+- **Searchable Changelog Browser:** Added a redesigned changelog modal with release summaries, section badges, note counts, and search across release history.
+
+### Changed
+
+- **Structured Release Notes Rendering:** Reworked changelog parsing so release sections display as richer grouped notes instead of a single markdown block.
+- **Release Workflow Handoff:** Split the backup flow so release notes are now drafted through a dedicated changelog command before the final release commit and tag are created.
+
+### Fixed
+
+- **Duplicate Release History Entry:** Removed the duplicated `1.17.0` changelog block so release history indexes and displays consistently.
+
 ## [1.27.0] - 2026-04-19
 
 ### Added

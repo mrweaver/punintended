@@ -4,6 +4,12 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.27.0] - 2026-04-19
+
+### Added
+
+- **AI-Assisted Backwords Clue Crafting:** Added AI clue generation for creators, drag-and-drop clue curation and ranking, stored clue source metadata, and progressive clue reveals for guessers.
+
 ## [1.26.0] - 2026-04-18
 
 ### Changed

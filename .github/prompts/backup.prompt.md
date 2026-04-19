@@ -1,6 +1,6 @@
 ---
 name: "PunIntended Backup"
-description: "Feature-aware backup for PunIntended: group local changes, confirm commit plan, version if needed, and push safely. Use when: running the PunIntended backup workflow."
+description: "Feature-aware backup for PunIntended: group local changes, confirm commit plan, version if needed, hand off release notes to the changelog workflow, and push safely. Use when: running the PunIntended backup workflow."
 argument-hint: "patch | minor | major | auto"
 agent: "agent"
 ---
@@ -24,7 +24,7 @@ Phase 2: Atomic Commits
 10. When all groups are committed, run `git status` and verify that no intended changes remain uncommitted.
 11. If leftover tracked changes remain, propose one final `chore:` commit for them before moving on.
 
-Phase 3: Smart Versioning and Changelog
+Phase 3: Smart Versioning and Changelog Handoff
 
 12. Determine the highest required release bump from the commits created in Phase 2:
 
@@ -33,12 +33,13 @@ Phase 3: Smart Versioning and Changelog
 - otherwise skip versioning
 - if the user supplied an override argument, use that instead
 
-13. For a patch or minor bump:
+13. For a patch, minor, or major bump:
 
 - update only `app/package.json`
-- add a new top-level dated entry to `CHANGELOG.md` in descending version order
-- summarize each feature commit as a bullet in the changelog
-- commit the version files as `chore(release): vX.Y.Z`
+- stop and tell the user: `Atomic commits are complete. Please run /changelog now to draft the release notes and sync the generated public changelog copy. Once that's done, tell me and I'll finish the release commit and tag.`
+- wait for the user's confirmation that the changelog workflow finished
+- stage `app/package.json` and `CHANGELOG.md`
+- commit the release files as `chore(release): vX.Y.Z`
 - create the matching git tag `vX.Y.Z`
 
 Phase 4: Push

@@ -1,6 +1,6 @@
 ---
 name: backup
-description: Feature-aware backup for PunIntended. Groups uncommitted changes by logical feature, creates one atomic commit per feature, bumps version in app/package.json and CHANGELOG.md, then pushes to origin.
+description: Feature-aware backup for PunIntended. Groups uncommitted changes by logical feature, creates one atomic commit per feature, bumps the app version when needed, hands changelog work off to /changelog, then pushes to origin.
 disable-model-invocation: true
 allowed-tools: Bash(git *), Bash(docker *), Read, Edit
 ---
@@ -27,18 +27,19 @@ Execute a feature-aware backup cycle for PunIntended. Bump type from $ARGUMENTS 
    d. Report the commit hash and message.
 5. After all groups are committed, run `git status` to verify no uncommitted changes remain (ignoring `.env`). If stragglers exist, propose one final `chore:` commit for them.
 
-## Phase 3: Smart Versioning & Changelog
+## Phase 3: Smart Versioning & Changelog Handoff
 6. Review ALL commits created in Phase 2 to determine the highest-priority bump:
    - If ANY commit is `feat:` → bump MINOR.
    - Else if ANY commit is `fix:` → bump PATCH.
    - Else (all `chore:`/`refactor:`) → skip versioning, go to Phase 4.
    - The user's $ARGUMENTS override auto-detection if provided.
-7. For MINOR or PATCH bumps:
+7. For PATCH, MINOR, or MAJOR bumps:
    a. Bump `version` in `app/package.json` only (there is no separate `api/package.json` in this project).
-   b. Add a `## [X.Y.Z] - YYYY-MM-DD` entry in correct descending version order to `CHANGELOG.md` at the repo root, with `- change` bullets summarising EACH feature commit.
-   c. Run `git add app/package.json CHANGELOG.md`.
-   d. Run `git commit -m "chore(release): vX.Y.Z"`.
-   e. Run `git tag vX.Y.Z`.
+   b. **STOP.** Instruct the user: `Atomic commits are complete. Please run the /changelog command now to draft the release notes and sync the generated public changelog copy. Once that's done, tell me and I'll finalise the release commit and tag.`
+   c. Wait for the user's confirmation that the changelog workflow has completed.
+   d. Run `git add app/package.json CHANGELOG.md`.
+   e. Run `git commit -m "chore(release): vX.Y.Z"`.
+   f. Run `git tag vX.Y.Z`.
 
 ## Phase 4: Push
 8. Run `git push origin HEAD`.

@@ -4,6 +4,17 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.28.1] - 2026-04-19
+
+### Changed
+
+- **Changelog Modal Search UX:** The changelog modal now highlights matching search terms inside release notes, surfaces filtered entries automatically, and trims the header layout for smaller screens.
+- **Changelog Modal Header Controls:** Replaced the full-width expand control with a compact icon action and kept it out of the way while search is active.
+
+### Fixed
+
+- **Filtered Release Expansion:** Search results now stay expanded while filtering so matching release text is immediately visible instead of remaining hidden inside collapsed entries.
+
 ## [1.28.0] - 2026-04-19
 
 ### Added

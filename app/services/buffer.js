@@ -16,9 +16,9 @@ import {
   updateChallengeEmbedding,
 } from "../db/database.js";
 import { generateChallengeBatch } from "./ai.js";
+import { generateEmbedding } from "./embeddings.js";
 
 // --- Configuration ---
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://ollama:11434";
 const RERANKER_URL = process.env.RERANKER_URL || "http://reranker:7997";
 const SANITY_CEILING = parseFloat(process.env.SANITY_CEILING || "0.95");
 const BUFFER_MIN = parseInt(process.env.BUFFER_MIN_SIZE || "5", 10);
@@ -40,23 +40,6 @@ function challengeToText(topic, focus) {
  */
 function toVectorString(embedding) {
   return `[${embedding.join(",")}]`;
-}
-
-/**
- * Generate a 1024-dim embedding via Ollama (qwen3-embedding:0.6b).
- */
-async function generateEmbedding(text) {
-  const res = await fetch(`${OLLAMA_URL}/api/embed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "qwen3-embedding:0.6b", input: text }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Ollama embedding failed (${res.status}): ${body}`);
-  }
-  const data = await res.json();
-  return data.embeddings[0];
 }
 
 /**
@@ -281,7 +264,7 @@ export function startBufferMonitor() {
     `[Buffer] Monitor started (interval: ${REFILL_INTERVAL_MS / 3600000}h, min: ${BUFFER_MIN}, target: ${BUFFER_TARGET}, ceiling: ${SANITY_CEILING})`,
   );
   console.log(
-    `[Buffer] Ollama: ${OLLAMA_URL}, Reranker: ${RERANKER_URL} (${RERANKER_ENABLED ? "enabled" : "disabled"})`,
+    `[Buffer] Reranker: ${RERANKER_URL} (${RERANKER_ENABLED ? "enabled" : "disabled"})`,
   );
   setInterval(() => maybeRefillBuffer(), REFILL_INTERVAL_MS);
 }

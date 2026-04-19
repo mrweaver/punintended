@@ -15,6 +15,7 @@ import {
 } from "../db/database.js";
 import {
   getActiveBackwordsJudgeDefinition,
+  getActiveClueGeneratorJudgeDefinition,
   getActivePunJudgeDefinition,
   getJudgeSnapshot,
 } from "../lib/aiJudges.js";
@@ -429,6 +430,118 @@ export async function generateBackwordsAssignment(pastChallenges = []) {
   });
 
   return JSON.parse(response.text);
+}
+
+function normalizeClueText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function escapeRegExpToken(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsTargetLeak(clueText, targets) {
+  const normalizedClue = normalizeClueText(clueText);
+  if (!normalizedClue) return false;
+
+  for (const target of targets) {
+    const normalizedTarget = normalizeClueText(target);
+    if (!normalizedTarget) continue;
+    if (normalizedClue.includes(normalizedTarget)) return true;
+
+    const tokens = normalizedTarget.split(" ").filter((t) => t.length > 3);
+    for (const token of tokens) {
+      const pattern = new RegExp(`\\b${escapeRegExpToken(token)}\\b`, "i");
+      if (pattern.test(normalizedClue)) return true;
+    }
+  }
+
+  return false;
+}
+
+async function runClueGeneration(topic, focus, humanClues, count) {
+  const judge = getActiveClueGeneratorJudgeDefinition();
+  const humanBlock = humanClues.length
+    ? humanClues.map((clue, i) => `${i + 1}. ${clue}`).join("\n")
+    : "(none)";
+
+  const response = await ai.models.generateContent({
+    model: judge.model,
+    systemInstruction: judge.systemPrompt,
+    contents: `Generate exactly ${count} additional pun clues for this Backwords puzzle.
+
+    [TOPIC]: ${topic}
+    [FOCUS]: ${focus}
+    [EXISTING_HUMAN_PUNS]:
+    ${humanBlock}`,
+    config: {
+      temperature: judge.config.temperature,
+      thinkingConfig: {
+        thinkingLevel: judge.config.thinkingLevel,
+      },
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          puns: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+        },
+        required: ["puns"],
+      },
+    },
+  });
+
+  const parsed = JSON.parse(response.text);
+  return Array.isArray(parsed.puns) ? parsed.puns : [];
+}
+
+export async function generateClueCandidates(topic, focus, humanClues, count) {
+  if (count <= 0) return [];
+
+  const targets = [topic, focus];
+  const humanNormalized = new Set(
+    humanClues.map((clue) => normalizeClueText(clue)).filter(Boolean),
+  );
+
+  const filterCandidates = (raw) => {
+    const out = [];
+    const seen = new Set(humanNormalized);
+    for (const item of raw) {
+      const text = typeof item === "string" ? item.trim() : "";
+      if (!text || text.length > 500) continue;
+      const normalized = normalizeClueText(text);
+      if (!normalized || seen.has(normalized)) continue;
+      if (containsTargetLeak(text, targets)) continue;
+      seen.add(normalized);
+      out.push(text);
+      if (out.length === count) break;
+    }
+    return out;
+  };
+
+  try {
+    const firstPass = await runClueGeneration(topic, focus, humanClues, count);
+    let filtered = filterCandidates(firstPass);
+    if (filtered.length < count) {
+      const needed = count - filtered.length;
+      const secondPass = await runClueGeneration(
+        topic,
+        focus,
+        [...humanClues, ...filtered],
+        needed,
+      );
+      filtered = [...filtered, ...filterCandidates(secondPass)].slice(0, count);
+    }
+    return filtered;
+  } catch (error) {
+    console.error("Clue generation failed:", error);
+    return [];
+  }
 }
 
 export async function judgeBackwordsGuess(topic, focus, guessA, guessB) {

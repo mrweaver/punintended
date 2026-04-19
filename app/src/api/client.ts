@@ -320,8 +320,11 @@ export const gauntletApi = {
     ),
 };
 
+export type BackwordsClueSource = "human" | "ai";
+
 export interface BackwordsClue {
   pun_text: string;
+  source?: BackwordsClueSource;
   ai_score: number | null;
   ai_feedback: string | null;
   ai_judge_key: string | null;
@@ -330,6 +333,11 @@ export interface BackwordsClue {
   ai_judge_model: string | null;
   ai_judged_at: string | null;
   clue_score: number | null;
+}
+
+export interface BackwordsPublishClue {
+  pun_text: string;
+  source: BackwordsClueSource;
 }
 
 export interface BackwordsAttempt {
@@ -442,11 +450,19 @@ export const backwordsApi = {
     }),
   start: (gameId: string) =>
     request<BackwordsStartResponse>(`/api/backwords/${gameId}`),
-  publish: (gameId: string, clues: string[]) =>
+  publish: (gameId: string, clues: BackwordsPublishClue[]) =>
     request<BackwordsStartResponse>(`/api/backwords/${gameId}/publish`, {
       method: "POST",
       body: JSON.stringify({ clues }),
     }),
+  generateClues: (gameId: string, humanClues: string[]) =>
+    request<{ generated: Array<{ text: string }> }>(
+      `/api/backwords/${gameId}/generate-clues`,
+      {
+        method: "POST",
+        body: JSON.stringify({ humanClues }),
+      },
+    ),
   submitGuess: (
     gameId: string,
     runId: string,

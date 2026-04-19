@@ -3,6 +3,7 @@ import { createSSE } from "../api/sse";
 import {
   backwordsApi,
   type BackwordsGame,
+  type BackwordsPublishClue,
   type BackwordsRun,
   type BackwordsStartResponse,
 } from "../api/client";
@@ -210,7 +211,7 @@ export function useBackwords(initialGameId?: string) {
   }, [hydrateState]);
 
   const publishClues = useCallback(
-    async (clues: string[]) => {
+    async (clues: BackwordsPublishClue[]) => {
       if (state.role !== "creator" || !state.game) return;
 
       setState((prev) => ({ ...prev, submitting: true, error: null }));
@@ -230,6 +231,18 @@ export function useBackwords(initialGameId?: string) {
       }
     },
     [hydrateState, state.game, state.role],
+  );
+
+  const generateClues = useCallback(
+    async (humanClues: string[]) => {
+      if (state.role !== "creator" || !state.game) return [] as string[];
+      const response = await backwordsApi.generateClues(
+        state.game.id,
+        humanClues,
+      );
+      return response.generated.map((item) => item.text);
+    },
+    [state.game, state.role],
   );
 
   const submitGuess = useCallback(
@@ -277,6 +290,7 @@ export function useBackwords(initialGameId?: string) {
     startBackwords,
     openBackwords,
     publishClues,
+    generateClues,
     submitGuess,
     reset,
   };

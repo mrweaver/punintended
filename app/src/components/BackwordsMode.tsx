@@ -6,17 +6,41 @@ import {
   Brain,
   CheckCircle2,
   EyeOff,
+  GripVertical,
+  Lock,
   LogOut,
+  Plus,
+  RefreshCcw,
   RotateCcw,
   Search,
   Share2,
   Sparkles,
   Target,
+  Trash2,
+  Wand2,
   XCircle,
 } from "lucide-react";
 import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   type BackwordsAttempt,
+  type BackwordsClueSource,
   type BackwordsGame,
+  type BackwordsPublishClue,
   type BackwordsRun,
 } from "../api/client";
 import { useBackwords } from "../hooks/useBackwords";
@@ -52,6 +76,25 @@ function extractMeaningfulTokens(value: string) {
     .filter((token) => token.length > 3);
 }
 
+interface CraftCard {
+  id: string;
+  text: string;
+  source: BackwordsClueSource;
+}
+
+function createCardId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function triggerHaptic(durationMs: number) {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    navigator.vibrate?.(durationMs);
+  }
+}
+
 function findTargetLeak(clue: string, targets: string[]) {
   const normalizedClue = normalizePhrase(clue);
   if (!normalizedClue) return null;
@@ -73,6 +116,133 @@ function findTargetLeak(clue: string, targets: string[]) {
   }
 
   return null;
+}
+
+function CurateSlots({
+  slots,
+  onDragEnd,
+  onDragStart,
+}: {
+  slots: CraftCard[];
+  onDragEnd: (event: DragEndEvent) => void;
+  onDragStart: () => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 5 },
+    }),
+  );
+
+  const activeSlots = slots.slice(0, 3);
+  const discardSlots = slots.slice(3);
+
+  return (
+    <DndContext
+      sensors={sensors}
+      modifiers={[restrictToVerticalAxis]}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
+      <SortableContext
+        items={slots.map((card) => card.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-orange-500 dark:text-violet-400">
+            Active Clues · Vague → Obvious
+          </p>
+          {activeSlots.map((card, index) => (
+            <SortableClueCard key={card.id} card={card} index={index} />
+          ))}
+        </div>
+
+        {discardSlots.length > 0 && (
+          <div className="mt-6 space-y-2 border-t-2 border-dashed border-zinc-200 pt-4 dark:border-zinc-700">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-gray-400 dark:text-zinc-500">
+              Discard Pile
+            </p>
+            {discardSlots.map((card, index) => (
+              <SortableClueCard
+                key={card.id}
+                card={card}
+                index={index + 3}
+              />
+            ))}
+          </div>
+        )}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableClueCard({
+  card,
+  index,
+}: {
+  card: CraftCard;
+  index: number;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: card.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const isActive = index < 3;
+  const activeLabels = ["Vague", "Moderate", "Obvious"];
+  const positionLabel = isActive ? activeLabels[index] : "Discard";
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-start gap-3 rounded-2xl border p-4 transition-shadow ${
+        isDragging
+          ? "shadow-lg z-10"
+          : "shadow-sm"
+      } ${
+        isActive
+          ? "border-orange-200 bg-white dark:border-violet-900/50 dark:bg-zinc-900"
+          : "border-zinc-200 bg-zinc-50 opacity-80 dark:border-zinc-800 dark:bg-zinc-950"
+      }`}
+    >
+      <button
+        type="button"
+        aria-label="Reorder clue"
+        className="flex h-10 w-8 shrink-0 touch-none items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-5 w-5" />
+      </button>
+      <div className="flex-1 space-y-1">
+        <div className="flex items-center gap-2">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-gray-400 dark:text-zinc-500">
+            {positionLabel}
+          </p>
+          {card.source === "ai" && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
+              <Sparkles className="h-3 w-3" /> AI
+            </span>
+          )}
+        </div>
+        <p className="font-serif italic text-zinc-800 dark:text-zinc-200">
+          {card.text}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function AttemptBreakdown({
@@ -347,6 +517,7 @@ export function BackwordsMode({
     error,
     startBackwords,
     publishClues,
+    generateClues,
     submitGuess,
     reset,
   } = useBackwords(initialBackwordsId);
@@ -358,22 +529,27 @@ export function BackwordsMode({
     string | null
   >(initialHighlightedRunId ?? null);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [clues, setClues] = useState(["", "", ""]);
+  const [staging, setStaging] = useState<CraftCard[]>([]);
+  const [draft, setDraft] = useState("");
+  const [craftStep, setCraftStep] = useState<"input" | "curate">("input");
+  const [slots, setSlots] = useState<CraftCard[]>([]);
+  const [generating, setGenerating] = useState(false);
   const [guessA, setGuessA] = useState("");
   const [guessB, setGuessB] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const clueRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
+  const draftInputRef = useRef<HTMLInputElement>(null);
   const guessARef = useRef<HTMLInputElement>(null);
-  const shouldAutoFocusClueRef = useRef(false);
 
   useEffect(() => {
-    if (role === "creator" && phase === "crafting") {
-      const nextClues = game?.clues?.map((clue) => clue.pun_text) ?? [];
-      shouldAutoFocusClueRef.current = true;
-      setClues([nextClues[0] ?? "", nextClues[1] ?? "", nextClues[2] ?? ""]);
+    if (role === "creator" && phase === "crafting" && game?.id) {
+      setStaging([]);
+      setDraft("");
+      setSlots([]);
+      setCraftStep("input");
+      setGenerating(false);
       setLocalError(null);
     }
-  }, [game?.id, game?.clues, phase, role]);
+  }, [game?.id, phase, role]);
 
   useEffect(() => {
     if (role === "guesser" && phase === "guessing") {
@@ -384,14 +560,9 @@ export function BackwordsMode({
   }, [phase, role, run?.attemptsUsed]);
 
   useEffect(() => {
-    if (phase !== "crafting" || !shouldAutoFocusClueRef.current) return;
-
-    const firstEmptyIndex = clues.findIndex((clue) => !clue.trim());
-    const targetIndex = firstEmptyIndex === -1 ? 0 : firstEmptyIndex;
-
-    clueRefs.current[targetIndex]?.focus();
-    shouldAutoFocusClueRef.current = false;
-  }, [clues, phase]);
+    if (phase !== "crafting" || craftStep !== "input") return;
+    draftInputRef.current?.focus();
+  }, [phase, craftStep, staging.length]);
 
   useEffect(() => {
     if (phase === "guessing") {
@@ -431,22 +602,138 @@ export function BackwordsMode({
     onExit();
   }
 
+  function handleAddStaging() {
+    const text = draft.trim();
+    if (!text) return;
+    if (staging.length >= 5) return;
+    if (text.length > 500) {
+      setLocalError("Clues must be 500 characters or fewer.");
+      return;
+    }
+    if (game?.topic && game.focus) {
+      const leak = findTargetLeak(text, [game.topic, game.focus]);
+      if (leak) {
+        setLocalError(
+          `Clues cannot include the hidden answer terms. Remove '${leak}'.`,
+        );
+        return;
+      }
+    }
+    const normalized = normalizePhrase(text);
+    if (
+      staging.some((card) => normalizePhrase(card.text) === normalized)
+    ) {
+      setLocalError("You've already staged that pun.");
+      return;
+    }
+    setLocalError(null);
+    setStaging((prev) => [
+      ...prev,
+      { id: createCardId(), text, source: "human" },
+    ]);
+    setDraft("");
+  }
+
+  function handleRemoveStaging(id: string) {
+    setStaging((prev) => prev.filter((card) => card.id !== id));
+  }
+
+  async function handleGenerateOptions() {
+    if (!game || generating) return;
+    setLocalError(null);
+    setGenerating(true);
+
+    const humanCards = staging.filter((card) => card.source === "human");
+    try {
+      const humanTexts = humanCards.map((card) => card.text);
+      const generatedTexts =
+        humanCards.length >= 5 ? [] : await generateClues(humanTexts);
+      const aiCards: CraftCard[] = generatedTexts.map((text) => ({
+        id: createCardId(),
+        text,
+        source: "ai",
+      }));
+      const combined = [...humanCards, ...aiCards].slice(0, 5);
+      setSlots(combined);
+      setStaging(combined);
+      setCraftStep("curate");
+    } catch (err) {
+      setLocalError(
+        err instanceof Error ? err.message : "Failed to generate clue options.",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleRerollAi() {
+    if (!game || generating) return;
+    const humanCards = slots.filter((card) => card.source === "human");
+    if (humanCards.length >= 5) return;
+    setLocalError(null);
+    setGenerating(true);
+    try {
+      const humanTexts = humanCards.map((card) => card.text);
+      const generatedTexts = await generateClues(humanTexts);
+      const aiCards: CraftCard[] = generatedTexts.map((text) => ({
+        id: createCardId(),
+        text,
+        source: "ai",
+      }));
+      const humansInOrder = slots.filter((card) => card.source === "human");
+      const combined = [...humansInOrder, ...aiCards].slice(0, 5);
+      setSlots(combined);
+      setStaging(combined);
+    } catch (err) {
+      setLocalError(
+        err instanceof Error ? err.message : "Failed to regenerate clues.",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function handleBackToInput() {
+    const humanCards = slots.filter((card) => card.source === "human");
+    setStaging(humanCards);
+    setSlots([]);
+    setCraftStep("input");
+    setLocalError(null);
+  }
+
+  function handleSlotDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    triggerHaptic(25);
+    if (!over || active.id === over.id) return;
+    setSlots((prev) => {
+      const oldIndex = prev.findIndex((card) => card.id === active.id);
+      const newIndex = prev.findIndex((card) => card.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
   function handlePublish() {
     if (!game?.topic || !game.focus) return;
-
-    const cleanedClues = clues.map((clue) => clue.trim());
-    if (cleanedClues.some((clue) => !clue)) {
-      setLocalError("Write all three clue puns before publishing.");
+    if (slots.length < 3) {
+      setLocalError("Select three clues before publishing.");
       return;
     }
 
-    if (new Set(cleanedClues.map(normalizePhrase)).size !== 3) {
+    const active = slots.slice(0, 3);
+    if (active.some((card) => !card.text.trim())) {
+      setLocalError("Each active clue must have text.");
+      return;
+    }
+
+    const normalized = active.map((card) => normalizePhrase(card.text));
+    if (new Set(normalized).size !== 3) {
       setLocalError("Each clue pun must be distinct.");
       return;
     }
 
-    for (const clue of cleanedClues) {
-      const leak = findTargetLeak(clue, [game.topic, game.focus]);
+    for (const card of active) {
+      const leak = findTargetLeak(card.text, [game.topic, game.focus]);
       if (leak) {
         setLocalError(
           `Clues cannot include the hidden answer terms. Remove '${leak}'.`,
@@ -456,7 +743,11 @@ export function BackwordsMode({
     }
 
     setLocalError(null);
-    publishClues(cleanedClues);
+    const payload: BackwordsPublishClue[] = active.map((card) => ({
+      pun_text: card.text.trim(),
+      source: card.source,
+    }));
+    publishClues(payload);
   }
 
   function handleGuessSubmit() {
@@ -640,58 +931,146 @@ export function BackwordsMode({
               </div>
             </div>
 
-            <Card className="space-y-4 border-2 border-orange-100 dark:border-violet-900/50">
-              <div className="space-y-1">
-                <p className="font-mono text-xs uppercase tracking-widest text-gray-400 dark:text-zinc-500">
-                  Craft Three Clues
-                </p>
-                <p className="text-sm text-gray-500 dark:text-zinc-400">
-                  Each clue must bridge both concepts without explicitly saying
-                  the hidden answer words.
-                </p>
-              </div>
-
-              {clues.map((clue, index) => (
-                <div key={index} className="space-y-2">
-                  <label className="font-mono text-xs uppercase tracking-widest text-gray-400 dark:text-zinc-500">
-                    Clue {index + 1}
-                  </label>
-                  <textarea
-                    ref={(element) => {
-                      clueRefs.current[index] = element;
-                    }}
-                    value={clue}
-                    onChange={(event) => {
-                      const next = [...clues];
-                      next[index] = event.target.value;
-                      setClues(next);
-                    }}
-                    maxLength={500}
-                    placeholder="Write a clue pun..."
-                    className="min-h-[96px] w-full resize-none rounded-xl border-none bg-gray-50 p-4 font-serif text-lg italic text-gray-900 focus:ring-2 focus:ring-orange-500 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:ring-violet-500"
-                  />
+            {craftStep === "input" && (
+              <Card className="space-y-4 border-2 border-orange-100 dark:border-violet-900/50">
+                <div className="space-y-1">
+                  <p className="font-mono text-xs uppercase tracking-widest text-gray-400 dark:text-zinc-500">
+                    Write Your Puns
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-zinc-400">
+                    Add as many as you like (1–5). The AI will fill the rest.
+                    Each must bridge both concepts without saying the hidden
+                    answer words.
+                  </p>
                 </div>
-              ))}
 
-              {(localError || error) && (
-                <p className="text-sm text-red-500">{localError ?? error}</p>
-              )}
+                {staging.length < 5 && (
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      ref={draftInputRef}
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleAddStaging();
+                        }
+                      }}
+                      maxLength={500}
+                      placeholder="Write a clue pun..."
+                      className="flex-1 rounded-xl border-none bg-gray-50 p-4 font-serif text-lg italic text-gray-900 focus:ring-2 focus:ring-orange-500 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:ring-violet-500"
+                    />
+                    <Button
+                      onClick={handleAddStaging}
+                      variant="secondary"
+                      disabled={!draft.trim()}
+                    >
+                      <Plus className="h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-                <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-zinc-500">
-                  <EyeOff className="h-3.5 w-3.5" />
-                  Don’t say the hidden words directly.
+                {staging.length > 0 && (
+                  <div className="space-y-2">
+                    {staging.map((card) => (
+                      <div
+                        key={card.id}
+                        className="flex items-start gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-950"
+                      >
+                        <p className="flex-1 font-serif italic text-zinc-800 dark:text-zinc-200">
+                          {card.text}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStaging(card.id)}
+                          className="shrink-0 rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                          aria-label="Remove pun"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(localError || error) && (
+                  <p className="text-sm text-red-500">{localError ?? error}</p>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+                  <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-zinc-500">
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Don't say the hidden words directly.
+                  </div>
+                  <div className="flex gap-3">
+                    <Button variant="ghost" onClick={handleExit}>
+                      Back
+                    </Button>
+                    <Button
+                      onClick={handleGenerateOptions}
+                      loading={generating}
+                      disabled={staging.length === 0}
+                    >
+                      <Wand2 className="h-4 w-4" />
+                      {staging.length >= 5 ? "Proceed" : "Generate Options"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  <Button variant="ghost" onClick={handleExit}>
+              </Card>
+            )}
+
+            {craftStep === "curate" && (
+              <Card className="space-y-4 border-2 border-orange-100 dark:border-violet-900/50">
+                <div className="space-y-1">
+                  <p className="font-mono text-xs uppercase tracking-widest text-gray-400 dark:text-zinc-500">
+                    Rank Your Clues
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-zinc-400">
+                    Drag to reorder. The top three become your puzzle, revealed
+                    to the guesser in order — vague first, obvious last.
+                  </p>
+                </div>
+
+                <CurateSlots
+                  slots={slots}
+                  onDragEnd={handleSlotDragEnd}
+                  onDragStart={() => triggerHaptic(15)}
+                />
+
+                {(localError || error) && (
+                  <p className="text-sm text-red-500">{localError ?? error}</p>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+                  <Button
+                    variant="ghost"
+                    onClick={handleBackToInput}
+                    disabled={submitting || generating}
+                  >
                     Back
                   </Button>
-                  <Button onClick={handlePublish} loading={submitting}>
-                    Publish Puzzle <ArrowRight className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-3">
+                    {slots.some((card) => card.source === "ai") && (
+                      <Button
+                        variant="outline"
+                        onClick={handleRerollAi}
+                        loading={generating}
+                        disabled={submitting}
+                      >
+                        <RefreshCcw className="h-4 w-4" /> Reroll AI
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handlePublish}
+                      loading={submitting}
+                      disabled={generating}
+                    >
+                      Publish Puzzle <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
           </motion.div>
         )}
 
@@ -777,19 +1156,39 @@ export function BackwordsMode({
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
-                {game.clues.map((clue, index) => (
-                  <div
-                    key={`${clue.pun_text}-${index}`}
-                    className="rounded-2xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950"
-                  >
-                    <p className="font-mono text-[11px] uppercase tracking-widest text-orange-500 dark:text-violet-400">
-                      Clue {index + 1}
-                    </p>
-                    <p className="mt-2 font-serif italic text-zinc-800 dark:text-zinc-200">
-                      “{clue.pun_text}”
-                    </p>
-                  </div>
-                ))}
+                {game.clues.map((clue, index) => {
+                  const hasSourceMetadata = game.clues.some(
+                    (c) => c.source !== undefined,
+                  );
+                  const revealedCount = hasSourceMetadata
+                    ? Math.min(game.clues.length, run.attemptsUsed + 1)
+                    : game.clues.length;
+                  const revealed = index < revealedCount;
+                  return (
+                    <div
+                      key={`${clue.pun_text}-${index}`}
+                      className={`rounded-2xl border p-4 ${
+                        revealed
+                          ? "border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+                          : "border-dashed border-zinc-200 bg-white/40 dark:border-zinc-800 dark:bg-zinc-900/40"
+                      }`}
+                    >
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-orange-500 dark:text-violet-400">
+                        Clue {index + 1}
+                      </p>
+                      {revealed ? (
+                        <p className="mt-2 font-serif italic text-zinc-800 dark:text-zinc-200">
+                          “{clue.pun_text}”
+                        </p>
+                      ) : (
+                        <p className="mt-2 flex items-center gap-1.5 text-sm italic text-gray-400 dark:text-zinc-500">
+                          <Lock className="h-3.5 w-3.5" />
+                          Unlocks after your next guess
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </Card>
 

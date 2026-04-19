@@ -21,6 +21,7 @@ import {
 import {
   buildBackwordsGuessFallback,
   generateBackwordsAssignment,
+  generateClueCandidates,
   judgeBackwordsGuess,
   scorePunText,
 } from "../services/ai.js";
@@ -186,28 +187,107 @@ router.get("/api/backwords/:id", ensureAuthenticated, async (req, res) => {
   }
 });
 
+const GENERATE_CLUES_RATE_LIMIT = 10;
+const GENERATE_CLUES_WINDOW_MS = 60_000;
+const generateClueRequestLog = new Map();
+
+function hitClueGenerationRateLimit(gameId) {
+  const now = Date.now();
+  const entries = (generateClueRequestLog.get(gameId) ?? []).filter(
+    (t) => now - t < GENERATE_CLUES_WINDOW_MS,
+  );
+  if (entries.length >= GENERATE_CLUES_RATE_LIMIT) {
+    generateClueRequestLog.set(gameId, entries);
+    return true;
+  }
+  entries.push(now);
+  generateClueRequestLog.set(gameId, entries);
+  return false;
+}
+
 router.post(
-  "/api/backwords/:id/publish",
+  "/api/backwords/:id/generate-clues",
   ensureAuthenticated,
   async (req, res) => {
-    const rawClues = Array.isArray(req.body?.clues) ? req.body.clues : [];
-    const clues = rawClues.map((value) =>
-      typeof value === "string" ? value.trim() : "",
-    );
+    const rawHuman = Array.isArray(req.body?.humanClues)
+      ? req.body.humanClues
+      : [];
+    const humanClues = rawHuman
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter(Boolean)
+      .slice(0, 5);
 
-    if (clues.length !== 3 || clues.some((clue) => !clue)) {
-      return res.status(400).json({
-        error: "Backwords requires exactly three clue puns.",
-      });
-    }
-
-    if (clues.some((clue) => clue.length > 500)) {
+    if (humanClues.some((c) => c.length > 500)) {
       return res
         .status(400)
         .json({ error: "Clues must be 500 characters or fewer." });
     }
 
-    const normalizedClues = clues.map(normalizePhrase);
+    try {
+      const game = await getBackwordsGameById(req.params.id);
+      if (!game || game.creatorId !== req.user.id) {
+        return res.status(404).json({ error: "Backwords puzzle not found" });
+      }
+
+      if (game.status !== "draft") {
+        return res.status(409).json({
+          error: "This Backwords puzzle has already been published.",
+        });
+      }
+
+      if (hitClueGenerationRateLimit(game.id)) {
+        return res
+          .status(429)
+          .json({ error: "Too many generations — slow down a moment." });
+      }
+
+      const count = Math.max(0, 5 - humanClues.length);
+      const generated = await generateClueCandidates(
+        game.topic,
+        game.focus,
+        humanClues,
+        count,
+      );
+
+      res.json({ generated: generated.map((text) => ({ text })) });
+    } catch (err) {
+      console.error("Failed to generate Backwords clues:", err);
+      res.status(500).json({ error: "Failed to generate clue options" });
+    }
+  },
+);
+
+router.post(
+  "/api/backwords/:id/publish",
+  ensureAuthenticated,
+  async (req, res) => {
+    const rawClues = Array.isArray(req.body?.clues) ? req.body.clues : [];
+    const parsedClues = rawClues.map((value) => {
+      if (typeof value === "string") {
+        return { pun_text: value.trim(), source: "human" };
+      }
+      if (value && typeof value === "object") {
+        const text =
+          typeof value.pun_text === "string" ? value.pun_text.trim() : "";
+        const source = value.source === "ai" ? "ai" : "human";
+        return { pun_text: text, source };
+      }
+      return { pun_text: "", source: "human" };
+    });
+
+    if (parsedClues.length !== 3 || parsedClues.some((c) => !c.pun_text)) {
+      return res.status(400).json({
+        error: "Backwords requires exactly three clue puns.",
+      });
+    }
+
+    if (parsedClues.some((c) => c.pun_text.length > 500)) {
+      return res
+        .status(400)
+        .json({ error: "Clues must be 500 characters or fewer." });
+    }
+
+    const normalizedClues = parsedClues.map((c) => normalizePhrase(c.pun_text));
     if (new Set(normalizedClues).size !== 3) {
       return res.status(400).json({
         error: "Each clue pun must be distinct.",
@@ -226,8 +306,8 @@ router.post(
         });
       }
 
-      for (const clue of clues) {
-        const leak = findTargetLeak(clue, [game.topic, game.focus]);
+      for (const { pun_text } of parsedClues) {
+        const leak = findTargetLeak(pun_text, [game.topic, game.focus]);
         if (leak) {
           return res.status(400).json({
             error: `Clues cannot explicitly include the hidden answer terms. Remove '${leak}'.`,
@@ -235,8 +315,9 @@ router.post(
         }
       }
 
-      const cluePayload = clues.map((clue) => ({
-        pun_text: clue,
+      const cluePayload = parsedClues.map((clue) => ({
+        pun_text: clue.pun_text,
+        source: clue.source,
         ai_score: null,
         ai_feedback: null,
         ai_judge_id: null,

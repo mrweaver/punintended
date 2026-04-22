@@ -208,7 +208,7 @@ export function Header({
   const [showNotifications, setShowNotifications] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
-  const latestNotification = notifications[0] ?? null;
+
 
   useEffect(() => {
     if (!showAccountMenu && !showNotifications) return;
@@ -485,19 +485,6 @@ export function Header({
                     </div>
 
                     <div className="mt-2 space-y-1">
-                      <HeaderMenuItem
-                        icon={Bell}
-                        label="Notifications"
-                        meta={
-                          unreadCount > 0 ? `${unreadCount} new` : undefined
-                        }
-                        sublabel={
-                          latestNotification
-                            ? latestNotification.message
-                            : "No recent activity"
-                        }
-                        onClick={handleOpenNotifications}
-                      />
                       <HeaderMenuItem
                         icon={Calendar}
                         label="My Submissions"

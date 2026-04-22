@@ -4,6 +4,16 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.28.2] - 2026-04-19
+
+### Changed
+
+- **Backwords Fallback Scoring:** When the primary semantic judge is unavailable, Backwords now falls back to local embedding-based similarity before using a stricter token match, improving guess evaluation resilience.
+
+### Fixed
+
+- **Backwords Guess Reliability:** Backwords guess judging now retries transient AI failures and preserves results through async fallback handling, reducing dropped or failed evaluations.
+
 ## [1.28.1] - 2026-04-19
 
 ### Changed

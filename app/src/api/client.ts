@@ -53,6 +53,8 @@ export const groupsApi = {
       method: "POST",
       body: JSON.stringify({ status }),
     }),
+  playerStats: (id: string, uid: number) =>
+    request<PlayerStats>(`/api/groups/${id}/players/${uid}/stats`),
 };
 
 // Daily Challenge (Tier 1: global)
@@ -515,6 +517,20 @@ export interface Player {
   uid: number;
   name: string;
   photoURL: string;
+}
+
+export interface RecentEffort {
+  date: string;
+  user_score: number | null;
+  winning_score: number | null;
+  group_average: number | null;
+}
+
+export interface PlayerStats {
+  totalSubmissions: number;
+  averageScore: string | null;
+  wins: number;
+  recentEfforts: RecentEffort[];
 }
 
 export interface Groaner {

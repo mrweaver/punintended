@@ -817,8 +817,54 @@ async function getWeeklyBestScores(groupId, weekStart, weekEnd) {
     const scores = Object.values(player.dailyScores);
     const sum = scores.reduce((a, b) => a + b, 0);
     const lowest = scores.length > 1 ? Math.min(...scores) : 0;
-    return { ...player, weekTotal: parseFloat((sum - lowest).toFixed(1)) };
   });
+}
+
+// Player stats for a specific group
+async function getPlayerGroupStats(groupId, userId) {
+  const result = await query(
+    `WITH group_puns AS (
+      SELECT p.challenge_id, p.author_id, MAX(p.ai_score) as max_score
+      FROM puns p
+      JOIN group_members gm ON gm.user_id = p.author_id AND gm.group_id = $1
+      WHERE p.ai_score IS NOT NULL
+      GROUP BY p.challenge_id, p.author_id
+    ),
+    challenge_winners AS (
+      SELECT challenge_id, MAX(max_score) as winning_score, AVG(max_score) as average_score
+      FROM group_puns
+      GROUP BY challenge_id
+    ),
+    user_puns AS (
+      SELECT p.challenge_id, MAX(p.ai_score) as user_score
+      FROM puns p
+      WHERE p.author_id = $2 AND p.ai_score IS NOT NULL
+      GROUP BY p.challenge_id
+    ),
+    recent_history AS (
+      SELECT up.challenge_id as date, up.user_score, cw.winning_score, cw.average_score as group_average
+      FROM user_puns up
+      LEFT JOIN challenge_winners cw ON cw.challenge_id = up.challenge_id
+      ORDER BY up.challenge_id DESC
+      LIMIT 7
+    )
+    SELECT
+      (SELECT COUNT(*) FROM user_puns) as total_submissions,
+      (SELECT AVG(user_score) FROM user_puns) as average_score,
+      (SELECT COUNT(*) 
+       FROM user_puns up 
+       JOIN challenge_winners cw ON up.challenge_id = cw.challenge_id 
+       WHERE up.user_score = cw.winning_score) as wins,
+      (SELECT json_agg(row_to_json(rh)) FROM (SELECT * FROM recent_history ORDER BY date ASC) rh) as recent_efforts`
+  , [groupId, userId]);
+
+  const row = result.rows[0] || {};
+  return {
+    totalSubmissions: parseInt(row.total_submissions || 0, 10),
+    averageScore: row.average_score ? parseFloat(row.average_score).toFixed(1) : null,
+    wins: parseInt(row.wins || 0, 10),
+    recentEfforts: row.recent_efforts || [],
+  };
 }
 
 // Global daily ranking
@@ -2502,6 +2548,7 @@ export {
   getPunsByAuthor,
   countPunsByAuthorForChallenge,
   getWeeklyBestScores,
+  getPlayerGroupStats,
   getGlobalDailyRanking,
   getGlobalAllTimeGroaners,
   getMessagesByGroup,

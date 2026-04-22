@@ -18,6 +18,7 @@ import {
   removePlayerFromGroup,
   getMessagesByGroup,
   createMessage,
+  getPlayerGroupStats,
 } from "../db/database.js";
 import {
   addGroupClient,
@@ -151,6 +152,24 @@ router.delete(
   },
 );
 
+router.get(
+  "/api/groups/:id/players/:uid/stats",
+  ensureAuthenticated,
+  async (req, res) => {
+    try {
+      const group = await getGroupById(req.params.id);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+      
+      const targetUid = parseInt(req.params.uid, 10);
+      const stats = await getPlayerGroupStats(req.params.id, targetUid);
+      res.json(stats);
+    } catch (error) {
+      console.error("Failed to get player stats:", error);
+      res.status(500).json({ error: "Failed to get player stats" });
+    }
+  },
+);
+
 // Typing
 router.post("/api/groups/:id/typing", ensureAuthenticated, (req, res) => {
   const { status } = req.body;
@@ -162,20 +181,18 @@ router.post("/api/groups/:id/typing", ensureAuthenticated, (req, res) => {
     clearTypingStatus(groupId, userId);
   } else if (status === "typing" || status === "submitted") {
     setTypingStatus(groupId, userId, name, photoURL, status);
-    if (status === "typing") {
-      const updatedAt = Date.now();
-      setTimeout(() => {
-        const entry = getTypingEntry(groupId, userId);
-        if (
-          entry &&
-          entry.status === "typing" &&
-          entry.updatedAt === updatedAt
-        ) {
-          clearTypingStatus(groupId, userId);
-          broadcastTypingUpdate(groupId);
-        }
-      }, 10000);
-    }
+    const updatedAt = Date.now();
+    setTimeout(() => {
+      const entry = getTypingEntry(groupId, userId);
+      if (
+        entry &&
+        entry.status === status &&
+        entry.updatedAt === updatedAt
+      ) {
+        clearTypingStatus(groupId, userId);
+        broadcastTypingUpdate(groupId);
+      }
+    }, 10000);
   } else {
     return res.status(400).json({ error: "Invalid status" });
   }

@@ -33,7 +33,8 @@ import { PlayerLeaderboard } from "./PlayerLeaderboard";
 import { WeeklyLeaderboard } from "./WeeklyLeaderboard";
 import { ShareModal } from "./modals/ShareModal";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
-import type { Group, DailyChallenge } from "../api/client";
+import { PlayerModal } from "./modals/PlayerModal";
+import type { Group, DailyChallenge, Player } from "../api/client";
 import { dailyApi } from "../api/client";
 
 interface GameBoardProps {
@@ -102,6 +103,7 @@ export function GameBoard({
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(session.name);
   const [playerToKick, setPlayerToKick] = useState<number | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const lastReadCountRef = useRef<number>(0);
   const chatInitializedRef = useRef<boolean>(false);
 
@@ -243,22 +245,18 @@ export function GameBoard({
         <div className="flex items-center gap-3">
           <div className="flex -space-x-2">
             {session.players.map((p) => (
-              <div key={p.uid} className="relative group">
-                <img
-                  src={p.photoURL}
-                  className="w-10 h-10 rounded-full border-2 border-white dark:border-zinc-950"
+              <div key={p.uid} className="relative hover:z-10">
+                <button
+                  onClick={() => setSelectedPlayer(p)}
+                  className="w-10 h-10 rounded-full border-2 border-white dark:border-zinc-950 overflow-hidden focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-violet-500 hover:border-orange-500 dark:hover:border-violet-500 transition-colors"
                   title={p.name}
-                  alt={p.name}
-                />
-                {isOwner && p.uid !== user?.uid && (
-                  <button
-                    onClick={() => setPlayerToKick(p.uid)}
-                    title={`Kick ${p.name}`}
-                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white items-center justify-center hidden group-hover:flex"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                )}
+                >
+                  <img
+                    src={p.photoURL}
+                    className="w-full h-full object-cover"
+                    alt={p.name}
+                  />
+                </button>
               </div>
             ))}
           </div>
@@ -383,7 +381,10 @@ export function GameBoard({
                 <textarea
                   placeholder="Type your pun here..."
                   value={punText}
-                  onChange={(e) => setPunText(e.target.value)}
+                  onChange={(e) => {
+                    setPunText(e.target.value);
+                    onTextChange(e.target.value.length > 0);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && e.ctrlKey) {
                       e.preventDefault();
@@ -695,6 +696,16 @@ export function GameBoard({
             setPlayerToKick(null);
           }}
           onCancel={() => setPlayerToKick(null)}
+        />
+      )}
+
+      {selectedPlayer && (
+        <PlayerModal
+          player={selectedPlayer}
+          groupId={session.id}
+          isOwner={isOwner && selectedPlayer.uid !== user?.uid}
+          onClose={() => setSelectedPlayer(null)}
+          onKick={setPlayerToKick}
         />
       )}
     </motion.div>

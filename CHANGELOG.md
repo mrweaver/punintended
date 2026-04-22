@@ -4,6 +4,20 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.29.0] - 2026-04-23
+
+### Added
+
+- **Group Player Analytics:** Introduced a player modal in the game board that displays individual performance statistics and visualises the gap between the player's recent scores and the group's daily average.
+
+### Changed
+
+- **Notification UI:** Removed the redundant "Notifications" link from the user account menu to consolidate alerts in the top navigation bar.
+
+### Fixed
+
+- **Submission Status:** Fixed an issue where players were incorrectly marked as having submitted a pun due to stale typing statuses.
+
 ## [1.28.2] - 2026-04-19
 
 ### Changed

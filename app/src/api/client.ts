@@ -524,6 +524,7 @@ export interface RecentEffort {
   user_score: number | null;
   winning_score: number | null;
   group_average: number | null;
+  worst_score: number | null;
 }
 
 export interface PlayerStats {

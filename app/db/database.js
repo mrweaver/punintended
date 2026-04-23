@@ -817,6 +817,8 @@ async function getWeeklyBestScores(groupId, weekStart, weekEnd) {
     const scores = Object.values(player.dailyScores);
     const sum = scores.reduce((a, b) => a + b, 0);
     const lowest = scores.length > 1 ? Math.min(...scores) : 0;
+    player.weekTotal = sum - lowest;
+    return player;
   });
 }
 
@@ -831,7 +833,7 @@ async function getPlayerGroupStats(groupId, userId) {
       GROUP BY p.challenge_id, p.author_id
     ),
     challenge_winners AS (
-      SELECT challenge_id, MAX(max_score) as winning_score, AVG(max_score) as average_score
+      SELECT challenge_id, MAX(max_score) as winning_score, AVG(max_score) as average_score, MIN(max_score) as worst_score
       FROM group_puns
       GROUP BY challenge_id
     ),
@@ -842,7 +844,7 @@ async function getPlayerGroupStats(groupId, userId) {
       GROUP BY p.challenge_id
     ),
     recent_history AS (
-      SELECT up.challenge_id as date, up.user_score, cw.winning_score, cw.average_score as group_average
+      SELECT up.challenge_id as date, up.user_score, cw.winning_score, cw.average_score as group_average, cw.worst_score
       FROM user_puns up
       LEFT JOIN challenge_winners cw ON cw.challenge_id = up.challenge_id
       ORDER BY up.challenge_id DESC

@@ -117,6 +117,7 @@ export function useBackwords(initialGameId?: string) {
       return;
     }
     url.searchParams.set("backwords", state.game.id);
+    url.pathname = "/";
     window.history.replaceState({}, "", url.toString());
   }, [state.game?.id, state.phase]);
 
@@ -281,6 +282,7 @@ export function useBackwords(initialGameId?: string) {
   const reset = useCallback(() => {
     const url = new URL(window.location.href);
     url.searchParams.delete("backwords");
+    url.pathname = "/";
     window.history.replaceState({}, "", url.toString());
     setState(INITIAL_STATE);
   }, []);

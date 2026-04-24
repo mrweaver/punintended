@@ -39,7 +39,7 @@ export function useGroup() {
               window.history.replaceState(
                 {},
                 document.title,
-                window.location.pathname,
+                "/",
               );
             }
           } else {

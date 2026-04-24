@@ -310,10 +310,10 @@ export function SessionLobby({
                   </AnimatePresence>
 
                   {/* Best Submission + Leading Pun (merge when same) */}
-                  {(bestPun || todayLeader) && (
+                  {bestPun && (
                     <div
                       className={`grid gap-4 pt-4 border-t border-border ${
-                        isBestAlsoLeader || (!bestPun || !todayLeader)
+                        isBestAlsoLeader || !todayLeader
                           ? "grid-cols-1"
                           : "grid-cols-1 md:grid-cols-2"
                       }`}
@@ -339,26 +339,24 @@ export function SessionLobby({
                         </div>
                       ) : (
                         <>
-                          {bestPun && (
-                            <div>
-                              <h3 className="text-lg font-serif italic text-text mb-3">
-                                Your Best Submission
-                              </h3>
-                              <PunCard
-                                pun={bestPun}
-                                index={0}
-                                comments={[]}
-                                submitting={submitting}
-                                hideAuthor={true}
-                                disableComments={true}
-                                onReact={reactPun}
-                                onViewed={markPunViewed}
-                                onEdit={() => {}}
-                                onDelete={() => {}}
-                                onComment={() => {}}
-                              />
-                            </div>
-                          )}
+                          <div>
+                            <h3 className="text-lg font-serif italic text-text mb-3">
+                              Your Best Submission
+                            </h3>
+                            <PunCard
+                              pun={bestPun}
+                              index={0}
+                              comments={[]}
+                              submitting={submitting}
+                              hideAuthor={true}
+                              disableComments={true}
+                              onReact={reactPun}
+                              onViewed={markPunViewed}
+                              onEdit={() => {}}
+                              onDelete={() => {}}
+                              onComment={() => {}}
+                            />
+                          </div>
                           {todayLeader && (
                             <div>
                               <h3 className="text-lg font-serif italic text-text mb-3">

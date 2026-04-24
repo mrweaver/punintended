@@ -33,10 +33,11 @@ function popLoginNoticeFromUrl(): LoginNotice | null {
   }
 
   url.searchParams.delete("login");
+  url.pathname = "/";
   window.history.replaceState(
     {},
     document.title,
-    `${url.pathname}${url.search}${url.hash}` || "/",
+    url.toString(),
   );
 
   return status === "success"
@@ -140,6 +141,15 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [loginNotice]);
 
+  // Force URL path to "/" on load to clean up any leftover paths
+  useEffect(() => {
+    if (window.location.pathname !== "/") {
+      const url = new URL(window.location.href);
+      url.pathname = "/";
+      window.history.replaceState({}, document.title, url.toString());
+    }
+  }, []);
+
   // Auto-enter shared Backwords and gauntlet links from URL params.
   useEffect(() => {
     if (!user) return;
@@ -158,7 +168,7 @@ export default function App() {
       setSharedGauntletId(null);
       setShowLeaderboard(false);
       setShowSubmissions(false);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      window.history.replaceState({}, document.title, "/");
     } else if (backwordsId) {
       setSharedBackwordsId(backwordsId);
       setSharedBackwordsComparisonId(null);
@@ -168,7 +178,7 @@ export default function App() {
       setSharedGauntletId(null);
       setShowLeaderboard(false);
       setShowSubmissions(false);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      window.history.replaceState({}, document.title, "/");
     } else if (gauntletId) {
       setSharedGauntletId(gauntletId);
       setGauntletMode(true);
@@ -178,7 +188,7 @@ export default function App() {
       setSharedBackwordsRunId(null);
       setShowLeaderboard(false);
       setShowSubmissions(false);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      window.history.replaceState({}, document.title, "/");
     }
   }, [user]);
 
@@ -191,6 +201,7 @@ export default function App() {
     setSharedGauntletId(null);
     setShowLeaderboard(false);
     setShowSubmissions(false);
+    window.history.pushState({}, "", "/");
   };
 
   const handleOpenLeaderboard = () => {
@@ -238,6 +249,7 @@ export default function App() {
   const handleLogoClick = () => {
     closeOverlayScreens();
     leaveGroup();
+    window.history.pushState({}, "", "/");
   };
 
   if (!isReady) {

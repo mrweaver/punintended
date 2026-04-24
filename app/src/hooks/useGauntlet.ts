@@ -76,6 +76,7 @@ export function useGauntlet(initialGauntletId?: string) {
     if (state.phase === "playing" && state.gauntletId) {
       const url = new URL(window.location.href);
       url.searchParams.set("gauntlet", state.gauntletId);
+      url.pathname = "/";
       window.history.pushState({}, "", url.toString());
     }
   }, [state.phase, state.gauntletId]);
@@ -165,6 +166,7 @@ export function useGauntlet(initialGauntletId?: string) {
     // Clear ?gauntlet= param
     const url = new URL(window.location.href);
     url.searchParams.delete("gauntlet");
+    url.pathname = "/";
     window.history.replaceState({}, "", url.toString());
     setState(INITIAL_STATE);
   }, []);

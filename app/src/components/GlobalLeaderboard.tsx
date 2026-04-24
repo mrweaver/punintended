@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "motion/react";
 import { Swords } from "lucide-react";
 import { useGlobalLeaderboard } from "../hooks/useGlobalLeaderboard";
+import { usePuns } from "../hooks/usePuns";
 import { useAuth } from "../contexts/AuthContext";
 import { punsApi } from "../api/client";
 import { Button } from "./ui/Button";
@@ -155,6 +156,10 @@ export function GlobalLeaderboard({ onClose }: Props) {
   const { daily, allTime, gauntlet, loading, refresh, optimisticUpdateReact } =
     useGlobalLeaderboard();
 
+  const todayId = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
+  const { puns: todayPuns } = usePuns(todayId, user?.uid);
+  const hasSubmittedToday = todayPuns.some((p) => p.authorId === user?.uid);
+
   const handleReact = (punId: string, currentReaction: "groan" | null) => {
     if (!user) return;
     const nextReaction = currentReaction ? null : "groan";
@@ -258,6 +263,12 @@ export function GlobalLeaderboard({ onClose }: Props) {
             ))}
           </div>
         )
+      ) : tab === "today" && !hasSubmittedToday ? (
+        <div className="text-center py-16 bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-700">
+          <p className="text-gray-400 dark:text-zinc-500 italic text-lg">
+            Submit a pun today to unlock the daily leaderboard!
+          </p>
+        </div>
       ) : punEntries.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-700">
           <p className="text-gray-400 dark:text-zinc-500 italic text-lg">

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronDown, ChevronUp, MessageSquare, Send } from "lucide-react";
+import { ChevronDown, ChevronUp, MessageSquare, Send, Eye } from "lucide-react";
 import { PunCard } from "./PunCard";
 import type { PunComment, PunReaction } from "../api/client";
 import type { useChallengeHistory } from "../hooks/useChallengeHistory";
@@ -70,6 +70,7 @@ export function ChallengeHistoryPanel({
   } = historyState;
   const dates = useMemo(() => pastDatesValid(groupCreatedAt), [groupCreatedAt]);
   const [punTexts, setPunTexts] = useState<Record<string, string>>({});
+  const [revealedPastDates, setRevealedPastDates] = useState<Set<string>>(new Set());
 
   const handleSubmitForDate = async (dateId: string) => {
     const text = (punTexts[dateId] || "").trim();
@@ -86,6 +87,11 @@ export function ChallengeHistoryPanel({
         const isExpanded = expandedDates.has(dateId);
         const isLoading = loadingDate === dateId;
         const puns = punsByDate[dateId] ?? [];
+        
+        const myPuns = puns.filter((p) => p.authorId === user?.uid);
+        const attemptsLeft = Math.max(0, 3 - myPuns.length);
+        const hasSubmitted = myPuns.length > 0;
+        const canSeePuns = hasSubmitted || revealedPastDates.has(dateId);
 
         return (
           <div key={dateId}>
@@ -108,7 +114,7 @@ export function ChallengeHistoryPanel({
             >
               <span className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 opacity-60" />
-                {isExpanded && puns.length > 0
+                {isExpanded && canSeePuns && puns.length > 0
                   ? `${puns.length} pun${puns.length !== 1 ? "s" : ""}`
                   : "View puns"}
               </span>
@@ -178,8 +184,6 @@ export function ChallengeHistoryPanel({
 
                       {/* Submission Component if attemptsLeft > 0 */}
                       {(() => {
-                        const myPuns = puns.filter((p) => p.authorId === user?.uid);
-                        const attemptsLeft = Math.max(0, 3 - myPuns.length);
                         const challenge = challengesByDate[dateId];
                         
                         if (attemptsLeft > 0 && challenge) {
@@ -221,7 +225,21 @@ export function ChallengeHistoryPanel({
                         return null;
                       })()}
 
-                      {puns.length === 0 ? (
+                      {!canSeePuns ? (
+                        <div className="py-6 text-center bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-700 mb-4">
+                          <p className="text-sm text-gray-500 dark:text-zinc-400 italic mb-4">
+                            Submit a pun to see what others wrote, or reveal them anyway if you're out of ideas!
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setRevealedPastDates((prev) => new Set(prev).add(dateId))}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            Reveal Submissions Anyway
+                          </Button>
+                        </div>
+                      ) : puns.length === 0 ? (
                         <div className="py-6 text-center text-gray-400 dark:text-zinc-500 italic text-sm mb-4">
                           No puns for this day.
                         </div>

@@ -95,35 +95,25 @@ export function ChallengeHistoryPanel({
 
         return (
           <div key={dateId}>
-            {/* Day separator */}
+            {/* Day separator and Expand/collapse trigger */}
             <div className="relative flex items-center py-5">
               <div className="flex-1 border-t border-gray-200 dark:border-zinc-700" />
               <div className="mx-4 flex-shrink-0">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 shadow-sm">
+                <button
+                  onClick={() => toggleDate(dateId)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50 dark:focus:ring-violet-500/50"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400 dark:bg-violet-400 inline-block" />
                   {formatDateLabel(dateId)}
-                </span>
+                  {isExpanded ? (
+                    <ChevronUp className="w-3.5 h-3.5 ml-1 opacity-60" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-60" />
+                  )}
+                </button>
               </div>
               <div className="flex-1 border-t border-gray-200 dark:border-zinc-700" />
             </div>
-
-            {/* Expand/collapse trigger */}
-            <button
-              onClick={() => toggleDate(dateId)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-100 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-sm text-gray-600 dark:text-zinc-400 mb-4"
-            >
-              <span className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 opacity-60" />
-                {isExpanded && canSeePuns && puns.length > 0
-                  ? `${puns.length} pun${puns.length !== 1 ? "s" : ""}`
-                  : "View puns"}
-              </span>
-              {isExpanded ? (
-                <ChevronUp className="w-4 h-4 opacity-60" />
-              ) : (
-                <ChevronDown className="w-4 h-4 opacity-60" />
-              )}
-            </button>
 
             {/* Puns for this day */}
             <AnimatePresence initial={false}>
@@ -252,7 +242,7 @@ export function ChallengeHistoryPanel({
                               index={idx + punIdx * 0.1}
                               comments={getCommentsForPun(pun.id)}
                               submitting={submitting}
-                              onReact={onReact}
+                              onReact={(punId, reaction) => historyState.reactPun(punId, reaction, dateId)}
                               onViewed={() => {}}
                               onEdit={onEdit}
                               onDelete={onDelete}

@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { punsApi, dailyApi, type Pun } from "../api/client";
+import { useAuth } from "../contexts/AuthContext";
 
 /**
  * Simplified challenge history - loads puns for past dates.
@@ -11,6 +12,7 @@ export function useChallengeHistory(groupId?: string | null) {
   const [punsByDate, setPunsByDate] = useState<Record<string, Pun[]>>({});
   const [challengesByDate, setChallengesByDate] = useState<Record<string, any>>({});
   const [loadingDate, setLoadingDate] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const loadDate = useCallback(
     async (challengeId: string) => {
@@ -54,10 +56,51 @@ export function useChallengeHistory(groupId?: string | null) {
   );
 
   const reactPun = useCallback(
-    async (punId: string, reaction: Parameters<typeof punsApi.react>[1]) => {
-      await punsApi.react(punId, reaction);
+    async (punId: string, reaction: Parameters<typeof punsApi.react>[1], dateId: string) => {
+      // Optimistic update
+      if (user) {
+        setPunsByDate((prev) => {
+          const puns = prev[dateId];
+          if (!puns) return prev;
+
+          const nextPuns = puns.map((pun) => {
+            if (pun.id !== punId) return pun;
+            
+            const groaners = pun.groaners ? [...pun.groaners] : [];
+            let newCount = pun.groanCount;
+            
+            const existingIndex = groaners.findIndex((g) => g.uid === user.uid);
+            if (existingIndex !== -1) {
+              groaners.splice(existingIndex, 1);
+              newCount--;
+            }
+            
+            if (reaction === "groan") {
+              groaners.push({ uid: user.uid, name: user.displayName });
+              newCount++;
+            }
+            
+            return {
+              ...pun,
+              myReaction: reaction,
+              groanCount: newCount,
+              groaners,
+            };
+          });
+
+          return { ...prev, [dateId]: nextPuns };
+        });
+      }
+
+      try {
+        await punsApi.react(punId, reaction);
+      } catch (err) {
+        console.error("Failed to react to history pun:", err);
+        // Revert on failure
+        await loadDate(dateId);
+      }
     },
-    [],
+    [user, loadDate],
   );
 
   return {

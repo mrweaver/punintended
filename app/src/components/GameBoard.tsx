@@ -90,9 +90,16 @@ export function GameBoard({
   const { typingPlayers, reportTyping, onTextChange } = useTypingStatus(
     session.id,
   );
-  const myPunCount = puns.filter((p) => p.authorId === user?.uid).length;
+  const myPuns = puns.filter((p) => p.authorId === user?.uid);
+  const myPunCount = myPuns.length;
   const attemptsLeft = Math.max(0, 3 - myPunCount);
   const hasSubmittedToday = myPunCount > 0;
+  const bestPun =
+    myPuns.length > 0
+      ? myPuns.reduce((best, p) =>
+          (p.aiScore ?? 0) > (best.aiScore ?? 0) ? p : best,
+        )
+      : null;
   const prevPunsRef = useRef<typeof puns>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -316,17 +323,17 @@ export function GameBoard({
       ) : (
         <div className="space-y-4">
           {revealedAt && (
-            <div className="flex items-center gap-3 text-sm text-text-muted">
+            <div className="flex items-center gap-3 text-xs text-text-muted/70">
               <span>
                 Revealed:{" "}
-                <span className="font-medium text-text">
+                <span className="font-medium text-text-muted">
                   {formatRevealTime(revealedAt)}
                 </span>
               </span>
               <span className="h-3 w-[1px] bg-border" aria-hidden="true" />
               <span className="tabular-nums">
                 Elapsed:{" "}
-                <span className="font-medium text-text">
+                <span className="font-medium text-text-muted">
                   {formatFuzzyTime(elapsedMs)}
                 </span>
               </span>
@@ -377,7 +384,22 @@ export function GameBoard({
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
+                className="rounded-2xl bg-surface p-4 sm:p-5 space-y-3 overflow-hidden"
               >
+                {myPuns.length > 0 && attemptsLeft > 0 && (
+                  <div className="flex justify-between items-center mb-1 px-1">
+                    <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                      Draft your next attempt
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onOpenSubmissions}
+                      className="text-xs font-medium text-accent hover:underline"
+                    >
+                      View today's submissions ({myPuns.length})
+                    </button>
+                  </div>
+                )}
                 <textarea
                   placeholder="Type your pun here..."
                   value={punText}

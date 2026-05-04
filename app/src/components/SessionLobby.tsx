@@ -137,10 +137,11 @@ export function SessionLobby({
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="space-y-6"
+      className="flex flex-col gap-6"
     >
       {/* ── Section 1: Today's Challenge Hero ── */}
-      <Card className="relative overflow-hidden">
+      <motion.div layout className={`w-full ${attemptsLeft === 0 ? "order-2" : "order-1"}`}>
+        <Card className="relative overflow-hidden">
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2 mb-2">
             <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.24em] text-accent">
@@ -186,6 +187,11 @@ export function SessionLobby({
                   Your timer starts the moment you reveal the challenge. Take a
                   breath, then hit the button when you&apos;re ready.
                 </p>
+                {livePlayers > 0 && (
+                  <p className="text-xs sm:text-sm text-accent font-medium mt-2">
+                    Join {livePlayers} friend{livePlayers !== 1 ? 's' : ''} across your active groups.
+                  </p>
+                )}
                 <Button
                   onClick={revealChallenge}
                   className="mt-2 px-8 py-4 text-lg"
@@ -203,10 +209,10 @@ export function SessionLobby({
                 className="space-y-6"
               >
                 {revealedAt && (
-                  <div className="flex items-center gap-3 text-sm text-text-muted">
+                  <div className="flex items-center gap-3 text-xs text-text-muted/70">
                     <span>
                       Revealed:{" "}
-                      <span className="font-medium text-text">
+                      <span className="font-medium text-text-muted">
                         {formatRevealTime(revealedAt)}
                       </span>
                     </span>
@@ -216,7 +222,7 @@ export function SessionLobby({
                     />
                     <span className="tabular-nums">
                       Elapsed:{" "}
-                      <span className="font-medium text-text">
+                      <span className="font-medium text-text-muted">
                         {formatFuzzyTime(elapsedMs)}
                       </span>
                     </span>
@@ -264,6 +270,20 @@ export function SessionLobby({
                         exit={{ opacity: 0, height: 0 }}
                         className="rounded-2xl border-2 border-accent-border bg-surface p-4 sm:p-5 space-y-3 overflow-hidden"
                       >
+                        {myPuns.length > 0 && attemptsLeft > 0 && (
+                          <div className="flex justify-between items-center mb-1 px-1">
+                            <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                              Draft your next attempt
+                            </span>
+                            <button
+                              type="button"
+                              onClick={onOpenSubmissions}
+                              className="text-xs font-medium text-accent hover:underline"
+                            >
+                              View today's submissions ({myPuns.length})
+                            </button>
+                          </div>
+                        )}
                         <textarea
                           placeholder="Type your pun here..."
                           value={punText}
@@ -408,9 +428,10 @@ export function SessionLobby({
           </AnimatePresence>
         </div>
       </Card>
+      </motion.div>
 
       {/* ── Section 2: Active Groups ── */}
-      <div className="space-y-3">
+      <motion.div layout className={`w-full space-y-3 ${attemptsLeft === 0 ? "order-1" : "order-2"}`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted">
@@ -497,7 +518,7 @@ export function SessionLobby({
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* ── Create Group Modal ── */}
       <AnimatePresence>

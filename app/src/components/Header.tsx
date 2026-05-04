@@ -117,10 +117,10 @@ function HeaderPrimaryNavButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl border border-transparent bg-background px-3 py-2 text-center text-[11px] font-semibold tracking-[0.04em] text-text-secondary transition-all hover:border-border-strong hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+      className="flex min-h-10 flex-row items-center justify-center gap-1.5 rounded-xl border border-transparent bg-background px-2 py-2 text-center text-[10px] font-semibold tracking-[0.04em] text-text-secondary transition-all hover:border-border-strong hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
     >
-      <Icon className="h-[18px] w-[18px]" />
-      <span>{label}</span>
+      <Icon className="h-4 w-4" />
+      <span className="truncate">{label}</span>
     </button>
   );
 }
@@ -532,7 +532,7 @@ export function Header({
 
         <nav
           aria-label="Primary navigation"
-          className="grid grid-cols-3 gap-2 rounded-[1.75rem] border border-border bg-surface/90 p-2 shadow-sm sm:hidden"
+          className="grid grid-cols-3 gap-1.5 rounded-[1.25rem] border border-border bg-surface/90 p-1.5 shadow-sm sm:hidden"
         >
           <HeaderPrimaryNavButton
             icon={Trophy}

@@ -4,6 +4,17 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.30.1] - 2026-05-09
+
+### Added
+
+- **Hub Daily-Best Backfill:** Added a replay script for resubmitting each player's best Australia/Sydney local-day score to the hub so historical data can be corrected after the daily overwrite rollout.
+
+### Fixed
+
+- **Hub Daily Score Sync:** PunIntended now only sends a player's best local-day score to the hub, preventing edits and worse retries from generating redundant same-day updates.
+- **Hub Daily-Key Alignment:** Live submissions and historical replay now group scores by Australia/Sydney local date so PunIntended matches the hub's overwrite rules exactly.
+
 ## [1.30.0] - 2026-05-09
 
 ### Added

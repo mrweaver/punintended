@@ -647,7 +647,7 @@ async function updatePunScore(punId, judgement, options = {}) {
   await withTransaction(async (client) => {
     const punResult = await client.query(
       `SELECT p.id, p.challenge_id, p.text, p.author_id, p.response_time_ms,
-              u.hub_user_id
+              p.created_at, u.hub_user_id
        FROM puns p
        JOIN users u ON u.id = p.author_id
        WHERE p.id = $1
@@ -658,11 +658,28 @@ async function updatePunScore(punId, judgement, options = {}) {
     if (!punResult.rows[0]) throw new Error("Pun not found");
 
     const pun = punResult.rows[0];
+    const priorBestResult = await client.query(
+      `SELECT MAX(ai_score) AS best_score
+       FROM puns
+       WHERE challenge_id = $1
+         AND author_id = $2
+         AND ai_score IS NOT NULL`,
+      [pun.challenge_id, pun.author_id],
+    );
+    const priorBestScore =
+      priorBestResult.rows[0]?.best_score === null ||
+      priorBestResult.rows[0]?.best_score === undefined
+        ? null
+        : Number(priorBestResult.rows[0].best_score);
     hubDispatch = {
       hubUserId: pun.hub_user_id ?? null,
       responseTimeMs: pun.response_time_ms ?? 0,
       score: judgement?.score ?? null,
-      isDaily: (options?.triggerType ?? "initial") === "initial",
+      playedAt: pun.created_at ?? new Date(),
+      shouldSubmit:
+        judgement?.score !== null &&
+        judgement?.score !== undefined &&
+        (priorBestScore === null || Number(judgement.score) > priorBestScore),
     };
     const challengeResult = await client.query(
       `SELECT topic, focus
@@ -735,13 +752,13 @@ async function updatePunScore(punId, judgement, options = {}) {
     );
   });
 
-  if (hubDispatch?.score !== null && hubDispatch?.score !== undefined) {
+  if (hubDispatch?.shouldSubmit) {
     submitScoreToHub({
       hubUserId: hubDispatch.hubUserId,
       aiScore: hubDispatch.score,
       responseTimeMs: hubDispatch.responseTimeMs,
-      isDaily: hubDispatch.isDaily,
-      playedAt: new Date(),
+      isDaily: true,
+      playedAt: hubDispatch.playedAt,
     }).catch((err) => {
       console.warn("[updatePunScore] hub dispatch failed:", err.message);
     });
@@ -821,6 +838,70 @@ async function countPunsByAuthorForChallenge(challengeId, authorId) {
     [challengeId, authorId],
   );
   return parseInt(result.rows[0].count, 10);
+}
+
+async function getBestDailyHubScores(options = {}, executor = query) {
+  const db = getDbRunner(executor);
+  const whereClauses = ["p.ai_score IS NOT NULL", "u.hub_user_id IS NOT NULL"];
+  const params = [];
+
+  if (options?.fromChallengeId) {
+    params.push(options.fromChallengeId);
+    whereClauses.push(`p.challenge_id >= $${params.length}`);
+  }
+
+  if (options?.toChallengeId) {
+    params.push(options.toChallengeId);
+    whereClauses.push(`p.challenge_id <= $${params.length}`);
+  }
+
+  if (options?.authorId) {
+    params.push(options.authorId);
+    whereClauses.push(`p.author_id = $${params.length}`);
+  }
+
+  let limitSql = "";
+  if (options?.limit) {
+    params.push(options.limit);
+    limitSql = `LIMIT $${params.length}`;
+  }
+
+  const result = await db(
+    `SELECT *
+     FROM (
+       SELECT DISTINCT ON (p.author_id, p.challenge_id)
+         p.id,
+         p.challenge_id,
+         p.author_id,
+         u.hub_user_id,
+         p.ai_score,
+         p.response_time_ms,
+         p.created_at
+       FROM puns p
+       JOIN users u ON u.id = p.author_id
+       WHERE ${whereClauses.join(" AND ")}
+       ORDER BY p.author_id, p.challenge_id, p.ai_score DESC, p.created_at ASC, p.id ASC
+     ) daily_best
+     ORDER BY daily_best.challenge_id ASC, daily_best.author_id ASC
+     ${limitSql}`,
+    params,
+  );
+
+  return result.rows.map((row) => ({
+    punId: row.id,
+    challengeId: row.challenge_id,
+    authorId: Number(row.author_id),
+    hubUserId: row.hub_user_id,
+    aiScore:
+      row.ai_score === null || row.ai_score === undefined
+        ? null
+        : Number(row.ai_score),
+    responseTimeMs:
+      row.response_time_ms === null || row.response_time_ms === undefined
+        ? 0
+        : Number(row.response_time_ms),
+    playedAt: row.created_at,
+  }));
 }
 
 function formatPun(row) {
@@ -2654,6 +2735,7 @@ export {
   setPunReaction,
   getPunsByAuthor,
   countPunsByAuthorForChallenge,
+  getBestDailyHubScores,
   getWeeklyBestScores,
   getPlayerGroupStats,
   getGlobalDailyRanking,

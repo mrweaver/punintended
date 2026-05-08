@@ -20,6 +20,7 @@ COPY app/db/ ./db/
 COPY app/lib/ ./lib/
 COPY app/middleware/ ./middleware/
 COPY app/routes/ ./routes/
+COPY app/scripts/ ./scripts/
 COPY app/services/ ./services/
 COPY --from=build /app/dist ./dist
 EXPOSE 3000

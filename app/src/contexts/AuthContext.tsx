@@ -23,11 +23,37 @@ const AuthContext = createContext<AuthContextValue>({
   },
 });
 
+function consumeHubHandoffToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token") ?? params.get("hub_token");
+  if (!token) return null;
+  // Strip the token from the URL so it doesn't linger in history or analytics.
+  params.delete("token");
+  params.delete("hub_token");
+  const remaining = params.toString();
+  const cleanUrl =
+    window.location.pathname + (remaining ? `?${remaining}` : "");
+  window.history.replaceState({}, "", cleanUrl);
+  return token;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    const handoff = consumeHubHandoffToken();
+    if (handoff) {
+      // Hand off to the backend; it verifies, sets the .cotlone.com cookie,
+      // and redirects back to /. We replace the location so the user never
+      // sees the token in their address bar.
+      window.location.replace(
+        `/auth/hub?token=${encodeURIComponent(handoff)}`,
+      );
+      return;
+    }
+
     authApi
       .getUser()
       .then(({ user }) => {

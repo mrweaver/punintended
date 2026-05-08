@@ -4,6 +4,7 @@ import {
   getBuiltInAiJudges,
   getUnknownAiJudgeDefinition,
 } from "../lib/aiJudges.js";
+import { submitScoreToHub } from "../services/hub.js";
 
 const { Pool } = pg;
 
@@ -226,6 +227,70 @@ async function findOrCreateUser(googleProfile) {
 async function getUserById(userId) {
   const result = await query("SELECT * FROM users WHERE id = $1", [userId]);
   return result.rows[0];
+}
+
+async function getUserByHubId(hubUserId) {
+  const result = await query("SELECT * FROM users WHERE hub_user_id = $1", [
+    hubUserId,
+  ]);
+  return result.rows[0] ?? null;
+}
+
+async function findOrCreateUserByHubIdentity({
+  hubUserId,
+  email,
+  displayName,
+  photoUrl,
+}) {
+  const normalizedDisplayName = normalizeDisplayNameInput(displayName);
+  const normalizedPhotoUrl = photoUrl ?? null;
+
+  let result = await query("SELECT * FROM users WHERE hub_user_id = $1", [
+    hubUserId,
+  ]);
+  if (result.rows.length > 0) {
+    result = await query(
+      `UPDATE users
+         SET email = COALESCE($1, email),
+             display_name = COALESCE($2, display_name),
+             photo_url = COALESCE($3, photo_url),
+             updated_at = NOW()
+       WHERE hub_user_id = $4
+       RETURNING *`,
+      [email ?? null, normalizedDisplayName, normalizedPhotoUrl, hubUserId],
+    );
+    return result.rows[0];
+  }
+
+  if (email) {
+    result = await query(
+      `UPDATE users
+         SET hub_user_id = $1,
+             display_name = COALESCE($2, display_name),
+             photo_url = COALESCE($3, photo_url),
+             updated_at = NOW()
+       WHERE email = $4 AND hub_user_id IS NULL
+       RETURNING *`,
+      [hubUserId, normalizedDisplayName, normalizedPhotoUrl, email],
+    );
+    if (result.rows.length > 0) return result.rows[0];
+  }
+
+  result = await query(
+    `INSERT INTO users (hub_user_id, email, display_name, photo_url)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [hubUserId, email ?? null, normalizedDisplayName, normalizedPhotoUrl],
+  );
+  return result.rows[0];
+}
+
+async function setUserHubId(userId, hubUserId) {
+  const result = await query(
+    `UPDATE users SET hub_user_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [hubUserId, userId],
+  );
+  return result.rows[0] ?? null;
 }
 
 async function updateCustomDisplayName(userId, customDisplayName) {
@@ -578,11 +643,14 @@ async function updatePunText(punId, text) {
 }
 
 async function updatePunScore(punId, judgement, options = {}) {
-  return withTransaction(async (client) => {
+  let hubDispatch = null;
+  await withTransaction(async (client) => {
     const punResult = await client.query(
-      `SELECT id, challenge_id, text
-       FROM puns
-       WHERE id = $1
+      `SELECT p.id, p.challenge_id, p.text, p.author_id, p.response_time_ms,
+              u.hub_user_id
+       FROM puns p
+       JOIN users u ON u.id = p.author_id
+       WHERE p.id = $1
        FOR UPDATE`,
       [punId],
     );
@@ -590,6 +658,12 @@ async function updatePunScore(punId, judgement, options = {}) {
     if (!punResult.rows[0]) throw new Error("Pun not found");
 
     const pun = punResult.rows[0];
+    hubDispatch = {
+      hubUserId: pun.hub_user_id ?? null,
+      responseTimeMs: pun.response_time_ms ?? 0,
+      score: judgement?.score ?? null,
+      isDaily: (options?.triggerType ?? "initial") === "initial",
+    };
     const challengeResult = await client.query(
       `SELECT topic, focus
        FROM global_daily_challenges
@@ -660,6 +734,18 @@ async function updatePunScore(punId, judgement, options = {}) {
       ],
     );
   });
+
+  if (hubDispatch?.score !== null && hubDispatch?.score !== undefined) {
+    submitScoreToHub({
+      hubUserId: hubDispatch.hubUserId,
+      aiScore: hubDispatch.score,
+      responseTimeMs: hubDispatch.responseTimeMs,
+      isDaily: hubDispatch.isDaily,
+      playedAt: new Date(),
+    }).catch((err) => {
+      console.warn("[updatePunScore] hub dispatch failed:", err.message);
+    });
+  }
 }
 
 async function deletePun(punId) {
@@ -2503,6 +2589,22 @@ async function runMigrations() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+
+  // --- Hub integration: bridge PunIntended user.id to the hub's UUID identity. ---
+  await query(`ALTER TABLE users ALTER COLUMN google_id DROP NOT NULL`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS hub_user_id UUID`);
+  await query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'users_hub_user_id_key'
+      ) THEN
+        ALTER TABLE users ADD CONSTRAINT users_hub_user_id_key UNIQUE (hub_user_id);
+      END IF;
+    END $$;
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_users_hub_user_id ON users(hub_user_id)`,
+  );
 }
 
 export {
@@ -2514,6 +2616,9 @@ export {
   runMigrations,
   findOrCreateUser,
   getUserById,
+  getUserByHubId,
+  findOrCreateUserByHubIdentity,
+  setUserHubId,
   updateCustomDisplayName,
   updateUserPrivacy,
   getGroupIdsByUser,

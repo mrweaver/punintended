@@ -4,6 +4,25 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.30.0] - 2026-05-09
+
+### Added
+
+- **Hub SSO Handoff:** Added shared Loom & Skullcap hub auth helpers, a new `GET /auth/hub` verification route, and request-level hub session hydration so PunIntended can accept `lns_session` cookies and hub-issued handoff tokens across `*.cotlone.com`.
+- **Hub User Linking:** Added `users.hub_user_id` support, automatic hub-profile upserts for hub-launched users, and first-login linking for existing Google-authenticated users.
+- **Hub Score Submission:** Added signed score delivery to the hub after pun judging, including app credentials in config and HMAC-signed payload submission with primary AI score and response-time metrics.
+
+### Changed
+
+- **Shared Auth Session:** Google OAuth callbacks now link hub identities when possible, mint the shared cross-subdomain session cookie, and clear it on logout alongside the local Passport session.
+- **Frontend Auth Bootstrap:** The client now consumes `?token=` and legacy `?hub_token=` launch parameters, strips them from the URL, and hands verification off to the backend before loading the app.
+- **Schema and Runtime Config:** User records now support hub-only identities by making `google_id` nullable, migrations create the new UUID link/index automatically, and hub env vars are wired through `compose.yaml` and `.env.example`.
+- **Changelog Modal Header:** Simplified release headers by removing redundant note counts, section badges, and the expand-all control from the modal toolbar.
+
+### Fixed
+
+- **Hub HMAC Timestamp Canonicalisation:** Hub score signing now truncates timestamps to whole seconds so JavaScript and Python serialize the same canonical datetime string and signatures verify consistently.
+
 ## [1.29.0] - 2026-04-23
 
 ### Added

@@ -6,12 +6,14 @@
  * authentication initialisation.
  */
 import compression from "compression";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import express from "express";
 import passport from "../auth/passport.js";
 import { pool } from "../db/database.js";
+import { hydrateFromHubSession } from "./auth.js";
 
 const pgSession = connectPgSimple(session);
 
@@ -55,6 +57,7 @@ export function applyMiddleware(app) {
   );
 
   app.use(express.json());
+  app.use(cookieParser());
 
   const sessionMiddleware = session({
     store: new pgSession({
@@ -76,4 +79,5 @@ export function applyMiddleware(app) {
   app.use(sessionMiddleware);
   app.use(passport.initialize());
   app.use(passport.session());
+  app.use(hydrateFromHubSession);
 }

@@ -9,10 +9,15 @@ CREATE TABLE IF NOT EXISTS session (
 );
 CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON session (expire);
 
--- Users (from Google OAuth)
+-- Users (linked via Google OAuth and/or hub handoff).
+-- Internal id stays SERIAL (referenced by puns/groups/notifications/etc.).
+-- google_id is the legacy OAuth identifier (now nullable for hub-only users).
+-- hub_user_id is the hub's UUID identity, set on first hub launch or on next
+-- Google login after the integration ships.
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    google_id VARCHAR(255) UNIQUE NOT NULL,
+    google_id VARCHAR(255) UNIQUE,
+    hub_user_id UUID UNIQUE,
     email VARCHAR(255),
     display_name VARCHAR(255),
     custom_display_name VARCHAR(255),
@@ -20,6 +25,10 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Idempotent additions for existing deployments.
+ALTER TABLE users ALTER COLUMN google_id DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hub_user_id UUID UNIQUE;
 
 -- Groups (Tier 2: social layer — no gameplay data, just membership)
 CREATE TABLE IF NOT EXISTS groups (
@@ -149,6 +158,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+CREATE INDEX IF NOT EXISTS idx_users_hub_user_id ON users(hub_user_id);
 CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id);
 CREATE INDEX IF NOT EXISTS idx_puns_challenge ON puns(challenge_id);
 CREATE INDEX IF NOT EXISTS idx_puns_author ON puns(author_id);

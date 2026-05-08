@@ -20,6 +20,11 @@ services:
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - UMAMI_BASE_URL=${UMAMI_BASE_URL:-http://umami:3000}
+      # Loom & Skullcap hub integration (see docs/guides/05-hub-integration.md)
+      - HUB_URL=${HUB_URL:-https://hub.cotlone.com}
+      - HUB_GAME_ID=${HUB_GAME_ID}
+      - HUB_API_SECRET=${HUB_API_SECRET}
+      - HUB_JWT_SECRET=${HUB_JWT_SECRET}
       # Buffer queue + semantic deduplication
       - OLLAMA_URL=http://ollama:11434
       - RERANKER_URL=http://reranker:7997

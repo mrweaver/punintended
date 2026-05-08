@@ -14,7 +14,6 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
-  ChevronsUpDown,
   FileText,
   Search,
   Sparkles,
@@ -503,45 +502,25 @@ function ReleaseEntry({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-accent">
-              {release.version === "Unreleased"
-                ? release.version
-                : `v${release.version}`}
-            </span>
-            {isCurrent && (
-              <span className="rounded-full border border-accent-border bg-accent-subtle px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-foreground">
-                Current
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm font-semibold text-accent">
+                {release.version === "Unreleased"
+                  ? release.version
+                  : `v${release.version}`}
               </span>
-            )}
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-text-muted">
-            <span className="inline-flex items-center gap-1.5">
+              {isCurrent && (
+                <span className="rounded-full border border-accent-border bg-accent-subtle px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-foreground">
+                  Current
+                </span>
+              )}
+            </div>
+            
+            <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
               <CalendarDays className="h-3.5 w-3.5" />
               {release.date}
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5" />
-              {release.noteCount} note{release.noteCount === 1 ? "" : "s"}
-            </span>
           </div>
-
-          {release.sections.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {release.sections.slice(0, 4).map((section) => (
-                <span
-                  key={section.id}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getSectionBadgeClasses(
-                    section.tone,
-                  )}`}
-                >
-                  {section.heading}
-                  {section.bulletCount > 0 ? ` ${section.bulletCount}` : ""}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </button>
 
@@ -578,12 +557,6 @@ function ReleaseEntry({
                       >
                         {section.heading}
                       </span>
-                      {section.bulletCount > 0 && (
-                        <span className="text-xs text-text-muted">
-                          {section.bulletCount} bullet
-                          {section.bulletCount === 1 ? "" : "s"}
-                        </span>
-                      )}
                     </div>
 
                     <div className="mt-3">
@@ -695,25 +668,10 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
     setExpanded(nextExpanded);
   }, [currentRelease, releases]);
 
-  const allFilteredExpanded =
-    filteredReleases.length > 0 &&
-    filteredReleases.every((release) => expanded[release.id]);
-
   function toggleRelease(releaseId: string) {
     setExpanded((previous) => ({
       ...previous,
       [releaseId]: !previous[releaseId],
-    }));
-  }
-
-  function toggleFilteredReleases() {
-    const nextState = Object.fromEntries(
-      filteredReleases.map((release) => [release.id, !allFilteredExpanded]),
-    );
-
-    setExpanded((previous) => ({
-      ...previous,
-      ...nextState,
     }));
   }
 
@@ -786,31 +744,7 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
               />
             </label>
 
-            {!isSearching && (
-              <button
-                type="button"
-                onClick={toggleFilteredReleases}
-                disabled={filteredReleases.length === 0}
-                aria-label={
-                  allFilteredExpanded
-                    ? "Collapse all visible releases"
-                    : "Expand all visible releases"
-                }
-                title={
-                  allFilteredExpanded
-                    ? "Collapse all visible releases"
-                    : "Expand all visible releases"
-                }
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border bg-surface text-text-secondary transition-colors hover:border-accent-border hover:bg-accent-subtle hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ChevronsUpDown className="h-4 w-4" />
-                <span className="sr-only">
-                  {allFilteredExpanded
-                    ? "Collapse all visible releases"
-                    : "Expand all visible releases"}
-                </span>
-              </button>
-            )}
+
           </div>
 
           {status === "ready" && releases.length > 0 && currentRelease && (

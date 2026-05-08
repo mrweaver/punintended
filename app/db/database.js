@@ -24,6 +24,7 @@ if (process.env.PGPASSWORD) {
 }
 
 const pool = new Pool(poolConfig);
+const HUB_DAILY_RESET_TIMEZONE = "Australia/Sydney";
 
 pool.on("connect", () => {
   console.log("Database connected successfully");
@@ -661,10 +662,11 @@ async function updatePunScore(punId, judgement, options = {}) {
     const priorBestResult = await client.query(
       `SELECT MAX(ai_score) AS best_score
        FROM puns
-       WHERE challenge_id = $1
-         AND author_id = $2
+       WHERE author_id = $1
+         AND (created_at AT TIME ZONE '${HUB_DAILY_RESET_TIMEZONE}')::date =
+             ($2 AT TIME ZONE '${HUB_DAILY_RESET_TIMEZONE}')::date
          AND ai_score IS NOT NULL`,
-      [pun.challenge_id, pun.author_id],
+      [pun.author_id, pun.created_at],
     );
     const priorBestScore =
       priorBestResult.rows[0]?.best_score === null ||
@@ -869,20 +871,29 @@ async function getBestDailyHubScores(options = {}, executor = query) {
   const result = await db(
     `SELECT *
      FROM (
-       SELECT DISTINCT ON (p.author_id, p.challenge_id)
+       SELECT DISTINCT ON (
+         p.author_id,
+         (p.created_at AT TIME ZONE '${HUB_DAILY_RESET_TIMEZONE}')::date
+       )
          p.id,
          p.challenge_id,
          p.author_id,
          u.hub_user_id,
          p.ai_score,
          p.response_time_ms,
-         p.created_at
+         p.created_at,
+         (p.created_at AT TIME ZONE '${HUB_DAILY_RESET_TIMEZONE}')::date AS played_local_date
        FROM puns p
        JOIN users u ON u.id = p.author_id
        WHERE ${whereClauses.join(" AND ")}
-       ORDER BY p.author_id, p.challenge_id, p.ai_score DESC, p.created_at ASC, p.id ASC
+       ORDER BY
+         p.author_id,
+         (p.created_at AT TIME ZONE '${HUB_DAILY_RESET_TIMEZONE}')::date,
+         p.ai_score DESC,
+         p.created_at ASC,
+         p.id ASC
      ) daily_best
-     ORDER BY daily_best.challenge_id ASC, daily_best.author_id ASC
+     ORDER BY daily_best.played_local_date ASC, daily_best.author_id ASC
      ${limitSql}`,
     params,
   );

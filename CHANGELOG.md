@@ -4,6 +4,12 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.30.2] - 2026-06-07
+
+### Fixed
+
+- **Judge Response Readability:** Improved the contrast of AI judge feedback so it is legible in both light and dark modes. Feedback on pun cards previously rendered as dark purple on the dark background and was nearly invisible; it now uses an accessible accent colour, and the low-contrast feedback and score labels across the Gauntlet and Backwords views have been brightened to meet readability standards.
+
 ## [1.30.1] - 2026-05-09
 
 ### Added

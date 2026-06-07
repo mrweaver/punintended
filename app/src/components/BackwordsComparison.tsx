@@ -75,12 +75,12 @@ function AttemptRow({
       </div>
 
       {(attempt.feedback || attempt.ai_judge_name) && (
-        <p className="mt-3 flex items-start gap-1.5 text-sm italic text-gray-500 dark:text-zinc-400">
+        <p className="mt-3 flex items-start gap-1.5 text-sm italic text-gray-600 dark:text-zinc-300">
           {attempt.feedback ?? "No feedback recorded."}
           <JudgeHint
             judgeName={attempt.ai_judge_name}
             judgeVersion={attempt.ai_judge_version}
-            className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+            className="mt-0.5 inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200"
             iconClassName="h-3.5 w-3.5 shrink-0"
           />
         </p>
@@ -256,12 +256,12 @@ export function BackwordsComparison({
                   {(clue.clue_score ?? 0).toLocaleString()} pts
                 </p>
                 {clue.ai_feedback && (
-                  <p className="mt-2 flex items-start gap-1.5 text-sm italic text-gray-500 dark:text-zinc-400">
+                  <p className="mt-2 flex items-start gap-1.5 text-sm italic text-gray-600 dark:text-zinc-300">
                     {clue.ai_feedback}
                     <JudgeHint
                       judgeName={clue.ai_judge_name}
                       judgeVersion={clue.ai_judge_version}
-                      className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+                      className="mt-0.5 inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                       iconClassName="h-3.5 w-3.5 shrink-0"
                     />
                   </p>

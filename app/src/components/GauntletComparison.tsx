@@ -356,12 +356,12 @@ export function GauntletComparison({
 
                   {round?.ai_feedback && (
                     <div className="pl-8">
-                      <p className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-zinc-500 italic">
+                      <p className="flex items-start gap-1.5 text-xs text-gray-600 dark:text-zinc-300 italic">
                         AI ({aiScore}/10): {round.ai_feedback}
                         <JudgeHint
                           judgeName={round?.ai_judge_name}
                           judgeVersion={round?.ai_judge_version}
-                          className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+                          className="mt-0.5 inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                           iconClassName="h-3.5 w-3.5 shrink-0"
                         />
                       </p>

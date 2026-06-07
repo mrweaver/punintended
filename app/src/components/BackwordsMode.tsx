@@ -369,19 +369,19 @@ function CreatorReceipt({
                 <p className="text-lg font-mono font-bold text-zinc-900 dark:text-zinc-100">
                   {clue.ai_score ?? 0}/10
                 </p>
-                <p className="text-xs text-gray-400 dark:text-zinc-500">
+                <p className="text-xs text-gray-500 dark:text-zinc-400">
                   {(clue.clue_score ?? 0).toLocaleString()} pts
                 </p>
               </div>
             </div>
 
             {clue.ai_feedback && (
-              <p className="flex items-start gap-1.5 text-sm italic text-gray-500 dark:text-zinc-400">
+              <p className="flex items-start gap-1.5 text-sm italic text-gray-600 dark:text-zinc-300">
                 {clue.ai_feedback}
                 <JudgeHint
                   judgeName={clue.ai_judge_name}
                   judgeVersion={clue.ai_judge_version}
-                  className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+                  className="mt-0.5 inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                   iconClassName="h-3.5 w-3.5 shrink-0"
                 />
               </p>

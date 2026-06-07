@@ -60,7 +60,7 @@ export function GauntletReceipt({
             <p className="text-5xl font-mono font-bold text-zinc-900 dark:text-zinc-100">
               {totalScore.toLocaleString()}
             </p>
-            <p className="text-sm text-gray-400 dark:text-zinc-500 mt-1">
+            <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1">
               out of {MAX_SCORE.toLocaleString()} possible
             </p>
             <p className="mt-2 font-serif italic text-orange-600 dark:text-violet-400 text-lg">
@@ -92,7 +92,7 @@ export function GauntletReceipt({
               {/* Round label + prompts */}
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-widest text-gray-400 dark:text-zinc-500 mb-1">
+                  <p className="font-mono text-xs uppercase tracking-widest text-gray-500 dark:text-zinc-400 mb-1">
                     Round {i + 1}
                   </p>
                   {prompt && (
@@ -126,12 +126,12 @@ export function GauntletReceipt({
               {/* AI feedback */}
               {round.ai_feedback && (
                 <div>
-                  <p className="flex items-start gap-1.5 text-sm text-gray-500 dark:text-zinc-400 italic">
+                  <p className="flex items-start gap-1.5 text-sm text-gray-600 dark:text-zinc-300 italic">
                     {round.ai_feedback}
                     <JudgeHint
                       judgeName={round.ai_judge_name}
                       judgeVersion={round.ai_judge_version}
-                      className="mt-0.5 inline-flex items-center text-gray-400 hover:text-gray-500 dark:text-zinc-500 dark:hover:text-zinc-300"
+                      className="mt-0.5 inline-flex items-center text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200"
                       iconClassName="h-3.5 w-3.5 shrink-0"
                     />
                   </p>
@@ -140,7 +140,7 @@ export function GauntletReceipt({
 
               {/* Score breakdown */}
               {!skipped && (
-                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-1 text-xs font-mono text-gray-500 dark:text-zinc-500">
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-1 text-xs font-mono text-gray-600 dark:text-zinc-400">
                   <div className="flex justify-between">
                     <span>AI Score: {aiScore}/10</span>
                     <span>+{baseScore}</span>

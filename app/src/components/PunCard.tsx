@@ -386,7 +386,7 @@ export function PunCard({
                 AI Score: {pun.aiScore}/10
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-accent italic">
+            <p className="text-xs sm:text-sm text-accent-foreground italic">
               {pun.aiFeedback}
             </p>
           </div>
@@ -397,7 +397,7 @@ export function PunCard({
       {pun.aiFeedback === "Re-evaluating..." && !isEditing && (
         <div className="flex items-start gap-3 p-3 bg-accent-subtle rounded-xl">
           <Gavel className="w-5 h-5 text-accent shrink-0 mt-0.5 animate-pulse" />
-          <p className="text-xs sm:text-sm text-accent italic">
+          <p className="text-xs sm:text-sm text-accent-foreground italic">
             Re-evaluating...
           </p>
         </div>

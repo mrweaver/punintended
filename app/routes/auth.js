@@ -2,11 +2,11 @@
  * routes/auth.js — Authentication routes.
  *
  * Three login surfaces share one PunIntended user record:
- *   1. /auth/google — direct Google OAuth via Passport (legacy, still
- *      supported for users who land on pun.cotlone.com directly).
- *   2. /auth/hub    — handoff token from hub.cotlone.com after a LAUNCH
+ *   1. /auth/google — start a direct Google sign-in round-trip and return the
+ *      user straight back to PunIntended with the shared session.
+ *   2. /auth/hub    — handoff token from loomskullcap.com after a LAUNCH
  *      click on the hub dashboard.
- *   3. The shared `lns_session` cookie on `.cotlone.com` issued by either
+ *   3. The shared `lns_session` cookie on `.loomskullcap.com` issued by either
  *      side (or by another integrated app) — read by ensureAuthenticated.
  *
  * Both Google and hub paths set the cross-subdomain cookie, so logging in
@@ -26,19 +26,48 @@ import { formatAuthUser } from "../middleware/auth.js";
 
 const router = Router();
 
+function getAppOrigin(req) {
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function resolveReturnTo(req) {
+  const appOrigin = getAppOrigin(req);
+  const fallback = `${appOrigin}/`;
+  const rawReturnTo =
+    typeof req.query.returnTo === "string" ? req.query.returnTo.trim() : "";
+
+  if (!rawReturnTo) return fallback;
+
+  try {
+    const candidate = new URL(rawReturnTo, appOrigin);
+    return candidate.origin === appOrigin ? candidate.toString() : fallback;
+  } catch (_err) {
+    return fallback;
+  }
+}
+
+function buildHubGoogleStartUrl(req) {
+  const hubUrl = (process.env.HUB_URL || "https://loomskullcap.com").replace(
+    /\/+$/,
+    "",
+  );
+  const returnTo = resolveReturnTo(req);
+  return `${hubUrl}/api/v1/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
 router.get(
   "/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"] }),
+  (req, res) => {
+    res.redirect(buildHubGoogleStartUrl(req));
+  },
 );
 
 router.get(
   "/auth/google/callback",
   passport.authenticate("google", { failureRedirect: "/?login=failed" }),
   async (req, res) => {
-    // Mint a hub-compatible session cookie so the user is also logged in at
-    // hub.cotlone.com and any other integrated app. The hub UUID may not
-    // exist yet for legacy users — they get linked the first time they
-    // come back through the hub.
+    // Legacy fallback: if this callback is still hit, mint the shared session
+    // cookie so the user is also logged in across the Loom apex.
     try {
       const hubUserId = req.user?.hub_user_id ?? null;
       if (hubUserId) {

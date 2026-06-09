@@ -32,8 +32,12 @@ import {
   isValidDateId,
   getRevealElapsedMs,
 } from "../lib/date.js";
-import { getActivePunJudgeDefinition } from "../lib/aiJudges.js";
-import { getOrCreateGlobalChallenge, scorePunText } from "../services/ai.js";
+import { readSessionToken } from "../auth/hub.js";
+import {
+  buildPunScoreFallback,
+  getOrCreateGlobalChallenge,
+  scorePunText,
+} from "../services/ai.js";
 import { maybeRefillBuffer } from "../services/buffer.js";
 import {
   addDailyClient,
@@ -46,25 +50,6 @@ import {
 } from "../services/sse.js";
 
 const router = Router();
-
-function buildRouteFallbackJudgement(feedback, reasoning) {
-  const judge = getActivePunJudgeDefinition();
-
-  return {
-    score: 0,
-    feedback,
-    reasoning,
-    judgeKey: judge.key,
-    judgeName: judge.name,
-    judgeVersion: judge.version,
-    judgeModel: judge.model,
-    judgePromptHash: judge.promptHash,
-    judgeStatus: judge.status,
-    isActive: judge.isActive,
-    status: "completed",
-    errorMessage: reasoning,
-  };
-}
 
 // SSE stream
 router.get("/api/daily/stream", ensureAuthenticated, (req, res) => {
@@ -222,24 +207,32 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
       text.trim(),
       canonicalResponseTimeMs,
     );
+    const hubSessionToken = readSessionToken(req);
     broadcastPunsUpdate(targetChallengeId);
 
     // Score asynchronously
     scorePunText(challenge.topic, challenge.focus, text.trim())
       .then(async (result) => {
         console.log(`[Pun ID: ${pun.id}] AI Reasoning: ${result.reasoning}`);
-        await updatePunScore(pun.id, result, { triggerType: "initial" });
+        await updatePunScore(pun.id, result, {
+          triggerType: "initial",
+          hubSessionToken,
+        });
         broadcastPunsUpdate(targetChallengeId);
       })
       .catch(async (err) => {
         console.error("AI scoring failed:", err);
         await updatePunScore(
           pun.id,
-          buildRouteFallbackJudgement(
-            "The judge fell asleep at the bar. Please edit and resubmit!",
-            "Route-level scoring failure during initial pun submission.",
-          ),
-          { triggerType: "initial" },
+          buildPunScoreFallback({
+            feedback:
+              "The judge has misplaced the scorecard, so a perfectly neutral 5 has been entered for now. Edit and resubmit later if you want a retrial.",
+            reasoning: "Route-level scoring failure during initial pun submission.",
+          }),
+          {
+            triggerType: "initial",
+            hubSessionToken,
+          },
         );
         broadcastPunsUpdate(targetChallengeId);
       });
@@ -267,11 +260,13 @@ router.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
 
     // Re-score
     const challenge = await getGlobalChallengeForDate(pun.challenge_id);
+    const hubSessionToken = readSessionToken(req);
     if (challenge) {
       scorePunText(challenge.topic, challenge.focus, text.trim())
         .then(async (result) => {
           await updatePunScore(req.params.id, result, {
             triggerType: "edit_rescore",
+            hubSessionToken,
           });
           broadcastPunsUpdate(pun.challenge_id);
         })
@@ -279,11 +274,15 @@ router.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
           console.error("AI re-scoring failed:", err);
           await updatePunScore(
             req.params.id,
-            buildRouteFallbackJudgement(
-              "The judge nodded off mid-revision. Try editing again shortly.",
-              "Route-level scoring failure during pun re-score.",
-            ),
-            { triggerType: "edit_rescore" },
+            buildPunScoreFallback({
+              feedback:
+                "The judge smudged the revised notes, so a perfectly neutral 5 stands for now. Try editing again shortly if you insist on an appeal.",
+              reasoning: "Route-level scoring failure during pun re-score.",
+            }),
+            {
+              triggerType: "edit_rescore",
+              hubSessionToken,
+            },
           );
           broadcastPunsUpdate(pun.challenge_id);
         });

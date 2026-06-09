@@ -12,6 +12,8 @@ import {
   getAllGroups,
   getGroupById,
   createGroup,
+  createGroupInvite,
+  acceptGroupInvite,
   joinGroup,
   deleteGroup,
   renameGroup,
@@ -91,6 +93,53 @@ router.post("/api/groups/:id/join", ensureAuthenticated, async (req, res) => {
     res.status(500).json({ error: "Failed to join group" });
   }
 });
+
+router.post("/api/groups/:id/invites", ensureAuthenticated, async (req, res) => {
+  try {
+    const group = await getGroupById(req.params.id);
+    if (!group) return res.status(404).json({ error: "Group not found" });
+    const isMember = group.players.some((player) => player.uid === req.user.id);
+    if (!isMember) {
+      return res.status(403).json({ error: "Only group members can create invite links" });
+    }
+
+    const invite = await createGroupInvite(req.params.id, req.user.id);
+    const origin = `${req.protocol}://${req.get("host")}`;
+
+    res.json({
+      token: invite.token,
+      groupId: req.params.id,
+      groupName: group.name,
+      createdAt: invite.created_at,
+      shareUrl: `${origin}/?invite=${invite.token}`,
+    });
+  } catch (error) {
+    console.error("Failed to create group invite:", error);
+    res.status(500).json({ error: "Failed to create group invite" });
+  }
+});
+
+router.post(
+  "/api/group-invites/:token/accept",
+  ensureAuthenticated,
+  async (req, res) => {
+    try {
+      const invite = await acceptGroupInvite(req.params.token, req.user.id);
+      if (!invite) {
+        return res.status(404).json({ error: "Invite not found or expired" });
+      }
+
+      const group = await getGroupById(invite.group_id);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+
+      broadcastGroupUpdate(group.id);
+      res.json(group);
+    } catch (error) {
+      console.error("Failed to accept group invite:", error);
+      res.status(500).json({ error: "Failed to accept group invite" });
+    }
+  },
+);
 
 router.delete("/api/groups/:id", ensureAuthenticated, async (req, res) => {
   try {

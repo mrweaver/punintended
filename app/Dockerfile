@@ -1,5 +1,6 @@
 # Stage 1: Build React app with Vite
 FROM node:20-alpine AS build
+RUN apk add --no-cache git
 WORKDIR /app
 COPY app/package*.json ./
 RUN npm install
@@ -10,7 +11,7 @@ RUN npm run build
 # Stage 2: Production Express server
 FROM node:20-alpine
 ENV TZ=Australia/Sydney
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache git tzdata
 WORKDIR /app
 COPY app/package*.json ./
 RUN npm ci --omit=dev

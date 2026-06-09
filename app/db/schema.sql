@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS group_members (
     PRIMARY KEY (group_id, user_id)
 );
 
+-- Shareable group invite links.
+CREATE TABLE IF NOT EXISTS group_invites (
+    token UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    revoked_at TIMESTAMP WITH TIME ZONE
+);
+
 -- Puns (Tier 1: belong to user + daily challenge, NOT to a group)
 CREATE TABLE IF NOT EXISTS puns (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -172,6 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id);
 CREATE INDEX IF NOT EXISTS idx_pun_comments_pun ON pun_comments(pun_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_group_invites_group ON group_invites(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_invites_created_by ON group_invites(created_by);
 
 -- Auto-update timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()

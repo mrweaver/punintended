@@ -374,6 +374,53 @@ async function joinGroup(groupId, userId) {
   );
 }
 
+async function createGroupInvite(groupId, createdBy) {
+  const result = await query(
+    `INSERT INTO group_invites (group_id, created_by)
+     VALUES ($1, $2)
+     RETURNING token, group_id, created_by, created_at, revoked_at`,
+    [groupId, createdBy],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function getGroupInviteByToken(token) {
+  const result = await query(
+    `SELECT token, group_id, created_by, created_at, revoked_at
+       FROM group_invites
+      WHERE token = $1
+        AND revoked_at IS NULL`,
+    [token],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function acceptGroupInvite(token, userId) {
+  return withTransaction(async (client) => {
+    const run = getDbRunner(client);
+    const inviteResult = await run(
+      `SELECT token, group_id
+         FROM group_invites
+        WHERE token = $1
+          AND revoked_at IS NULL
+        FOR UPDATE`,
+      [token],
+    );
+
+    const invite = inviteResult.rows[0] ?? null;
+    if (!invite) return null;
+
+    await run(
+      `INSERT INTO group_members (group_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [invite.group_id, userId],
+    );
+
+    return invite;
+  });
+}
+
 async function deleteGroup(groupId) {
   await query("DELETE FROM groups WHERE id = $1", [groupId]);
 }
@@ -674,6 +721,7 @@ async function updatePunScore(punId, judgement, options = {}) {
         ? null
         : Number(priorBestResult.rows[0].best_score);
     hubDispatch = {
+      hubSessionToken: options?.hubSessionToken ?? null,
       hubUserId: pun.hub_user_id ?? null,
       responseTimeMs: pun.response_time_ms ?? 0,
       score: judgement?.score ?? null,
@@ -681,7 +729,7 @@ async function updatePunScore(punId, judgement, options = {}) {
       shouldSubmit:
         judgement?.score !== null &&
         judgement?.score !== undefined &&
-        (priorBestScore === null || Number(judgement.score) > priorBestScore),
+        (priorBestScore === null || Number(judgement.score) >= priorBestScore),
     };
     const challengeResult = await client.query(
       `SELECT topic, focus
@@ -756,14 +804,23 @@ async function updatePunScore(punId, judgement, options = {}) {
 
   if (hubDispatch?.shouldSubmit) {
     submitScoreToHub({
+      hubSessionToken: hubDispatch.hubSessionToken,
       hubUserId: hubDispatch.hubUserId,
       aiScore: hubDispatch.score,
       responseTimeMs: hubDispatch.responseTimeMs,
       isDaily: true,
       playedAt: hubDispatch.playedAt,
-    }).catch((err) => {
-      console.warn("[updatePunScore] hub dispatch failed:", err.message);
-    });
+    })
+      .then((result) => {
+        if (!result) {
+          console.warn(
+            "[updatePunScore] hub dispatch returned no result for current daily best",
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn("[updatePunScore] hub dispatch failed:", err.message);
+      });
   }
 }
 
@@ -1035,13 +1092,16 @@ async function getPlayerGroupStats(groupId, userId) {
        FROM user_puns up 
        JOIN challenge_winners cw ON up.challenge_id = cw.challenge_id 
        WHERE up.user_score = cw.winning_score) as wins,
-      (SELECT json_agg(row_to_json(rh)) FROM (SELECT * FROM recent_history ORDER BY date ASC) rh) as recent_efforts`
-  , [groupId, userId]);
+      (SELECT json_agg(row_to_json(rh)) FROM (SELECT * FROM recent_history ORDER BY date ASC) rh) as recent_efforts`,
+    [groupId, userId],
+  );
 
   const row = result.rows[0] || {};
   return {
     totalSubmissions: parseInt(row.total_submissions || 0, 10),
-    averageScore: row.average_score ? parseFloat(row.average_score).toFixed(1) : null,
+    averageScore: row.average_score
+      ? parseFloat(row.average_score).toFixed(1)
+      : null,
     wins: parseInt(row.wins || 0, 10),
     recentEfforts: row.recent_efforts || [],
   };
@@ -2243,6 +2303,15 @@ async function runMigrations() {
   }
 
   // --- Standard idempotent migrations ---
+  await query(`
+    CREATE TABLE IF NOT EXISTS group_invites (
+      token UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      revoked_at TIMESTAMP WITH TIME ZONE
+    )
+  `);
   await query(
     `ALTER TABLE puns ADD COLUMN IF NOT EXISTS response_time_ms INTEGER`,
   );
@@ -2518,6 +2587,8 @@ async function runMigrations() {
   await alterToTz("groups", "created_at");
   await alterToTz("groups", "updated_at");
   await alterToTz("group_members", "joined_at");
+  await alterToTz("group_invites", "created_at");
+  await alterToTz("group_invites", "revoked_at");
   await alterToTz("puns", "created_at");
   await alterToTz("puns", "updated_at");
   await alterToTz("puns", "ai_judged_at");
@@ -2656,6 +2727,12 @@ async function runMigrations() {
   await query(
     `CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id)`,
   );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_group_invites_group ON group_invites(group_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_group_invites_created_by ON group_invites(created_by)`,
+  );
 
   await query(`
     DO $fn$ BEGIN
@@ -2715,9 +2792,12 @@ export {
   updateUserPrivacy,
   getGroupIdsByUser,
   createGroup,
+  createGroupInvite,
   getAllGroups,
   getGroupById,
+  getGroupInviteByToken,
   joinGroup,
+  acceptGroupInvite,
   deleteGroup,
   renameGroup,
   removePlayerFromGroup,

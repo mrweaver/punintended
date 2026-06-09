@@ -22,6 +22,10 @@ import {
 } from "./ReactionPicker";
 import type { Pun, PunComment, PunReaction } from "../api/client";
 
+// Key of the dedicated backup pun judge (see app/lib/aiJudges.js — REGINALD_RESERVE_V1).
+// When a pun was scored by this judge, the primary judge had hit its daily quota.
+const BACKUP_PUN_JUDGE_KEY = "reginald-reserve";
+
 interface PunCardProps {
   pun: Pun;
   index: number;
@@ -118,6 +122,8 @@ export function PunCard({
   const [editText, setEditText] = useState("");
   const [commentText, setCommentText] = useState("");
   const dismissedRef = useRef(pun.viewed);
+  const judgeButtonRef = useRef<HTMLButtonElement>(null);
+  const judgeDetailsRef = useRef<HTMLDivElement>(null);
   const [showNewBadge, setShowNewBadge] = useState(!pun.viewed);
   const badgeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -130,7 +136,33 @@ export function PunCard({
     return () => clearTimeout(badgeTimerRef.current);
   }, [pun.viewed]);
 
+  useEffect(() => {
+    if (!showJudgeDetails) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (judgeButtonRef.current?.contains(target)) return;
+      if (judgeDetailsRef.current?.contains(target)) return;
+      setShowJudgeDetails(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowJudgeDetails(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showJudgeDetails]);
+
   const isAuthor = pun.authorId === user?.uid;
+  const scoredByBackup = pun.aiJudgeKey === BACKUP_PUN_JUDGE_KEY;
 
   const handleSubmitComment = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -342,12 +374,14 @@ export function PunCard({
           {/* 1. The Trigger & Popover Anchor */}
           <div className="relative mt-0.5 shrink-0">
             <button
+              ref={judgeButtonRef}
               onClick={(e) => {
                 e.stopPropagation();
-                setShowJudgeDetails(!showJudgeDetails);
+                setShowJudgeDetails((prev) => !prev);
               }}
               className="p-1 -m-1 rounded-md text-accent hover:bg-accent/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
               aria-label="View judge details"
+              aria-expanded={showJudgeDetails}
             >
               <Gavel className="w-5 h-5" />
             </button>
@@ -356,6 +390,7 @@ export function PunCard({
             <AnimatePresence>
               {showJudgeDetails && (
                 <motion.div
+                  ref={judgeDetailsRef}
                   initial={{ opacity: 0, y: 5, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 5, scale: 0.95 }}
@@ -381,10 +416,18 @@ export function PunCard({
 
           {/* 3. The Text Content */}
           <div>
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-sm font-bold text-accent-foreground">
                 AI Score: {pun.aiScore}/10
               </span>
+              {scoredByBackup && (
+                <span
+                  title="Our usual judge hit its daily limit, so a backup judge stepped in."
+                  className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-warning-subtle text-warning"
+                >
+                  Backup judge
+                </span>
+              )}
             </div>
             <p className="text-xs sm:text-sm text-accent-foreground italic">
               {pun.aiFeedback}

@@ -35,7 +35,7 @@ import { ShareModal } from "./modals/ShareModal";
 import { DeleteConfirmModal } from "./modals/DeleteConfirmModal";
 import { PlayerModal } from "./modals/PlayerModal";
 import type { Group, DailyChallenge, Player } from "../api/client";
-import { dailyApi } from "../api/client";
+import { dailyApi, groupsApi } from "../api/client";
 
 interface GameBoardProps {
   session: Group;
@@ -105,6 +105,8 @@ export function GameBoard({
 
   const [punText, setPunText] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [creatingInvite, setCreatingInvite] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -128,6 +130,19 @@ export function GameBoard({
   const unreadChatCount = chatOpen
     ? 0
     : Math.max(0, messages.length - lastReadCountRef.current);
+
+  const openShareModal = useCallback(async () => {
+    setCreatingInvite(true);
+    try {
+      const invite = await groupsApi.createInvite(session.id);
+      setInviteUrl(invite.shareUrl);
+      setShowShareModal(true);
+    } catch (error) {
+      console.error("Failed to create invite link:", error);
+    } finally {
+      setCreatingInvite(false);
+    }
+  }, [session.id]);
 
   // Play a sound when the current user's pun gets AI-scored
   useEffect(() => {
@@ -269,7 +284,8 @@ export function GameBoard({
           </div>
           <Button
             variant="outline"
-            onClick={() => setShowShareModal(true)}
+            onClick={openShareModal}
+            loading={creatingInvite}
             className="text-xs px-3 py-2"
           >
             <QrCode className="w-4 h-4" />
@@ -693,9 +709,12 @@ export function GameBoard({
               <strong className="dark:text-zinc-200">{session.name}</strong>.
             </>
           }
-          shareUrl={`${window.location.origin}?group=${session.id}`}
+          shareUrl={inviteUrl ?? `${window.location.origin}/?group=${session.id}`}
           shareMessage={`Join my PunIntended group, ${session.name}.`}
-          onClose={() => setShowShareModal(false)}
+          onClose={() => {
+            setShowShareModal(false);
+            setInviteUrl(null);
+          }}
         />
       )}
 

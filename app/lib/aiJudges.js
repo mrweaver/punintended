@@ -32,6 +32,39 @@ const PERCIVAL_PEDANTIC_V1 = createJudgeDefinition({
   isActive: true,
 });
 
+const ADELAIDE_ACERBIC_V2 = createJudgeDefinition({
+  key: "adelaide-acerbic",
+  name: "Adelaide the Acerbic",
+  version: "2.0",
+  model: "gemini-3.5-flash",
+  systemPrompt: PERCIVAL_PEDANTIC_V1.systemPrompt,
+  config: {
+    temperature: 0.4,
+    thinkingLevel: "high",
+    responseSchemaVersion: "pun-score-v1",
+  },
+  status: "active",
+  isActive: true,
+});
+
+// Backup pun judge: same rubric/persona as the active pun judge, but runs on the
+// lite model. Steps in when the primary judge's model hits its free-tier daily
+// quota (HTTP 429). Same prompt + different model = a distinct judge.
+const REGINALD_RESERVE_V1 = createJudgeDefinition({
+  key: "reginald-reserve",
+  name: "Reginald the Reserve",
+  version: "1.0",
+  model: process.env.GEMINI_FALLBACK_MODEL || "gemini-3.1-flash-lite",
+  systemPrompt: ADELAIDE_ACERBIC_V2.systemPrompt,
+  config: {
+    temperature: 0.4,
+    thinkingLevel: "high",
+    responseSchemaVersion: "pun-score-v1",
+  },
+  status: "active",
+  isActive: true,
+});
+
 const SILAS_SUBTLE_V2 = createJudgeDefinition({
   key: "silas-subtle",
   name: "Silas the Subtle",
@@ -51,6 +84,21 @@ const SILAS_SUBTLE_V2 = createJudgeDefinition({
          - "You have practically nailed one half of the puzzle."
          - "Very close, just refine your terminology."
          - "A solid guess, you are moving in the right direction."`,
+  config: {
+    temperature: 0.1,
+    thinkingLevel: "high",
+    responseSchemaVersion: "backwords-guess-v2",
+  },
+  status: "active",
+  isActive: true,
+});
+
+const OBERON_OBLIQUE_V3 = createJudgeDefinition({
+  key: "oberon-oblique",
+  name: "Oberon the Oblique",
+  version: "3.0",
+  model: "gemini-3.5-flash",
+  systemPrompt: SILAS_SUBTLE_V2.systemPrompt,
   config: {
     temperature: 0.1,
     thinkingLevel: "high",
@@ -107,6 +155,21 @@ const PENN_PROLIFIC_V1 = createJudgeDefinition({
   isActive: true,
 });
 
+const LYRA_LACONIC_V2 = createJudgeDefinition({
+  key: "lyra-laconic",
+  name: "Lyra the Laconic",
+  version: "2.0",
+  model: "gemini-3.5-flash",
+  systemPrompt: PENN_PROLIFIC_V1.systemPrompt,
+  config: {
+    temperature: 0.9,
+    thinkingLevel: "medium",
+    responseSchemaVersion: "clue-generator-v1",
+  },
+  status: "active",
+  isActive: true,
+});
+
 const UNKNOWN_JUDGE_V0 = createJudgeDefinition({
   key: "unknown-judge",
   name: "Judge Nomen Nescio",
@@ -126,16 +189,21 @@ const UNKNOWN_JUDGE_V0 = createJudgeDefinition({
 // Map specific game modes to their currently active judge.
 // ============================================================================
 
-const CURRENT_PUN_JUDGE = PERCIVAL_PEDANTIC_V1;
-const CURRENT_BACKWORDS_JUDGE = SILAS_SUBTLE_V2;
-const CURRENT_CLUE_GENERATOR_JUDGE = PENN_PROLIFIC_V1;
+const CURRENT_PUN_JUDGE = ADELAIDE_ACERBIC_V2;
+const CURRENT_PUN_BACKUP_JUDGE = REGINALD_RESERVE_V1;
+const CURRENT_BACKWORDS_JUDGE = OBERON_OBLIQUE_V3;
+const CURRENT_CLUE_GENERATOR_JUDGE = LYRA_LACONIC_V2;
 
 const BUILT_IN_AI_JUDGES = [
   UNKNOWN_JUDGE_V0,
   PERCIVAL_PEDANTIC_V1,
+  ADELAIDE_ACERBIC_V2,
+  REGINALD_RESERVE_V1,
   IRENE_INFERENCE_V1,
   SILAS_SUBTLE_V2,
+  OBERON_OBLIQUE_V3,
   PENN_PROLIFIC_V1,
+  LYRA_LACONIC_V2,
 ];
 
 
@@ -178,6 +246,10 @@ export function formatJudgeLabel(name, version) {
 
 export function getActivePunJudgeDefinition() {
   return CURRENT_PUN_JUDGE;
+}
+
+export function getBackupPunJudgeDefinition() {
+  return CURRENT_PUN_BACKUP_JUDGE;
 }
 
 export function getActiveBackwordsJudgeDefinition() {

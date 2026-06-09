@@ -43,10 +43,24 @@
       "Bash(node -e \"const pkg = require\\('express/package.json'\\); console.log\\('Express version:', pkg.version\\)\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://localhost:3000/umami/api/send -H \"Content-Type: application/json\" -d '{\"payload\":{\"hostname\":\"pun.cotlone.com\",\"language\":\"en-US\",\"referrer\":\"\",\"screen\":\"1920x1080\",\"title\":\"Test\",\"url\":\"/\",\"website\":\"7759fce6-d100-4a22-a0d7-6d32e8ad31b6\",\"name\":\"\"},\"type\":\"event\"}')",
       "Bash(curl -s -w \"\\\\nHTTP Status: %{http_code}\\\\n\" -X POST http://localhost:3000/umami/api/send -H \"Content-Type: application/json\" -d '{\"type\":\"event\",\"payload\":{\"website\":\"7759fce6-d100-4a22-a0d7-6d32e8ad31b6\",\"url\":\"/\",\"hostname\":\"pun.cotlone.com\",\"language\":\"en-US\",\"screen\":\"1920x1080\"}}')",
-      "Bash(curl -s -w \"\\\\nHTTP Status: %{http_code}\\\\n\" http://localhost:3000/umami/script.js)"
+      "Bash(curl -s -w \"\\\\nHTTP Status: %{http_code}\\\\n\" http://localhost:3000/umami/script.js)",
+      "Bash(awk 'NR>=646 && NR<=760' db/database.js)",
+      "Bash(awk 'NR>=144 && NR<=205' db/database.js)",
+      "Bash(node --check services/ai.js)",
+      "Bash(node --check lib/aiJudges.js)",
+      "Bash(node -e \"import\\('./lib/aiJudges.js'\\).then\\(m=>{const j=m.getBackupPunJudgeDefinition\\(\\);console.log\\('backup judge:', j.key, j.name, j.model, 'version', j.version\\);console.log\\('builtins:', m.getBuiltInAiJudges\\(\\).map\\(x=>x.key\\).join\\(','\\)\\);}\\).catch\\(e=>{console.error\\('ERR',e.message\\);process.exit\\(1\\)}\\)\")",
+      "Bash(node -e \"import\\('./lib/aiJudges.js'\\).then\\(m=>{const j=m.getBackupPunJudgeDefinition\\(\\);const all=m.getBuiltInAiJudges\\(\\).map\\(x=>x.key\\);console.log\\(JSON.stringify\\({backup:{key:j.key,name:j.name,model:j.model,version:j.version,isActive:j.isActive},builtins:all},null,0\\)\\);}\\).catch\\(e=>{console.error\\('ERR',e&&e.message\\);process.exit\\(1\\)}\\)\")",
+      "Bash(echo \"RC=$?\")",
+      "Bash(echo \"=== *)",
+      "Read(//tmp/**)",
+      "Bash(git ls-remote *)",
+      "Bash(npm -v)",
+      "Bash(python3 -c 'import json;json.load\\(open\\('\\\\''/opt/stacks/punintended/app/package-lock.json'\\\\''\\)\\);print\\('\\\\''JSON valid'\\\\''\\)')",
+      "Bash(git rev-list *)"
     ],
     "additionalDirectories": [
       "/opt/stacks/punintended/app"
     ]
-  }
+  },
+  "plansDirectory": "./.claude/plans"
 }

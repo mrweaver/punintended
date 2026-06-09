@@ -3,52 +3,130 @@ import { groupsApi, type Group } from "../api/client";
 import { createSSE } from "../api/sse";
 import { useAuth } from "../contexts/AuthContext";
 
+const PENDING_GROUP_INTENT_KEY = "pun_pending_group_intent";
+
+type PendingGroupIntent = {
+  inviteToken: string | null;
+  groupId: string | null;
+};
+
+function getIncomingGroupIntent(): PendingGroupIntent | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const inviteToken = params.get("invite");
+  const groupId = params.get("session") || params.get("group");
+  if (!inviteToken && !groupId) return null;
+  return { inviteToken, groupId };
+}
+
+function readPendingGroupIntent(): PendingGroupIntent | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PENDING_GROUP_INTENT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      inviteToken:
+        typeof parsed?.inviteToken === "string" ? parsed.inviteToken : null,
+      groupId: typeof parsed?.groupId === "string" ? parsed.groupId : null,
+    };
+  } catch {
+    localStorage.removeItem(PENDING_GROUP_INTENT_KEY);
+    return null;
+  }
+}
+
+function writePendingGroupIntent(intent: PendingGroupIntent | null) {
+  if (typeof window === "undefined") return;
+  if (!intent?.inviteToken && !intent?.groupId) {
+    localStorage.removeItem(PENDING_GROUP_INTENT_KEY);
+    return;
+  }
+  localStorage.setItem(PENDING_GROUP_INTENT_KEY, JSON.stringify(intent));
+}
+
 export function useGroup() {
   const { user } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    const incomingIntent = getIncomingGroupIntent();
+    if (incomingIntent) writePendingGroupIntent(incomingIntent);
+  }, []);
+
   // Load groups on mount
   useEffect(() => {
     if (!user) return;
-    groupsApi
-      .list()
-      .then((data) => {
+
+    let cancelled = false;
+
+    async function hydrateGroups() {
+      setLoading(true);
+
+      const incomingIntent = getIncomingGroupIntent();
+      const pendingIntent = incomingIntent ?? readPendingGroupIntent();
+      const savedGroupId = localStorage.getItem("pun_session_id");
+      let targetGroupId = pendingIntent?.groupId || savedGroupId;
+      let shouldClearUrl = !!incomingIntent;
+
+      if (pendingIntent?.inviteToken) {
+        try {
+          const joinedGroup = await groupsApi.acceptInvite(pendingIntent.inviteToken);
+          targetGroupId = joinedGroup.id;
+          writePendingGroupIntent(null);
+        } catch (error) {
+          console.error("Failed to accept pending invite:", error);
+          writePendingGroupIntent(null);
+        }
+      }
+
+      try {
+        let data = await groupsApi.list();
+        if (cancelled) return;
+
+        if (pendingIntent?.groupId) {
+          const foundFromIntent = data.find((group) => group.id === pendingIntent.groupId);
+          if (
+            foundFromIntent &&
+            !foundFromIntent.players.some((player) => player.uid === user.uid)
+          ) {
+            await groupsApi.join(foundFromIntent.id);
+            data = await groupsApi.list();
+            if (cancelled) return;
+          }
+
+          writePendingGroupIntent(null);
+        }
+
         setGroups(data);
 
-        // Restore group from URL or localStorage
-        const urlParams = new URLSearchParams(window.location.search);
-        const groupIdFromUrl =
-          urlParams.get("session") || urlParams.get("group");
-        const savedGroupId = localStorage.getItem("pun_session_id");
-        const targetId = groupIdFromUrl || savedGroupId;
-
-        if (targetId) {
-          const found = data.find((g) => g.id === targetId);
+        if (targetGroupId) {
+          const found = data.find((group) => group.id === targetGroupId);
           if (found) {
             setCurrentGroup(found);
-            // Auto-join if from URL
-            if (
-              groupIdFromUrl &&
-              !found.players.some((p) => p.uid === user.uid)
-            ) {
-              groupsApi.join(found.id).catch(console.error);
-            }
-            if (groupIdFromUrl) {
-              window.history.replaceState(
-                {},
-                document.title,
-                "/",
-              );
-            }
+            localStorage.setItem("pun_session_id", found.id);
           } else {
             localStorage.removeItem("pun_session_id");
           }
         }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+
+        if (shouldClearUrl) {
+          window.history.replaceState({}, document.title, "/");
+        }
+      } catch (error) {
+        console.error("Failed to load groups:", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    hydrateGroups();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // SSE for current group

@@ -37,6 +37,14 @@ export const groupsApi = {
     }),
   join: (id: string) =>
     request<Group>(`/api/groups/${id}/join`, { method: "POST" }),
+  createInvite: (id: string) =>
+    request<GroupInviteLink>(`/api/groups/${id}/invites`, {
+      method: "POST",
+    }),
+  acceptInvite: (token: string) =>
+    request<Group>(`/api/group-invites/${token}/accept`, {
+      method: "POST",
+    }),
   rename: (id: string, name: string) =>
     request<Group>(`/api/groups/${id}`, {
       method: "PATCH",
@@ -501,6 +509,14 @@ export interface Group {
   players: Player[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GroupInviteLink {
+  token: string;
+  groupId: string;
+  groupName: string;
+  createdAt: string;
+  shareUrl: string;
 }
 
 export interface DailyChallenge {

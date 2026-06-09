@@ -16,10 +16,10 @@ import {
 } from "../db/database.js";
 import {
   getActiveBackwordsJudgeDefinition,
-  getActivePunJudgeDefinition,
 } from "../lib/aiJudges.js";
 import {
   buildBackwordsGuessFallback,
+  buildPunScoreFallback,
   generateBackwordsAssignment,
   generateClueCandidates,
   judgeBackwordsGuess,
@@ -83,25 +83,6 @@ function sanitizeBackwordsGameForViewer(game, revealTargets) {
     ...game,
     topic: null,
     focus: null,
-  };
-}
-
-function buildCreatorFallbackJudgement(feedback, reasoning) {
-  const judge = getActivePunJudgeDefinition();
-
-  return {
-    score: 0,
-    feedback,
-    reasoning,
-    judgeKey: judge.key,
-    judgeName: judge.name,
-    judgeVersion: judge.version,
-    judgeModel: judge.model,
-    judgePromptHash: judge.promptHash,
-    judgeStatus: judge.status,
-    isActive: judge.isActive,
-    status: "completed",
-    errorMessage: reasoning,
   };
 }
 
@@ -352,10 +333,11 @@ router.post(
       Promise.all(
         publishedGame.clues.map((clue) =>
           scorePunText(game.topic, game.focus, clue.pun_text).catch(() =>
-            buildCreatorFallbackJudgement(
-              "The judge wandered off before scoring this clue.",
-              "Backwords clue scoring fell back after an API failure.",
-            ),
+            buildPunScoreFallback({
+              feedback:
+                "The judge wandered off before scoring this clue, so a perfectly neutral 5 has been entered for now.",
+              reasoning: "Backwords clue scoring fell back after an API failure.",
+            }),
           ),
         ),
       )
@@ -373,10 +355,11 @@ router.post(
         .catch(async (err) => {
           console.error("Backwords clue scoring failed:", err);
           const judgements = publishedGame.clues.map(() =>
-            buildCreatorFallbackJudgement(
-              "The judge wandered off before scoring this clue.",
-              "Backwords clue scoring failed during async processing.",
-            ),
+            buildPunScoreFallback({
+              feedback:
+                "The judge wandered off before scoring this clue, so a perfectly neutral 5 has been entered for now.",
+              reasoning: "Backwords clue scoring failed during async processing.",
+            }),
           );
           const scoredGame = await updateBackwordsGameScores(
             publishedGame.id,

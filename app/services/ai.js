@@ -17,12 +17,13 @@ import {
   getActiveBackwordsJudgeDefinition,
   getActiveClueGeneratorJudgeDefinition,
   getActivePunJudgeDefinition,
+  getBackupPunJudgeDefinition,
   getJudgeSnapshot,
 } from "../lib/aiJudges.js";
 import { generateEmbedding, cosineSimilarity } from "./embeddings.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const DEFAULT_MODEL = "gemini-3.1-flash-lite-preview";
+const DEFAULT_MODEL = "gemini-3.5-flash";
 
 const PUN_SCORE_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -291,9 +292,6 @@ export async function generateDailyChallenge(pastChallenges = []) {
 
     The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON.${avoidClause}`,
     config: {
-      temperature: 0.95, // Elevated for higher variance across the 20 pairs
-      topK: 64, // Widened pool for more diverse everyday objects
-      topP: 0.95, // Standard cutoff to prevent total gibberish
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -360,9 +358,6 @@ export async function generateChallengeBatch(recentChallenges = []) {
 
     The goal is to force players to make creative puns connecting two completely different concepts. Return as JSON with a 'challenges' array of exactly 20 objects.${avoidClause}`,
     config: {
-      temperature: 0.95,
-      topK: 64,
-      topP: 0.95,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -386,44 +381,90 @@ export async function generateChallengeBatch(recentChallenges = []) {
   return JSON.parse(response.text).challenges;
 }
 
-export async function scorePunText(topic, focus, punText) {
-  const judge = getActivePunJudgeDefinition();
-  const judgeSnapshot = getJudgeSnapshot(judge);
+// Detects Gemini free-tier daily-quota exhaustion (HTTP 429 / RESOURCE_EXHAUSTED).
+function isQuotaError(error) {
+  const status = error?.status ?? error?.code ?? error?.error?.code;
+  if (status === 429) return true;
+  const message = `${error?.message ?? ""} ${error?.error?.status ?? ""}`;
+  return /RESOURCE_EXHAUSTED|too many requests|quota|\b429\b/i.test(message);
+}
 
-  try {
-    const response = await ai.models.generateContent({
-      model: judge.model,
-      systemInstruction: judge.systemPrompt,
+async function runPunJudge(judge, topic, focus, punText) {
+  const response = await ai.models.generateContent({
+    model: judge.model,
+    systemInstruction: judge.systemPrompt,
 
-      contents: `Evaluate the following submission:
+    contents: `Evaluate the following submission:
 
       [TOPIC]: ${topic}
       [FOCUS]: ${focus}
       [USER_PUN]: """${punText}"""`,
 
-      config: {
-        temperature: judge.config.temperature,
-        thinkingConfig: {
-          thinkingLevel: judge.config.thinkingLevel,
-        },
-        responseMimeType: "application/json",
-        responseSchema: PUN_SCORE_RESPONSE_SCHEMA,
+    config: {
+      thinkingConfig: {
+        thinkingLevel: judge.config.thinkingLevel,
       },
-    });
+      responseMimeType: "application/json",
+      responseSchema: PUN_SCORE_RESPONSE_SCHEMA,
+    },
+  });
 
-    return {
-      ...JSON.parse(response.text),
-      ...judgeSnapshot,
-    };
+  return {
+    ...JSON.parse(response.text),
+    ...getJudgeSnapshot(judge),
+  };
+}
+
+function buildScoreFiveFallback(judge) {
+  return buildPunScoreFallback({
+    judge,
+    reasoning: "API failure or timeout.",
+    feedback:
+      "My analytical faculties have collapsed into a regrettable heap, so I shall record a perfectly neutral 5 and proceed with dignity.",
+  });
+}
+
+export function buildPunScoreFallback({
+  judge = getActivePunJudgeDefinition(),
+  feedback =
+    "My analytical faculties have collapsed into a regrettable heap, so I shall record a perfectly neutral 5 and proceed with dignity.",
+  reasoning = "Pun scoring infrastructure fallback applied.",
+} = {}) {
+  return {
+    score: 5,
+    feedback,
+    reasoning,
+    ...getJudgeSnapshot(judge),
+    status: "completed",
+    errorMessage: reasoning,
+  };
+}
+
+export async function scorePunText(topic, focus, punText) {
+  const judge = getActivePunJudgeDefinition();
+
+  try {
+    return await runPunJudge(judge, topic, focus, punText);
   } catch (error) {
+    // On daily-quota exhaustion, retry with the dedicated backup judge (lite model).
+    if (isQuotaError(error)) {
+      const backupJudge = getBackupPunJudgeDefinition();
+      console.warn(
+        `[AI] Pun judge "${judge.key}" hit its quota; falling back to backup judge "${backupJudge.key}" (${backupJudge.model}).`,
+      );
+      try {
+        return await runPunJudge(backupJudge, topic, focus, punText);
+      } catch (backupError) {
+        console.error(
+          "AI Judging failed (backup judge also failed):",
+          backupError,
+        );
+        return buildScoreFiveFallback(judge);
+      }
+    }
+
     console.error("AI Judging failed:", error);
-    return {
-      reasoning: "API failure or timeout.",
-      score: 5,
-      feedback:
-        "I was prepared to offer a blistering critique, but my analytical faculties encountered a systemic failure. We shall record a perfectly mediocre 5 and proceed.",
-      ...judgeSnapshot,
-    };
+    return buildScoreFiveFallback(judge);
   }
 }
 
@@ -492,9 +533,6 @@ export async function generateBackwordsAssignment(pastChallenges = []) {
 
     Return as JSON with keys 'topic' and 'focus'.${avoidClause}`,
     config: {
-      temperature: 0.85,
-      topK: 48,
-      topP: 0.9,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -556,7 +594,6 @@ async function runClueGeneration(topic, focus, humanClues, count) {
     [EXISTING_HUMAN_PUNS]:
     ${humanBlock}`,
     config: {
-      temperature: judge.config.temperature,
       thinkingConfig: {
         thinkingLevel: judge.config.thinkingLevel,
       },
@@ -644,7 +681,6 @@ export async function judgeBackwordsGuess(topic, focus, guessA, guessB) {
       [GUESS_A]: """${guessA}"""
       [GUESS_B]: """${guessB}"""`,
         config: {
-          temperature: judge.config.temperature,
           thinkingConfig: {
             thinkingLevel: judge.config.thinkingLevel,
           },

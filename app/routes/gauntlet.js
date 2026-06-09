@@ -26,7 +26,11 @@ import {
   createGauntletMessage,
 } from "../db/database.js";
 import { getActivePunJudgeDefinition } from "../lib/aiJudges.js";
-import { generateGauntletPrompts, scorePunText } from "../services/ai.js";
+import {
+  buildPunScoreFallback,
+  generateGauntletPrompts,
+  scorePunText,
+} from "../services/ai.js";
 import {
   addGauntletClient,
   removeGauntletClient,
@@ -36,7 +40,7 @@ import {
 
 const router = Router();
 
-function buildRouteFallbackJudgement(feedback, reasoning) {
+function buildNoSubmissionJudgement(feedback, reasoning) {
   const judge = getActivePunJudgeDefinition();
 
   return {
@@ -170,10 +174,11 @@ router.post(
             await updateGauntletRoundScore(
               runId,
               roundIndex,
-              buildRouteFallbackJudgement(
-                "The judge fell asleep at the bar. No score for this round.",
-                `Route-level gauntlet scoring failure for round ${roundIndex}.`,
-              ),
+              buildPunScoreFallback({
+                feedback:
+                  "The judge dropped this round's paperwork, so a perfectly neutral 5 has been entered and we shall carry on.",
+                reasoning: `Route-level gauntlet scoring failure for round ${roundIndex}.`,
+              }),
               { triggerType: "initial" },
             );
             await maybeFinalize(runId);
@@ -183,7 +188,7 @@ router.post(
         await updateGauntletRoundScore(
           runId,
           roundIndex,
-          buildRouteFallbackJudgement(
+          buildNoSubmissionJudgement(
             "Time's up - no pun submitted.",
             "Timer expired before a gauntlet submission was recorded.",
           ),

@@ -38,6 +38,16 @@ function consumeHubHandoffToken(): string | null {
   return token;
 }
 
+function getLoginReturnToUrl(): string {
+  if (typeof window === "undefined") return "/";
+  const url = new URL(window.location.href);
+  url.searchParams.delete("token");
+  url.searchParams.delete("hub_token");
+  url.searchParams.delete("login");
+  url.searchParams.delete("reason");
+  return url.toString();
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -66,7 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = () => {
-    window.location.href = "/auth/google";
+    const returnTo = getLoginReturnToUrl();
+    window.location.href = `/auth/google?returnTo=${encodeURIComponent(returnTo)}`;
   };
 
   const logout = async () => {

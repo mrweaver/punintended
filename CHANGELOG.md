@@ -4,6 +4,23 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.31.0] - 2026-06-08
+
+### Added
+
+- **Shareable Group Invite Links:** Group members can now generate a shareable invite link (with a scannable QR code) instead of adding players one by one. New `POST /api/groups/:id/invites` and `POST /api/group-invites/:token/accept` endpoints, backed by a new `group_invites` table; opening `/?invite=<token>` joins the group after sign-in.
+- **Backup AI Judge:** When the primary judge's model hits its Gemini free-tier daily quota (HTTP 429 / `RESOURCE_EXHAUSTED`), a reserve judge ("Reginald the Reserve") on a lighter fallback model automatically scores the pun so judging never stalls. The fallback model is configurable via the optional `GEMINI_FALLBACK_MODEL` env var (defaults to `gemini-3.1-flash-lite`).
+- **Backup Judge Badge:** Pun cards now show a "Backup judge" badge when a pun's score came from the reserve judge, so the change in judge is transparent to players.
+- **Expanded Judge Roster:** Added new AI judge personalities (Adelaide the Acerbic, Oberon the Oblique, Lyra the Laconic) to the active rotation.
+
+### Changed
+
+- **Hub Integration via Shared Client:** Replaced PunIntended's inline Loom & Skullcap hub auth and score-submission logic with the shared `@cotlone/loom-hub-client` package, simplifying `auth/hub.js` and `services/hub.js`.
+
+### Fixed
+
+- **Judge Details Popover:** The judge details popover can now be dismissed by clicking outside it or pressing Escape, and exposes `aria-expanded` for assistive technologies.
+
 ## [1.30.2] - 2026-06-07
 
 ### Fixed

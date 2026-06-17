@@ -56,7 +56,12 @@
       "Bash(git ls-remote *)",
       "Bash(npm -v)",
       "Bash(python3 -c 'import json;json.load\\(open\\('\\\\''/opt/stacks/punintended/app/package-lock.json'\\\\''\\)\\);print\\('\\\\''JSON valid'\\\\''\\)')",
-      "Bash(git rev-list *)"
+      "Bash(git rev-list *)",
+      "Bash(awk '/CREATE TABLE IF NOT EXISTS gauntlet_round_judgements/,/\\\\\\);/' db/schema.sql)",
+      "Bash(awk '/CREATE TABLE IF NOT EXISTS backwords_guess_judgements/,/\\\\\\);/' db/schema.sql)",
+      "Bash(node --check db/database.js)",
+      "Bash(node -e \"import\\('./lib/punRetry.js'\\).then\\(m=>{console.log\\('5m@1:',m.getRetryCooldownMs\\(1\\)/60000,'15m@2:',m.getRetryCooldownMs\\(2\\)/60000,'30m@3:',m.getRetryCooldownMs\\(3\\)/60000,'60m@4:',m.getRetryCooldownMs\\(4\\)/60000,'60m@9:',m.getRetryCooldownMs\\(9\\)/60000\\);const e=m.getRetryEligibility\\({failureCount:1,lastFailedAt:new Date\\(Date.now\\(\\)-6*60000\\)}\\);console.log\\('eligible after 6m/1fail:',e.eligible\\);const e2=m.getRetryEligibility\\({failureCount:2,lastFailedAt:new Date\\(Date.now\\(\\)-6*60000\\)}\\);console.log\\('eligible after 6m/2fail\\(need15\\):',e2.eligible,'nextAt set:',!!e2.nextRetryAt\\);}\\).catch\\(e=>{console.error\\(e\\);process.exit\\(1\\)}\\)\")",
+      "Bash(node --check routes/daily.js)"
     ],
     "additionalDirectories": [
       "/opt/stacks/punintended/app"

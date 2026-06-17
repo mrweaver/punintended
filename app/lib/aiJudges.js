@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 // ============================================================================
 // 1. JUDGE DEFINITIONS (The Registry)
 // Define all historical and current judges here as immutable entities.
+// Each judge has a `provider` field: "gemini" or "minimax".
 // ============================================================================
 
 const PERCIVAL_PEDANTIC_V1 = createJudgeDefinition({
@@ -10,6 +11,7 @@ const PERCIVAL_PEDANTIC_V1 = createJudgeDefinition({
   name: "Percival the Pedantic",
   version: "1.0",
   model: "gemini-3.1-flash-lite-preview",
+  provider: "gemini",
   systemPrompt: `You are a sharp, formal, and deadpan judge for a pun-making game.
       Your humour relies entirely on dry, understated sarcasm, highly formal vocabulary, and a slightly weary, pedantic intellect.
 
@@ -37,6 +39,7 @@ const ADELAIDE_ACERBIC_V2 = createJudgeDefinition({
   name: "Adelaide the Acerbic",
   version: "2.0",
   model: "gemini-3.5-flash",
+  provider: "gemini",
   systemPrompt: PERCIVAL_PEDANTIC_V1.systemPrompt,
   config: {
     temperature: 0.4,
@@ -55,6 +58,7 @@ const REGINALD_RESERVE_V1 = createJudgeDefinition({
   name: "Reginald the Reserve",
   version: "1.0",
   model: process.env.GEMINI_FALLBACK_MODEL || "gemini-3.1-flash-lite",
+  provider: "gemini",
   systemPrompt: ADELAIDE_ACERBIC_V2.systemPrompt,
   config: {
     temperature: 0.4,
@@ -70,6 +74,7 @@ const SILAS_SUBTLE_V2 = createJudgeDefinition({
   name: "Silas the Subtle",
   version: "2.0",
   model: "gemini-3.1-flash-lite-preview",
+  provider: "gemini",
   systemPrompt: `You adjudicate a reverse-engineering wordplay game.
       Two hidden targets exist: a Topic and a Focus. The player submits two guessed concepts.
 
@@ -98,6 +103,7 @@ const OBERON_OBLIQUE_V3 = createJudgeDefinition({
   name: "Oberon the Oblique",
   version: "3.0",
   model: "gemini-3.5-flash",
+  provider: "gemini",
   systemPrompt: SILAS_SUBTLE_V2.systemPrompt,
   config: {
     temperature: 0.1,
@@ -113,6 +119,7 @@ const IRENE_INFERENCE_V1 = createJudgeDefinition({
   name: "Irene of Inference",
   version: "1.0",
   model: "gemini-3.1-flash-lite-preview",
+  provider: "gemini",
   systemPrompt: `You adjudicate a reverse-engineering wordplay game.
       Two hidden targets exist: a Topic and a Focus. The player submits two guessed concepts.
 
@@ -137,6 +144,7 @@ const PENN_PROLIFIC_V1 = createJudgeDefinition({
   name: "Penn the Prolific",
   version: "1.0",
   model: "gemini-3.1-flash-lite-preview",
+  provider: "gemini",
   systemPrompt: `You are a Backwords pun generator. You are given a hidden Topic and Focus plus the Creator's own pun attempts, and you must produce additional puns that bridge both concepts.
 
       CRITICAL RULES:
@@ -160,10 +168,76 @@ const LYRA_LACONIC_V2 = createJudgeDefinition({
   name: "Lyra the Laconic",
   version: "2.0",
   model: "gemini-3.5-flash",
+  provider: "gemini",
   systemPrompt: PENN_PROLIFIC_V1.systemPrompt,
   config: {
     temperature: 0.9,
     thinkingLevel: "medium",
+    responseSchemaVersion: "clue-generator-v1",
+  },
+  status: "active",
+  isActive: true,
+});
+
+// ── MiniMax M3 Judges ────────────────────────────────────────────────────────
+// These use the OpenAI-compatible MiniMax API (https://api.minimax.io/v1).
+// Provider "minimax" routes through callMiniMax() in services/ai.js.
+
+const ARCHIBALD_ACERBIC_M3_V1 = createJudgeDefinition({
+  key: "archibald-acerbic-m3",
+  name: "Archibald the Acerbic (M3)",
+  version: "1.0",
+  model: "MiniMax-M3",
+  provider: "minimax",
+  systemPrompt: PERCIVAL_PEDANTIC_V1.systemPrompt,
+  config: {
+    temperature: 0.4,
+    responseSchemaVersion: "pun-score-v1",
+  },
+  status: "active",
+  isActive: true,
+});
+
+// Backup for Archibald: faster MiniMax-M2.7-highspeed model.
+const ROLAND_RESERVE_M3_V1 = createJudgeDefinition({
+  key: "roland-reserve-m3",
+  name: "Roland the Reserve (M2.7)",
+  version: "1.0",
+  model: "MiniMax-M2.7-highspeed",
+  provider: "minimax",
+  systemPrompt: PERCIVAL_PEDANTIC_V1.systemPrompt,
+  config: {
+    temperature: 0.4,
+    responseSchemaVersion: "pun-score-v1",
+  },
+  status: "active",
+  isActive: true,
+});
+
+const VESPERA_VIGILANT_M3_V1 = createJudgeDefinition({
+  key: "vespera-vigilant-m3",
+  name: "Vespera the Vigilant (M3)",
+  version: "1.0",
+  model: "MiniMax-M3",
+  provider: "minimax",
+  systemPrompt: SILAS_SUBTLE_V2.systemPrompt,
+  config: {
+    temperature: 0.1,
+    responseSchemaVersion: "backwords-guess-v2",
+  },
+  status: "active",
+  isActive: true,
+});
+
+const CLIO_CREATIVE_M3_V1 = createJudgeDefinition({
+  key: "clio-creative-m3",
+  name: "Clio the Creative (M3)",
+  version: "1.0",
+  model: "MiniMax-M3",
+  provider: "minimax",
+  systemPrompt: PENN_PROLIFIC_V1.systemPrompt,
+  config: {
+    temperature: 0.9,
     responseSchemaVersion: "clue-generator-v1",
   },
   status: "active",
@@ -175,6 +249,7 @@ const UNKNOWN_JUDGE_V0 = createJudgeDefinition({
   name: "Judge Nomen Nescio",
   version: "0",
   model: "legacy",
+  provider: "gemini",
   systemPrompt: null,
   config: {
     source: "legacy-placeholder",
@@ -185,30 +260,124 @@ const UNKNOWN_JUDGE_V0 = createJudgeDefinition({
 
 
 // ============================================================================
-// 2. ACTIVE ROUTING (The Configuration)
-// Map specific game modes to their currently active judge.
+// 2. JUDGE REGISTRY & ROUTER
 // ============================================================================
 
-const CURRENT_PUN_JUDGE = ADELAIDE_ACERBIC_V2;
-const CURRENT_PUN_BACKUP_JUDGE = REGINALD_RESERVE_V1;
-const CURRENT_BACKWORDS_JUDGE = OBERON_OBLIQUE_V3;
-const CURRENT_CLUE_GENERATOR_JUDGE = LYRA_LACONIC_V2;
-
+// All judges available for selection (ordered: newest/active first).
 const BUILT_IN_AI_JUDGES = [
-  UNKNOWN_JUDGE_V0,
-  PERCIVAL_PEDANTIC_V1,
+  ARCHIBALD_ACERBIC_M3_V1,
+  ROLAND_RESERVE_M3_V1,
+  VESPERA_VIGILANT_M3_V1,
+  CLIO_CREATIVE_M3_V1,
   ADELAIDE_ACERBIC_V2,
   REGINALD_RESERVE_V1,
-  IRENE_INFERENCE_V1,
-  SILAS_SUBTLE_V2,
   OBERON_OBLIQUE_V3,
-  PENN_PROLIFIC_V1,
   LYRA_LACONIC_V2,
+  SILAS_SUBTLE_V2,
+  PENN_PROLIFIC_V1,
+  PERCIVAL_PEDANTIC_V1,
+  IRENE_INFERENCE_V1,
+  UNKNOWN_JUDGE_V0,
 ];
+
+const JUDGE_REGISTRY = new Map(BUILT_IN_AI_JUDGES.map((j) => [j.key, j]));
+
+// Role names used as app_settings keys.
+export const JUDGE_ROLES = {
+  PUN: "judge_role_pun",
+  PUN_BACKUP: "judge_role_pun_backup",
+  BACKWORDS: "judge_role_backwords",
+  CLUE_GENERATOR: "judge_role_clue_generator",
+};
+
+// Built-in defaults (MiniMax M3 as primary, Gemini as secondary fallback).
+const DEFAULT_JUDGES = {
+  [JUDGE_ROLES.PUN]: ARCHIBALD_ACERBIC_M3_V1,
+  [JUDGE_ROLES.PUN_BACKUP]: ROLAND_RESERVE_M3_V1,
+  [JUDGE_ROLES.BACKWORDS]: VESPERA_VIGILANT_M3_V1,
+  [JUDGE_ROLES.CLUE_GENERATOR]: CLIO_CREATIVE_M3_V1,
+};
+
+// In-memory override map — loaded from DB on startup via loadJudgeOverrides().
+const _overrides = new Map();
+
+/**
+ * Load persisted judge overrides from app_settings.
+ * Called once at server startup by services/ai.js (or server.js).
+ */
+export async function loadJudgeOverrides(getAppSettingFn) {
+  for (const role of Object.values(JUDGE_ROLES)) {
+    const key = await getAppSettingFn(role);
+    if (key && JUDGE_REGISTRY.has(key)) {
+      _overrides.set(role, JUDGE_REGISTRY.get(key));
+    }
+  }
+  console.log("[JudgeRouter] Overrides loaded:", Object.fromEntries([..._overrides.entries()].map(([r, j]) => [r, j.key])));
+}
+
+/**
+ * Programmatically set an override for a role (also persists to DB via caller).
+ * @param {string} role - One of JUDGE_ROLES values.
+ * @param {string} judgeKey - Key of the judge to use.
+ * @returns {object} The resolved judge definition.
+ */
+export function setJudgeOverride(role, judgeKey) {
+  const judge = JUDGE_REGISTRY.get(judgeKey);
+  if (!judge) throw new Error(`Unknown judge key: ${judgeKey}`);
+  _overrides.set(role, judge);
+  return judge;
+}
+
+export function clearJudgeOverride(role) {
+  _overrides.delete(role);
+}
+
+function getJudgeForRole(role) {
+  return _overrides.get(role) ?? DEFAULT_JUDGES[role];
+}
 
 
 // ============================================================================
-// 3. UTILITIES & EXPORTS
+// 3. ACTIVE JUDGE ACCESSORS
+// ============================================================================
+
+export function getActivePunJudgeDefinition() {
+  return getJudgeForRole(JUDGE_ROLES.PUN);
+}
+
+export function getBackupPunJudgeDefinition() {
+  return getJudgeForRole(JUDGE_ROLES.PUN_BACKUP);
+}
+
+export function getActiveBackwordsJudgeDefinition() {
+  return getJudgeForRole(JUDGE_ROLES.BACKWORDS);
+}
+
+export function getActiveClueGeneratorJudgeDefinition() {
+  return getJudgeForRole(JUDGE_ROLES.CLUE_GENERATOR);
+}
+
+export function getUnknownAiJudgeDefinition() {
+  return UNKNOWN_JUDGE_V0;
+}
+
+export function getBuiltInAiJudges() {
+  return BUILT_IN_AI_JUDGES;
+}
+
+/** Returns a snapshot of all roles and their currently active judge keys. */
+export function getActiveJudgesByRole() {
+  return Object.fromEntries(
+    Object.entries(JUDGE_ROLES).map(([roleName, roleKey]) => [
+      roleKey,
+      getJudgeForRole(roleKey).key,
+    ]),
+  );
+}
+
+
+// ============================================================================
+// 4. UTILITIES & EXPORTS
 // ============================================================================
 
 function createJudgeDefinition(definition) {
@@ -239,33 +408,8 @@ function normalizeJudgeVersion(version) {
 
 export function formatJudgeLabel(name, version) {
   const normalizedName = typeof name === "string" ? name.trim() : "";
-
   if (!normalizedName) return null;
   return normalizedName;
-}
-
-export function getActivePunJudgeDefinition() {
-  return CURRENT_PUN_JUDGE;
-}
-
-export function getBackupPunJudgeDefinition() {
-  return CURRENT_PUN_BACKUP_JUDGE;
-}
-
-export function getActiveBackwordsJudgeDefinition() {
-  return CURRENT_BACKWORDS_JUDGE;
-}
-
-export function getActiveClueGeneratorJudgeDefinition() {
-  return CURRENT_CLUE_GENERATOR_JUDGE;
-}
-
-export function getUnknownAiJudgeDefinition() {
-  return UNKNOWN_JUDGE_V0;
-}
-
-export function getBuiltInAiJudges() {
-  return BUILT_IN_AI_JUDGES;
 }
 
 export function getJudgeSnapshot(definition) {
@@ -274,6 +418,7 @@ export function getJudgeSnapshot(definition) {
     judgeName: definition.name,
     judgeVersion: definition.version,
     judgeModel: definition.model,
+    judgeProvider: definition.provider ?? "gemini",
     judgePromptHash: definition.promptHash,
     judgeStatus: definition.status,
     isActive: definition.isActive,

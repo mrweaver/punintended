@@ -7,6 +7,8 @@ import {
   Trash2,
   Send,
   Gavel,
+  RotateCw,
+  BrainCircuit,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "./ui/Button";
@@ -20,11 +22,20 @@ import {
   ReactionSummary,
   type MessageReaction,
 } from "./ReactionPicker";
-import type { Pun, PunComment, PunReaction } from "../api/client";
+import { punsApi, type Pun, type PunComment, type PunReaction } from "../api/client";
 
 // Key of the dedicated backup pun judge (see app/lib/aiJudges.js — REGINALD_RESERVE_V1).
 // When a pun was scored by this judge, the primary judge had hit its daily quota.
 const BACKUP_PUN_JUDGE_KEY = "reginald-reserve";
+
+// Compact "in 5m" / "in 42s" label for when the next retry becomes available.
+function formatRetryCountdown(untilMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(untilMs / 1000));
+  if (totalSeconds >= 60) {
+    return `in ${Math.ceil(totalSeconds / 60)}m`;
+  }
+  return `in ${totalSeconds}s`;
+}
 
 interface PunCardProps {
   pun: Pun;
@@ -119,6 +130,7 @@ export function PunCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showJudgeDetails, setShowJudgeDetails] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(false);
   const [editText, setEditText] = useState("");
   const [commentText, setCommentText] = useState("");
   const dismissedRef = useRef(pun.viewed);
@@ -126,6 +138,9 @@ export function PunCard({
   const judgeDetailsRef = useRef<HTMLDivElement>(null);
   const [showNewBadge, setShowNewBadge] = useState(!pun.viewed);
   const badgeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [retrying, setRetrying] = useState(false);
+  // Ticks every second while a cooldown is pending so the countdown label updates.
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Once viewed, never show badge again for this pun
   useEffect(() => {
@@ -163,6 +178,37 @@ export function PunCard({
 
   const isAuthor = pun.authorId === user?.uid;
   const scoredByBackup = pun.aiJudgeKey === BACKUP_PUN_JUDGE_KEY;
+
+  // AI scoring failed → offer a re-score to anyone, gated by the server cooldown.
+  const retryAvailableAtMs = pun.aiRetryAvailableAt
+    ? new Date(pun.aiRetryAvailableAt).getTime()
+    : null;
+  const cooldownRemainingMs =
+    retryAvailableAtMs !== null ? retryAvailableAtMs - nowMs : 0;
+  const retryOnCooldown = cooldownRemainingMs > 0;
+  const canRetryNow =
+    pun.aiScoringFailed && !retrying && (pun.aiCanRetryScore || !retryOnCooldown);
+
+  // While a cooldown is pending, tick once a second to refresh the countdown.
+  useEffect(() => {
+    if (!pun.aiScoringFailed || !retryOnCooldown) return;
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [pun.aiScoringFailed, retryOnCooldown]);
+
+  const handleRetryScore = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canRetryNow) return;
+    setRetrying(true);
+    try {
+      await punsApi.retryScore(pun.id);
+      // Success path is driven by the SSE puns-update broadcast; the button
+      // disappears once the pun is re-scored. Keep the spinner until then.
+    } catch (err) {
+      console.error("Retry scoring failed:", err);
+      setRetrying(false);
+    }
+  };
 
   const handleSubmitComment = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -432,6 +478,60 @@ export function PunCard({
             <p className="text-xs sm:text-sm text-accent-foreground italic">
               {pun.aiFeedback}
             </p>
+
+            {/* Retry affordance: AI scoring failed; any user may re-trigger it. */}
+            {pun.aiScoringFailed && (
+              <button
+                onClick={handleRetryScore}
+                disabled={!canRetryNow}
+                title={
+                  canRetryNow
+                    ? "Ask the judge to try scoring this pun again"
+                    : "The judge needs a breather — retry available soon"
+                }
+                aria-label="Retry AI scoring"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:text-accent-foreground disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                <RotateCw
+                  className={`w-3.5 h-3.5 ${retrying ? "animate-spin" : ""}`}
+                />
+                <span>
+                  {retrying
+                    ? "Retrying…"
+                    : retryOnCooldown
+                      ? `Retry ${formatRetryCountdown(cooldownRemainingMs)}`
+                      : "Retry scoring"}
+                </span>
+              </button>
+            )}
+
+            {/* Reasoning toggle */}
+            {pun.aiReasoning && (
+              <div className="mt-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowReasoning((p) => !p); }}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-accent/70 hover:text-accent transition-colors"
+                >
+                  <BrainCircuit className="w-3 h-3" />
+                  <span>{showReasoning ? "Hide reasoning" : "Show reasoning"}</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showReasoning ? "rotate-180" : ""}`} />
+                </button>
+                <AnimatePresence>
+                  {showReasoning && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <pre className="mt-2 text-[11px] leading-relaxed text-accent-foreground/70 whitespace-pre-wrap font-mono bg-accent/5 rounded-lg p-2 border border-accent/10 max-h-48 overflow-y-auto">
+                        {pun.aiReasoning}
+                      </pre>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
         </div>
       )}

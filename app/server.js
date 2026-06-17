@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import { runMigrations } from "./db/database.js";
 import { applyMiddleware } from "./middleware/index.js";
 import { startHeartbeat } from "./services/sse.js";
+import { initJudgeOverrides } from "./services/ai.js";
 import {
   startBufferMonitor,
   backfillEmbeddings,
@@ -65,7 +66,8 @@ app.get("*", (req, res) => {
 startHeartbeat();
 
 runMigrations()
-  .then(() => {
+  .then(async () => {
+    await initJudgeOverrides();
     startBufferMonitor();
     backfillEmbeddings().catch(console.error);
     maybeRefillBuffer().catch(console.error);

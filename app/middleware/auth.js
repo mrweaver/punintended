@@ -78,6 +78,16 @@ export function ensureAuthenticated(req, res, next) {
   res.status(401).json({ error: "Not authenticated" });
 }
 
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+export function isDeveloperEmail(email) {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
+
 export function formatAuthUser(user) {
   if (!user) return null;
 
@@ -89,5 +99,6 @@ export function formatAuthUser(user) {
     photoURL: user.photo_url,
     email: user.email,
     anonymousInLeaderboards: !!user.anonymous_in_leaderboards,
+    isDeveloper: isDeveloperEmail(user.email),
   };
 }

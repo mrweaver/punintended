@@ -5,8 +5,36 @@ import {
   getUnknownAiJudgeDefinition,
 } from "../lib/aiJudges.js";
 import { submitScoreToHub } from "../services/hub.js";
+import { getRetryEligibility } from "../lib/punRetry.js";
 
 const { Pool } = pg;
+
+// Scalar columns derived from pun_judgements describing whether a pun's most
+// recent AI scoring failed, how many times it has failed since the last success,
+// and when it last failed. Drives the "retry scoring" affordance (see PunCard).
+// Correlated on p.id, so it composes with `GROUP BY p.id` board queries.
+const PUN_SCORING_STATE_SQL = `
+  (
+    SELECT j.status FROM pun_judgements j
+    WHERE j.pun_id = p.id
+    ORDER BY j.created_at DESC LIMIT 1
+  ) = 'failed' AS ai_scoring_failed,
+  (
+    SELECT MAX(j.created_at) FROM pun_judgements j
+    WHERE j.pun_id = p.id AND j.status = 'failed'
+  ) AS ai_last_failed_at,
+  (
+    SELECT COUNT(*) FROM pun_judgements j
+    WHERE j.pun_id = p.id AND j.status = 'failed'
+      AND j.created_at > COALESCE(
+        (
+          SELECT MAX(j2.created_at) FROM pun_judgements j2
+          WHERE j2.pun_id = p.id AND j2.status <> 'failed'
+        ),
+        '-infinity'::timestamptz
+      )
+  ) AS ai_failure_count
+`;
 
 const poolConfig = {
   host: process.env.PGHOST || "punintended-db",
@@ -608,6 +636,7 @@ async function getPunsForChallenge(challengeId, viewerId = null) {
   const result = await query(
     `SELECT p.*,
        aj.model AS ai_judge_model,
+       ${PUN_SCORING_STATE_SQL},
        ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
@@ -640,6 +669,7 @@ async function getPunsForChallengeByGroup(
   const result = await query(
     `SELECT p.*,
        aj.model AS ai_judge_model,
+       ${PUN_SCORING_STATE_SQL},
        ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
@@ -680,6 +710,7 @@ async function updatePunText(punId, text) {
      SET text = $1,
          ai_score = NULL,
          ai_feedback = 'Re-evaluating...',
+         ai_reasoning = NULL,
          ai_judge_id = NULL,
          ai_judge_key = NULL,
          ai_judge_name = NULL,
@@ -783,15 +814,17 @@ async function updatePunScore(punId, judgement, options = {}) {
       `UPDATE puns
        SET ai_score = $1,
            ai_feedback = $2,
-           ai_judge_id = $3,
-           ai_judge_key = $4,
-           ai_judge_name = $5,
-           ai_judge_version = $6,
-           ai_judged_at = $7
-       WHERE id = $8`,
+           ai_reasoning = $3,
+           ai_judge_id = $4,
+           ai_judge_key = $5,
+           ai_judge_name = $6,
+           ai_judge_version = $7,
+           ai_judged_at = $8
+       WHERE id = $9`,
       [
         judgement?.score ?? null,
         judgement?.feedback ?? null,
+        judgement?.reasoning ?? null,
         judge.id,
         judge.key,
         judge.name,
@@ -856,6 +889,7 @@ async function getPunsByAuthor(authorId) {
   const result = await query(
     `SELECT p.*,
        aj.model AS ai_judge_model,
+       ${PUN_SCORING_STATE_SQL},
        ${displayNameSql("u")} AS author_name,
        u.photo_url AS author_photo,
        COUNT(pr.pun_id) AS groan_count,
@@ -972,6 +1006,50 @@ async function getBestDailyHubScores(options = {}, executor = query) {
   }));
 }
 
+// Maps the PUN_SCORING_STATE_SQL columns into the client-facing retry shape,
+// computing live cooldown eligibility from the consecutive-failure count.
+function formatPunScoringState(row) {
+  const aiScoringFailed = row.ai_scoring_failed === true;
+  if (!aiScoringFailed) {
+    return {
+      aiScoringFailed: false,
+      aiCanRetryScore: false,
+      aiRetryAvailableAt: null,
+    };
+  }
+
+  const failureCount = Number(row.ai_failure_count || 0);
+  const { eligible, nextRetryAt } = getRetryEligibility({
+    failureCount,
+    lastFailedAt: row.ai_last_failed_at || null,
+  });
+
+  return {
+    aiScoringFailed: true,
+    aiCanRetryScore: eligible,
+    aiRetryAvailableAt: eligible ? null : nextRetryAt,
+  };
+}
+
+// Authoritative scoring-failure state for a single pun, used server-side to
+// re-validate a retry request (getPunById does a bare SELECT * without the
+// derived columns). Returns null if the pun does not exist.
+async function getPunScoringState(punId) {
+  const result = await query(
+    `SELECT p.id, p.challenge_id, ${PUN_SCORING_STATE_SQL}
+     FROM puns p WHERE p.id = $1`,
+    [punId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    challengeId: row.challenge_id,
+    failureCount: Number(row.ai_failure_count || 0),
+    lastFailedAt: row.ai_last_failed_at || null,
+    ...formatPunScoringState(row),
+  };
+}
+
 function formatPun(row) {
   return {
     id: row.id,
@@ -985,11 +1063,13 @@ function formatPun(row) {
         ? null
         : parseFloat(row.ai_score),
     aiFeedback: row.ai_feedback,
+    aiReasoning: row.ai_reasoning ?? null,
     aiJudgeKey: row.ai_judge_key || null,
     aiJudgeName: row.ai_judge_name || null,
     aiJudgeVersion: row.ai_judge_version || null,
     aiJudgeModel: row.ai_judge_model || null,
     aiJudgedAt: row.ai_judged_at || null,
+    ...formatPunScoringState(row),
     responseTimeMs:
       row.response_time_ms === null || row.response_time_ms === undefined
         ? null
@@ -2774,6 +2854,33 @@ async function runMigrations() {
   await query(
     `CREATE INDEX IF NOT EXISTS idx_users_hub_user_id ON users(hub_user_id)`,
   );
+  // app_settings table for judge overrides and other runtime config.
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key VARCHAR(100) PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  // ai_reasoning column on puns (stores the judge's chain-of-thought / reasoning).
+  await query(`ALTER TABLE puns ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
+}
+
+async function getAppSetting(key) {
+  const result = await query(
+    `SELECT value FROM app_settings WHERE key = $1`,
+    [key],
+  );
+  return result.rows[0]?.value ?? null;
+}
+
+async function setAppSetting(key, value) {
+  await query(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [key, value],
+  );
 }
 
 export {
@@ -2823,6 +2930,7 @@ export {
   updatePunScore,
   deletePun,
   getPunById,
+  getPunScoringState,
   setPunReaction,
   getPunsByAuthor,
   countPunsByAuthorForChallenge,
@@ -2868,4 +2976,6 @@ export {
   getBackwordsComparison,
   getMessageReactions,
   setMessageReaction,
+  getAppSetting,
+  setAppSetting,
 };

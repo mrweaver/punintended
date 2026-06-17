@@ -104,6 +104,10 @@ export const punsApi = {
       method: "POST",
       body: JSON.stringify({ reaction }),
     }),
+  retryScore: (id: string) =>
+    request<{ success: boolean }>(`/api/puns/${id}/retry-score`, {
+      method: "POST",
+    }),
 };
 
 // Messages (group-scoped)
@@ -169,6 +173,36 @@ export const profileApi = {
       method: "PUT",
       body: JSON.stringify({ anonymous }),
     }),
+};
+
+// Admin (developer-only)
+export interface JudgeMeta {
+  key: string;
+  name: string;
+  version: string;
+  model: string;
+  provider: "gemini" | "minimax";
+  status: string;
+  isActive: boolean;
+  responseSchemaVersion: string | null;
+}
+
+export interface JudgeSettings {
+  judges: JudgeMeta[];
+  activeByRole: Record<string, string>;
+  roles: Record<string, string>;
+}
+
+export const adminApi = {
+  getJudgeSettings: () => request<JudgeSettings>("/api/admin/judge-settings"),
+  setJudgeRole: (role: string, judgeKey: string | null) =>
+    request<{ activeByRole: Record<string, string> }>(
+      "/api/admin/judge-settings",
+      {
+        method: "PUT",
+        body: JSON.stringify({ role, judgeKey }),
+      },
+    ),
 };
 
 // Leaderboards
@@ -500,6 +534,7 @@ export interface AuthUser {
   photoURL: string;
   email: string;
   anonymousInLeaderboards: boolean;
+  isDeveloper: boolean;
 }
 
 export interface Group {
@@ -564,11 +599,18 @@ export interface Pun {
   text: string;
   aiScore: number | null;
   aiFeedback: string | null;
+  aiReasoning: string | null;
   aiJudgeKey: string | null;
   aiJudgeName: string | null;
   aiJudgeVersion: string | null;
   aiJudgeModel: string | null;
   aiJudgedAt: string | null;
+  /** True when the pun's most recent AI scoring failed (placeholder score shown). */
+  aiScoringFailed: boolean;
+  /** True when a re-score may be triggered right now (cooldown elapsed). */
+  aiCanRetryScore: boolean;
+  /** ISO timestamp when the next retry becomes available, or null if available now. */
+  aiRetryAvailableAt: string | null;
   responseTimeMs: number | null;
   groanCount: number;
   groaners?: Groaner[];

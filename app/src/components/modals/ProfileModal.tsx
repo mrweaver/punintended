@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "motion/react";
-import { Share2, Check, LogOut, X } from "lucide-react";
+import { Share2, Check, LogOut, X, ChevronDown } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { profileApi } from "../../api/client";
+import { profileApi, adminApi, type JudgeSettings } from "../../api/client";
 import { Button } from "../ui/Button";
 import type { Pun } from "../../api/client";
 
@@ -63,9 +63,19 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
   const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
   const [isSavingPrivacy, setIsSavingPrivacy] = useState(false);
 
+  // Developer settings state
+  const [judgeSettings, setJudgeSettings] = useState<JudgeSettings | null>(null);
+  const [judgeSaving, setJudgeSaving] = useState<Record<string, boolean>>({});
+  const [judgeSaved, setJudgeSaved] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     profileApi.getPuns().then(setUserPuns).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!user?.isDeveloper) return;
+    adminApi.getJudgeSettings().then(setJudgeSettings).catch(console.error);
+  }, [user?.isDeveloper]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -84,6 +94,23 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
     setDisplayNameInput(user.customDisplayName ?? "");
     setDisplayNameError(null);
   }, [user]);
+
+  const handleJudgeChange = async (role: string, judgeKey: string) => {
+    if (!judgeSettings) return;
+    setJudgeSaving((prev) => ({ ...prev, [role]: true }));
+    try {
+      const result = await adminApi.setJudgeRole(role, judgeKey || null);
+      setJudgeSettings((prev) =>
+        prev ? { ...prev, activeByRole: result.activeByRole } : prev,
+      );
+      setJudgeSaved((prev) => ({ ...prev, [role]: true }));
+      setTimeout(() => setJudgeSaved((prev) => ({ ...prev, [role]: false })), 2000);
+    } catch (err) {
+      console.error("Failed to update judge:", err);
+    } finally {
+      setJudgeSaving((prev) => ({ ...prev, [role]: false }));
+    }
+  };
 
   const streak = useMemo(() => calculateStreak(userPuns), [userPuns]);
 
@@ -356,6 +383,90 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
               </div>
             </div>
           </div>
+
+          {/* Developer Settings — only visible to developer accounts */}
+          {user.isDeveloper && (
+            <div className="px-4 sm:px-8 pb-8">
+              <div className="border-t border-gray-200 dark:border-zinc-700 pt-6">
+                <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500 dark:text-violet-400 mb-4 flex items-center gap-2">
+                  <span>⚙</span> Developer Settings
+                </h4>
+
+                {!judgeSettings ? (
+                  <p className="text-xs text-gray-400 dark:text-zinc-500">Loading judge configuration…</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {Object.entries(judgeSettings.roles)
+                      .filter(([, roleKey]) => roleKey !== judgeSettings.roles.PUN_BACKUP)
+                      .map(([roleName, roleKey]) => {
+                        const roleLabel: Record<string, string> = {
+                          PUN: "Pun Scoring",
+                          BACKWORDS: "Backwords Judging",
+                          CLUE_GENERATOR: "Clue Generation",
+                          PUN_BACKUP: "Pun Backup",
+                        };
+                        const activeKey = judgeSettings.activeByRole[roleKey];
+                        const activeJudge = judgeSettings.judges.find((j) => j.key === activeKey);
+                        const compatibleJudges = judgeSettings.judges.filter(
+                          (j) =>
+                            j.isActive &&
+                            j.responseSchemaVersion === activeJudge?.responseSchemaVersion,
+                        );
+                        const saving = !!judgeSaving[roleKey];
+                        const saved = !!judgeSaved[roleKey];
+
+                        return (
+                          <div
+                            key={roleKey}
+                            className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/60"
+                          >
+                            <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-gray-500 dark:text-zinc-400 mb-3">
+                              {roleLabel[roleName] ?? roleName}
+                            </label>
+
+                            {activeJudge && (
+                              <div className="flex items-center gap-2 mb-3">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide ${activeJudge.provider === "minimax" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                                  {activeJudge.provider}
+                                </span>
+                                <span className="text-xs text-gray-500 dark:text-zinc-400 truncate">
+                                  {activeJudge.model}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="relative">
+                              <select
+                                value={activeKey ?? ""}
+                                disabled={saving}
+                                onChange={(e) => handleJudgeChange(roleKey, e.target.value)}
+                                className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-sm text-gray-900 outline-none transition-colors focus:border-orange-300 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-violet-500 disabled:opacity-60"
+                              >
+                                {compatibleJudges.map((j) => (
+                                  <option key={j.key} value={j.key}>
+                                    {j.name} ({j.provider})
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-zinc-500" />
+                            </div>
+
+                            <div className="mt-2 h-4">
+                              {saving && <p className="text-xs text-gray-400 dark:text-zinc-500">Saving…</p>}
+                              {saved && !saving && <p className="text-xs text-green-500 dark:text-green-400">Saved ✓</p>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+
+                <p className="mt-3 text-xs text-gray-400 dark:text-zinc-500">
+                  Changes take effect immediately for all players. Judge overrides persist across server restarts.
+                </p>
+              </div>
+            </div>
+          )}
 
         </div>
       </motion.div>

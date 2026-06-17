@@ -19,6 +19,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-michael.robert.weaver@gmail.com}
       - UMAMI_BASE_URL=${UMAMI_BASE_URL:-http://umami:3000}
       # Loom & Skullcap hub integration (see docs/guides/05-hub-integration.md)
       - HUB_URL=${HUB_URL:-https://hub.cotlone.com}

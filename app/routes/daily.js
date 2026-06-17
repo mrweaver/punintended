@@ -19,6 +19,7 @@ import {
   updatePunScore,
   deletePun,
   getPunById,
+  getPunScoringState,
   setPunReaction,
   countPunsByAuthorForChallenge,
   getGlobalChallengeForDate,
@@ -228,6 +229,7 @@ router.post("/api/daily/puns", ensureAuthenticated, async (req, res) => {
             feedback:
               "The judge has misplaced the scorecard, so a perfectly neutral 5 has been entered for now. Edit and resubmit later if you want a retrial.",
             reasoning: "Route-level scoring failure during initial pun submission.",
+            failed: true,
           }),
           {
             triggerType: "initial",
@@ -278,6 +280,7 @@ router.put("/api/puns/:id", ensureAuthenticated, async (req, res) => {
               feedback:
                 "The judge smudged the revised notes, so a perfectly neutral 5 stands for now. Try editing again shortly if you insist on an appeal.",
               reasoning: "Route-level scoring failure during pun re-score.",
+              failed: true,
             }),
             {
               triggerType: "edit_rescore",
@@ -311,6 +314,95 @@ router.delete("/api/puns/:id", ensureAuthenticated, async (req, res) => {
     res.status(500).json({ error: "Failed to delete pun" });
   }
 });
+
+// Puns whose re-score is in flight right now, so concurrent retry clicks
+// (from any user) don't fan out into multiple simultaneous judge calls.
+const punsBeingRescored = new Set();
+
+// Re-score a pun whose AI judging previously failed. Open to ANY authenticated
+// user — a failed score is a shared problem — but gated by an escalating
+// cooldown (see lib/punRetry.js) and a per-pun in-flight guard. On success the
+// "failed" placeholder is overwritten and the SSE puns-update makes the retry
+// affordance disappear for everyone.
+router.post(
+  "/api/puns/:id/retry-score",
+  ensureAuthenticated,
+  async (req, res) => {
+    const punId = req.params.id;
+
+    try {
+      const state = await getPunScoringState(punId);
+      if (!state) return res.status(404).json({ error: "Pun not found" });
+
+      if (!state.aiScoringFailed) {
+        return res
+          .status(409)
+          .json({ error: "This pun already has a valid score." });
+      }
+
+      if (!state.aiCanRetryScore) {
+        return res.status(429).json({
+          error: "This pun was retried too recently. Try again later.",
+          retryAvailableAt: state.aiRetryAvailableAt,
+        });
+      }
+
+      if (punsBeingRescored.has(punId)) {
+        return res
+          .status(409)
+          .json({ error: "A re-score is already in progress for this pun." });
+      }
+
+      const pun = await getPunById(punId);
+      if (!pun) return res.status(404).json({ error: "Pun not found" });
+
+      const challenge = await getGlobalChallengeForDate(pun.challenge_id);
+      if (!challenge) {
+        return res
+          .status(409)
+          .json({ error: "Challenge unavailable for re-scoring." });
+      }
+
+      punsBeingRescored.add(punId);
+      const hubSessionToken = readSessionToken(req);
+
+      // Re-score asynchronously, mirroring the edit-rescore flow.
+      scorePunText(challenge.topic, challenge.focus, pun.text)
+        .then(async (result) => {
+          await updatePunScore(punId, result, {
+            triggerType: "retry_rescore",
+            hubSessionToken,
+          });
+          broadcastPunsUpdate(pun.challenge_id);
+        })
+        .catch(async (err) => {
+          console.error("AI retry-scoring failed:", err);
+          await updatePunScore(
+            punId,
+            buildPunScoreFallback({
+              feedback:
+                "The judge is still indisposed. A neutral 5 stands — you can try again after a short wait.",
+              reasoning: "Retry-triggered scoring failure.",
+              failed: true,
+            }),
+            { triggerType: "retry_rescore", hubSessionToken },
+          );
+          broadcastPunsUpdate(pun.challenge_id);
+        })
+        .finally(() => {
+          punsBeingRescored.delete(punId);
+        });
+
+      // Optimistically reflect the "re-evaluating" state to all clients.
+      broadcastPunsUpdate(pun.challenge_id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to retry pun score:", error);
+      punsBeingRescored.delete(punId);
+      res.status(500).json({ error: "Failed to retry pun score" });
+    }
+  },
+);
 
 router.post("/api/puns/:id/reaction", ensureAuthenticated, async (req, res) => {
   const { reaction } = req.body;

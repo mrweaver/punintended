@@ -4,6 +4,26 @@ All notable changes to PunIntended will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.32.0] - 2026-06-17
+
+### Added
+
+- **MiniMax Judge Provider:** Added MiniMax-backed judges to the roster, including new defaults for pun scoring, Backwords judging, and clue generation.
+- **Developer Judge Controls:** Developer accounts can now switch active judges for each game role from the profile settings panel, with changes applied immediately and persisted across restarts.
+- **Pun Re-score Workflow:** Failed AI judgements can now be retried with an escalating cooldown, so placeholder scores are no longer permanent when a judge call fails.
+- **Judge Reasoning Display:** Pun cards can now reveal the model’s internal reasoning, including captured MiniMax thinking output when available.
+
+### Changed
+
+- **Judge Routing and Defaults:** Judge selection now routes by provider and role rather than fixed hardcoded choices, making MiniMax the default active path while keeping Gemini judges available as alternatives.
+- **Challenge Prompt Design:** Daily, Gauntlet, and Backwords challenge generation now prefer broader, more everyday topics and short tangible focus words to make pun prompts feel more natural and less overly specific.
+- **Developer Auth Metadata:** Auth responses now include developer status so admin-only configuration can be gated cleanly in the UI.
+
+### Fixed
+
+- **MiniMax JSON Parsing:** MiniMax judge responses now tolerate thinking tags, fenced JSON, and wrapped object output instead of collapsing into generic fallback scores.
+- **Fallback Transparency:** Failed AI scores now store clearer failure reasons, making it easier to distinguish genuine judgements from infrastructure fallbacks.
+
 ## [1.31.0] - 2026-06-08
 
 ### Added
